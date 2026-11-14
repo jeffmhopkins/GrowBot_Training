@@ -184,7 +184,7 @@ skill (with the follower limited to that skill's mode) for that baseline.
 ## Order of work
 
 1. Each skill trains and passes its own eval: look (spin and aim), lift and fall (tall,
-   forward), camera walk (low, backward).
+   forward), the low backing gait (retrained on the build).
 2. The person, camera model, tracker and follower in the simulator, with the baseline
    on the single skills.
 3. The master distilled and fine-tuned; the final test above.
