@@ -6,7 +6,8 @@
 # repo at the commit it read, ./install.sh, the tests, ./run.sh jlaunch --config <config>,
 # and hand back runs/jlaunch.tar.gz. It can't run anything else, by design.
 #
-#   name       a-z, 0-9 and _, starting with a letter (3-64). It names the download
+#   name       growbot_ then a-z, 0-9 and _ (up to 56 more). The Body tab only imports
+#              policies from jobs named so. It names the download
 #              (<name>_artifacts.tar.gz) and groups its runs, so keep it once it has runs.
 #   title      what the Jobs list shows
 #   config     configs/<file>.toml in this repo
