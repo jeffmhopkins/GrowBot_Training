@@ -248,8 +248,10 @@ Every run keeps a `live/` folder up to date, and the Launcher shows it on the jo
 | `replay.html` | 3D replay of the latest checkpoint: three short walks | at every checkpoint (every 2 million steps) |
 | `policy_latest.json` | that checkpoint as an app policy | at every checkpoint |
 
-When the run finishes, `replay.html` becomes the full six-walk replay of the final
-policy, `policy_final.json` and `eval.txt` appear, and `progress.json` says it's done.
+Its `state` goes from "training" to "finishing" while the run evaluates and draws the
+final replay. Then `replay.html` becomes the full six-walk replay of the final policy,
+`policy_final.json` and `eval.txt` appear, and `progress.json` says "done". If a step
+fails, it says "failed" instead of sitting at "training". A resumed run keeps its history.
 
 ## Optional: JAX on the Radeon iGPU
 

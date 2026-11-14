@@ -200,12 +200,17 @@ def main(argv: list[str] | None = None) -> int:
     callbacks = CallbackList(
         [Diagnostics(live), Checkpoint(t.checkpoint_every_steps, out / "checkpoints", live)]
     )
-    model.learn(
-        total_timesteps=t.total_steps,
-        callback=callbacks,
-        reset_num_timesteps=reset,
-        tb_log_name="ppo",
-    )
+    try:
+        model.learn(
+            total_timesteps=t.total_steps,
+            callback=callbacks,
+            reset_num_timesteps=reset,
+            tb_log_name="ppo",
+        )
+    except BaseException:
+        live.mark("failed")
+        raise
+    live.mark("finishing")
     model.save(out / "final_model.zip")
     vec.save(str(out / "vecnormalize.pkl"))
     vec.close()

@@ -7,10 +7,11 @@ The trainer keeps it current. JBrain's Launcher shows it on the job's page:
     replay.html         the 3D replay of the latest checkpoint (rewritten at each one)
     policy_latest.json  that checkpoint as an app policy, ready to download
 
-When the run ends, ``python -m growbot_train.live finish runs/<name>`` swaps in the final
-policy, the full replay and the evaluation, and marks it done. ``progress.json``'s
-``title``/``state``/``percent``/``eta_s``/``summary`` shape is what the Launcher reads; the
-``history`` list is for anything that wants to chart the run.
+Its ``state`` is "training", then "finishing" while the run evaluates and draws the final
+replay, then "done" once ``python -m growbot_train.live finish runs/<name>`` swaps in the
+final policy, the full replay and the evaluation ("failed" if the run stops on an error).
+``progress.json``'s ``title``/``state``/``percent``/``eta_s``/``summary`` shape is what the
+Launcher reads; the ``history`` list is for anything that wants to chart the run.
 """
 
 from __future__ import annotations
@@ -57,6 +58,9 @@ class Live:
         self.start_steps = start_steps
         self.t0 = time.time()
         self.history: list[dict[str, float]] = []
+        if start_steps:  # a resumed run keeps its chart
+            old = _load(self.folder / "progress.json")
+            self.history = [h for h in old.get("history", []) if h.get("steps", 0) <= start_steps]
         self.replay_steps: int | None = None
         self.latest: dict[str, float] = {}
         self.steps = start_steps
@@ -92,7 +96,18 @@ class Live:
         except Exception as exc:  # noqa: BLE001 - the live view must never stop a run
             print(f"live: snapshot at {steps} failed: {exc}", flush=True)
 
+    def mark(self, state: str) -> None:
+        """Training has stopped: "finishing" (evaluation and the final replay still to come)
+        or "failed". Either way there is no time left to estimate."""
+        self._save(state)
+
     def _save(self, state: str = "training") -> None:
+        try:
+            self._write_progress(state)
+        except Exception as exc:  # noqa: BLE001 - the live view must never stop a run
+            print(f"live: progress not written: {exc}", flush=True)
+
+    def _write_progress(self, state: str) -> None:
         done = max(0, self.steps - self.start_steps)
         elapsed = time.time() - self.t0
         rate = done / elapsed if elapsed > 0 else 0.0
@@ -132,7 +147,7 @@ def finish(run: Path) -> None:
     folder = run / LIVE
     folder.mkdir(parents=True, exist_ok=True)
     for src, dest in (
-        (next(run.glob("policy_*.json"), None), "policy_final.json"),
+        (next(iter(sorted(run.glob("policy_*.json"))), None), "policy_final.json"),
         (run / "replay.html", "replay.html"),
         (run / "eval.txt", "eval.txt"),
     ):
@@ -141,7 +156,7 @@ def finish(run: Path) -> None:
             os.replace(folder / f".{dest}.tmp", folder / dest)
     (folder / "policy_latest.json").unlink(missing_ok=True)
     progress = folder / "progress.json"
-    doc = json.loads(progress.read_text()) if progress.exists() else {"summary": []}
+    doc = _load(progress) or {"title": f"Training {run.name}", "summary": []}
     summary = [s for s in doc.get("summary", []) if s["label"] != "Latest replay"]
     tail = [line for line in _lines(run / "eval.txt") if line.startswith("eval summary:")]
     if tail:
@@ -151,17 +166,36 @@ def finish(run: Path) -> None:
     _write(progress, json.dumps(doc, indent=1) + "\n")
 
 
+def failed(run: Path) -> None:
+    """The run stopped with an error before it finished: say so, so a phone watching it
+    doesn't wait on a "training" that will never move again."""
+    progress = run / LIVE / "progress.json"
+    doc = _load(progress)
+    if not doc or doc.get("state") == "done":
+        return
+    doc.update(state="failed", eta_s=None, updated_at=_now())
+    _write(progress, json.dumps(doc, indent=1) + "\n")
+
+
+def _load(path: Path) -> dict[str, Any]:
+    try:
+        doc = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {}
+    return doc if isinstance(doc, dict) else {}
+
+
 def _lines(path: Path) -> list[str]:
     return path.read_text().splitlines() if path.exists() else []
 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Finish a run's live folder")
-    ap.add_argument("action", choices=["finish"])
+    ap.add_argument("action", choices=["finish", "failed"])
     ap.add_argument("run")
     args = ap.parse_args(argv)
-    finish(Path(args.run))
-    print(f"live: {Path(args.run) / LIVE} finished", flush=True)
+    (finish if args.action == "finish" else failed)(Path(args.run))
+    print(f"live: {Path(args.run) / LIVE} marked {args.action}", flush=True)
     return 0
 
 

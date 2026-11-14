@@ -12,6 +12,8 @@ RUN="runs/$NAME"
 PY=.venv/bin/python
 [ -x "$PY" ] || { echo "run ./install.sh first"; exit 1; }
 
+# Any step failing leaves the live folder saying so, not "training" forever.
+trap 'rc=$?; [ "$rc" -eq 0 ] || "$PY" -m growbot_train.live failed "$RUN" || true' EXIT
 "$PY" -m growbot_train.train --out "$RUN" "$@"
 "$PY" -m growbot_train.evaluate "$RUN"/policy_*.json --sweep --json "$RUN/eval.json" \
   | tee "$RUN/eval.txt"

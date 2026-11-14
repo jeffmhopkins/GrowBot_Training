@@ -64,3 +64,56 @@ def test_snapshot_and_finish(tiny_run: Path, tmp_path: Path) -> None:
     assert (run / "live" / "policy_final.json").exists()
     assert not (run / "live" / "policy_latest.json").exists()
     assert any(s["label"] == "Final evaluation" for s in doc["summary"])
+
+
+def test_resume_keeps_history_and_counts_from_the_old_steps(tmp_path: Path) -> None:
+    m = {"v_along": 0.01, "speed": 0.01, "abs_err_deg": 30.0, "falls_per_1k_steps": 0.0}
+    first = Live(tmp_path, Config(), total_steps=1000)
+    first.update(1000, m)
+    resumed = Live(tmp_path, Config(), total_steps=1000, start_steps=1000)
+    assert [h["steps"] for h in resumed.history] == [1000]
+    resumed.update(1500, m)
+    doc = _progress(tmp_path)
+    assert doc["percent"] == 75.0
+    assert [h["steps"] for h in doc["history"]] == [1000, 1500]
+
+
+def test_states_after_training(tmp_path: Path) -> None:
+    from growbot_train.live import failed
+
+    live = Live(tmp_path, Config(), total_steps=1000)
+    live.mark("finishing")
+    assert _progress(tmp_path)["state"] == "finishing"
+    assert _progress(tmp_path)["eta_s"] is None
+    failed(tmp_path)
+    assert _progress(tmp_path)["state"] == "failed"
+
+
+def test_progress_write_failure_never_stops_training(tmp_path: Path, monkeypatch) -> None:
+    import growbot_train.live as live_mod
+
+    live = Live(tmp_path, Config(), total_steps=1000)
+
+    def boom(*_a: object) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(live_mod, "_write", boom)
+    live.update(10, {"v_along": 0.0, "speed": 0.0, "abs_err_deg": 0.0, "falls_per_1k_steps": 0.0})
+
+
+def test_finish_without_progress_or_eval(tmp_path: Path) -> None:
+    (tmp_path / "policy_heading_walk.json").write_text("{}")
+    finish(tmp_path)
+    doc = _progress(tmp_path)
+    assert doc["state"] == "done"
+    assert doc["title"] == f"Training {tmp_path.name}"
+    assert (tmp_path / "live" / "policy_final.json").exists()
+
+
+def test_live_files_match_what_the_launcher_serves(tiny_run: Path) -> None:
+    import re
+
+    allowed = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}\.(json|html|txt|csv|png|gz)$")
+    finish(tiny_run)
+    names = [p.name for p in (tiny_run / "live").iterdir() if not p.name.startswith(".")]
+    assert names and all(allowed.match(n) for n in names), names
