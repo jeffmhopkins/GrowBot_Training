@@ -182,7 +182,20 @@ class Checkpoint(BaseCallback):
         return True
 
 
+def usable_cpus() -> int:
+    """The CPUs this process may run on. The launcher pins each side-by-side run to its
+    own share of the cores, and a run sized to the whole machine would pile three
+    machines' worth of simulators onto that share."""
+    try:
+        return max(1, len(os.sched_getaffinity(0)))
+    except AttributeError:  # macOS has no affinity call
+        return max(1, os.cpu_count() or 1)
+
+
 def default_n_envs() -> int:
+    # The whole machine's count, not this run's share: the simulator count sets the
+    # rollout size, so a run pinned to a third of the cores trains exactly as one on
+    # all of them, only its workers each step more simulators.
     return max(1, os.cpu_count() or 1)
 
 
@@ -216,11 +229,11 @@ def main(argv: list[str] | None = None) -> int:
         cfg.train.n_envs = args.envs
     t = cfg.train
     n_envs = t.n_envs or default_n_envs() * max(1, t.envs_per_worker)
-    workers = min(n_envs, default_n_envs())
+    workers = min(n_envs, usable_cpus())
     out.mkdir(parents=True, exist_ok=True)
     cfg.save(out / "config.json")
     # The learner is small; a few threads are plenty and leave the cores to the sims.
-    torch.set_num_threads(max(1, min(8, (os.cpu_count() or 2) // 4)))
+    torch.set_num_threads(max(1, min(8, usable_cpus() // 4)))
     print(
         f"== training {cfg.name}: {t.total_steps:,} steps on {n_envs} simulators "
         f"in {workers} workers ==",
