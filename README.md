@@ -51,8 +51,13 @@ the exported JSON, the same file the phone would run.
 
 **In any browser, phone included: `replay.html`.** Every run writes one. It's a single
 file: open it and it plays six walks in 3D (target ahead, to the side, behind, a target
-that keeps turning, and two on randomly varied robots), with the target direction as a
-red arrow, the path drawn behind the robot, and the live heading error and speed. Drag to
+that keeps turning, and two on randomly varied robots), with every command input drawn
+as an arrow: the target direction in red (a full 3D arrow, tipped up to the camera aim
+asked for, when the job has a camera-height input), and on the floor in green the speed
+command (its length is the speed, as a share of the cap; it points away from the target
+when the command backs away). Beside each, faint, is what the robot did: where the camera
+actually points (camera-first jobs) and the averaged velocity. The path is drawn behind the
+robot, and the live heading error, speed and commands read out at the top. Drag to
 orbit, pinch or scroll to zoom, scrub the timeline, change playback speed. It needs no
 install or graphics drivers, because the walks are simulated when the page is made; the
 page only plays them back. To make one for any policy:

@@ -634,6 +634,35 @@ def test_the_shipped_look_config_scores_the_lens() -> None:
     assert env._lens
 
 
+def test_the_asked_camera_aim_faces_the_target_and_follows_the_height_command() -> None:
+    from pathlib import Path
+
+    from growbot_train import config as config_mod
+
+    cfg = config_mod.load(Path(__file__).parent.parent / "configs" / "look.toml")
+    env = GrowBotHeadingEnv(cfg)
+    ups = []
+    for tilt in (-1.0, 1.0):
+        env.reset(seed=0, options={"nominal": True, "tilt_cmd": tilt, "target_error_deg": 40.0})
+        want = env.want_lens_dir()
+        assert abs(np.linalg.norm(want) - 1.0) < 1e-9
+        az = math.degrees(math.atan2(want[1], want[0]))
+        assert abs(wrap_deg(az - env.target_deg)) < 1e-6
+        ups.append(want[2])
+        assert abs(np.linalg.norm(env.lens_dir()) - 1.0) < 1e-6
+    # Low (-1) leans back less, so the camera looks further up than standing tall.
+    assert ups[0] > ups[1]
+
+
+def test_a_nose_first_lens_leans_away_from_the_target() -> None:
+    env = GrowBotHeadingEnv(Config())
+    env.reset(seed=0, options={"nominal": True, "target_error_deg": 0.0})
+    want = env.want_lens_dir()
+    assert want[2] < 0.99  # the default body rests nose-up, so the lens is tipped
+    az = math.degrees(math.atan2(want[1], want[0]))
+    assert abs(wrap_deg(az - env.target_deg - 180.0)) < 1e-6
+
+
 def test_the_curriculum_narrows_every_draw_toward_the_built_robot() -> None:
     env = GrowBotHeadingEnv(Config())
     env.dr_scale = 0.1

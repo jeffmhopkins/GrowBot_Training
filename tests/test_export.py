@@ -84,6 +84,22 @@ def test_replay_page_embeds_the_walks(tiny_run: Path, tmp_path: Path) -> None:
     assert len(first["frames"]) == 26
     assert all(len(pose) == 7 for pose in first["frames"][0][0])
     assert len(first["frames"][0][0]) == len(first["shapes"])
+    # A heading-walk policy takes no speed or camera-height input, so the page draws none.
+    assert loaded["inputs"] == {"speed": False, "camera_height": False, "camera_first": False}
+
+
+def test_replay_carries_every_command_input(tiny_speed_run: Path) -> None:
+    from growbot_train.replay import build
+
+    data = build(tiny_speed_run / "policy_heading_walk.json", seconds=1.0, seed=0, body=None)
+    assert data["inputs"]["speed"] and data["inputs"]["camera_height"]
+    for f in data["episodes"][0]["frames"]:
+        _, _, _, _, _, speed, height, want, lens, vel = f
+        assert -1.0 <= speed <= 1.0 and -1.0 <= height <= 1.0
+        # The asked and actual camera aims are directions; the velocity is flat, in cm/s.
+        assert abs(np.linalg.norm(want) - 1.0) < 0.01
+        assert abs(np.linalg.norm(lens) - 1.0) < 0.01
+        assert len(vel) == 2
 
 
 def test_speed_command_policy_declares_cmd_forward(tiny_speed_run: Path) -> None:

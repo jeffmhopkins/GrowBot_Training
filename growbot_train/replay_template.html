@@ -62,6 +62,8 @@
   <div class="stat"><b id="sErr">0°</b><span>heading error</span></div>
   <div class="stat" id="tAlong"><b id="sAlong">0.0</b><span>cm/s toward target</span></div>
   <div class="stat" id="tSpeed"><b id="sSpeed">0.0</b><span id="sCap">cm/s speed</span></div>
+  <div class="stat" id="tCmd" hidden><b id="sCmd">0</b><span>speed command</span></div>
+  <div class="stat" id="tAim" hidden><b id="sAim">0°</b><span id="sAimLabel">camera aim up</span></div>
 </div>
 <div class="bar">
   <div class="row">
@@ -74,7 +76,7 @@
     <input id="scrub" type="range" min="0" max="0" value="0" aria-label="Time">
     <span class="time" id="time">0.0 s</span>
   </div>
-  <div class="note legend" id="legend"><i style="background:var(--target)"></i>target direction<i style="background:var(--accent)"></i>path · drag to orbit, pinch or scroll to zoom</div>
+  <div class="note legend" id="legend"></div>
 </div>
 <div id="empty"><p>No replay data in this page. Make one with<br><code>python -m growbot_train.replay runs/&lt;run&gt;/policy_heading_walk.json</code></p></div>
 <script type="module">
@@ -121,8 +123,36 @@ ground.receiveShadow = true;
 world.add(ground);
 let grid;
 
-const arrow = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(), 0.18, 0xff0000, 0.04, 0.025);
-world.add(arrow);
+// A solid arrow: ArrowHelper draws its shaft as a 1 px line, too thin to read on a phone.
+// A faint one (opacity below 1) is what the robot did, beside the solid command.
+const UP_Y = new THREE.Vector3(0, 1, 0);
+const SHAFT = new THREE.CylinderGeometry(1, 1, 1, 12).translate(0, 0.5, 0);
+const HEAD = new THREE.ConeGeometry(1, 1, 16).translate(0, 0.5, 0);
+class Arrow extends THREE.Group {
+  constructor(radius, opacity = 1) {
+    super();
+    this.r = radius;
+    this.mat = new THREE.MeshBasicMaterial({ transparent: opacity < 1, opacity, depthWrite: opacity >= 1 });
+    this.shaft = new THREE.Mesh(SHAFT, this.mat);
+    this.head = new THREE.Mesh(HEAD, this.mat);
+    this.add(this.shaft, this.head);
+    world.add(this);
+  }
+  place(origin, dir, length) {
+    this.visible = length > 0.002 && dir.lengthSq() > 1e-9;
+    if (!this.visible) return;
+    this.position.copy(origin);
+    this.quaternion.setFromUnitVectors(UP_Y, dir.clone().normalize());
+    const head = Math.min(length * 0.45, this.r * 6);
+    this.shaft.scale.set(this.r, length - head, this.r);
+    this.head.scale.set(this.r * 2.6, head, this.r * 2.6);
+    this.head.position.y = length - head;
+  }
+}
+const IN = DATA.inputs || {};
+const LOOK_LEN = 0.13, SPEED_LEN = 0.15;  // metres for the look arrows; for full speed (the cap)
+const look = new Arrow(0.004), aim = new Arrow(0.003, 0.4);
+const speedCmd = new Arrow(0.004), speedNow = new Arrow(0.003, 0.4);
 const MAXF = Math.max(...DATA.episodes.map((e) => e.frames.length));
 const trailGeo = new THREE.BufferGeometry();
 trailGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(MAXF * 3), 3));
@@ -138,7 +168,10 @@ function applyTheme() {
   grid.rotation.x = Math.PI / 2;
   grid.position.z = 0.001;
   world.add(grid);
-  arrow.setColor(new THREE.Color(css("--target")));
+  look.mat.color.set(css("--target"));
+  aim.mat.color.set(css("--target"));
+  speedCmd.mat.color.set(css("--ok"));
+  speedNow.mat.color.set(css("--ok"));
   trailMat.color.set(css("--accent"));
 }
 applyTheme();
@@ -170,7 +203,8 @@ function load(i) {
   show();
 }
 
-const v3 = new THREE.Vector3();
+const v3 = new THREE.Vector3(), o3 = new THREE.Vector3();
+const up = (v) => (Math.asin(Math.max(-1, Math.min(1, v[2]))) * 180) / Math.PI;
 function show() {
   const f = ep.frames[frame];
   f[0].forEach((g, k) => {
@@ -179,8 +213,20 @@ function show() {
   });
   const p = f[0][0];
   const t = (f[1] * Math.PI) / 180;
-  arrow.position.set(p[0], p[1], p[2] + 0.07);
-  arrow.setDirection(v3.set(Math.cos(t), Math.sin(t), 0));
+  const [, , , , , cmd, , want, lens, vel] = f;
+  // The command: toward the target, tipped up to the camera aim it asks for when the job
+  // has a camera height input. Beside it, faint, where the camera actually points.
+  o3.set(p[0], p[1], p[2] + 0.07);
+  look.place(o3, IN.camera_height ? v3.set(...want) : v3.set(Math.cos(t), Math.sin(t), 0), LOOK_LEN);
+  aim.visible = !!IN.camera_first;
+  if (IN.camera_first) aim.place(o3, v3.set(...lens), LOOK_LEN);
+  // On the floor: the speed asked for (signed, so backing away points away from the
+  // target) and, faint, the averaged velocity, both to the same scale.
+  o3.set(p[0], p[1], 0.004);
+  speedCmd.visible = !!IN.speed;
+  if (IN.speed) speedCmd.place(o3, v3.set(Math.cos(t) * Math.sign(cmd), Math.sin(t) * Math.sign(cmd), 0), SPEED_LEN * Math.abs(cmd));
+  const vlen = Math.hypot(vel[0], vel[1]);
+  speedNow.place(o3, v3.set(vel[0], vel[1], 0), Math.min(2 * SPEED_LEN, (SPEED_LEN * vlen) / DATA.speed_cap_cm_s));
   trailGeo.setDrawRange(0, frame + 1);
   if (follow) {
     const target = new THREE.Vector3(p[0], p[2], -p[1]);
@@ -193,6 +239,8 @@ function show() {
   $("sAlong").textContent = f[3].toFixed(1);
   $("sSpeed").textContent = f[4].toFixed(1);
   $("tSpeed").classList.toggle("over", f[4] > DATA.speed_cap_cm_s * 1.1);
+  $("sCmd").textContent = cmd === 0 ? "stop" : cmd > 0 ? `+${cmd.toFixed(2)}` : `${cmd.toFixed(2)} back`;
+  $("sAim").textContent = IN.camera_height ? `${Math.round(up(want))}° / ${Math.round(up(lens))}°` : `${Math.round(up(lens))}°`;
   $("scrub").value = frame;
   const end = frame === ep.frames.length - 1 && ep.fell ? " · fell" : "";
   $("time").textContent = `${(frame * DATA.dt).toFixed(1)} s${end}`;
@@ -200,6 +248,17 @@ function show() {
 
 DATA.episodes.forEach((e, i) => $("episode").add(new Option(e.title + (e.fell ? " (falls)" : ""), i)));
 $("sCap").textContent = `cm/s speed (cap ${DATA.speed_cap_cm_s})`;
+$("tCmd").hidden = !IN.speed;
+$("tAim").hidden = !IN.camera_first;
+if (IN.camera_height) $("sAimLabel").textContent = "camera aim up, asked / now";
+const key = (color, text, faint) => `<i style="background:var(${color})${faint ? ";opacity:.4" : ""}"></i>${text}`;
+$("legend").innerHTML = [
+  key("--target", IN.camera_height ? "heading and camera aim asked" : "target direction"),
+  IN.camera_first ? key("--target", "camera aim now", true) : "",
+  IN.speed ? key("--ok", "speed command (×cap)") : "",
+  key("--ok", "velocity", true),
+  key("--accent", "path"),
+].join("") + " · drag to orbit, pinch or scroll to zoom";
 if (DATA.note) $("legend").prepend(`${DATA.note} · `);
 $("episode").onchange = (e) => load(+e.target.value);
 // A live page (written while training) plays its walks in a loop and, between walks, reloads
