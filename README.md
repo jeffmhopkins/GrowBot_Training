@@ -250,7 +250,7 @@ Because there's more to learn, episodes run 30 seconds, the target moves more of
 `obs_spec.cmd_forward` and `obs_spec.cmd_pitch` blocks describe the two new inputs; the
 app's runner reads them from `cmd.fwd` and `cmd.pitch`.
 
-Run it with `./run.sh camera-try --config configs/camera_walk.toml`, or from JBrain's Math
+Run it with `./run.sh camera-try --config configs/camera_walk.toml`, or from JBrain's Jobs
 launcher ("GrowBot camera walk").
 
 ## The look policy
@@ -336,7 +336,7 @@ ready to commit.
 
 ## Running it from JBrain
 
-JBrain's Launcher (the Math tile) has **GrowBot heading walk**, **GrowBot camera walk**
+JBrain's Launcher (the Jobs tile, once called Math) has **GrowBot heading walk**, **GrowBot camera walk**
 and **GrowBot look** jobs. Each clones this repo on the box, runs `./install.sh` and the tests,
 trains with `./run.sh` (the others with `--config configs/camera_walk.toml` or
 `configs/look.toml`), and
