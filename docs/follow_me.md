@@ -116,7 +116,8 @@ A small controller between the tracker and the policy:
 - **Heading:** the tracker's heading error, straight into `cmd_yaw`.
 - **Speed:** from the distance error against the set distance, with a dead band. Too
   far walks forward, too close backs away, and within the band it's 0, so it stops and
-  just turns. The speed is capped and ramps, so a mode change is never a jump.
+  just turns. Backing ramps with the error. Forward is stop-or-go at full speed until a
+forward teacher learns slower speeds (see the gaps above).
 - **Pitch:** the tracker's vertical error, integrated into `cmd_pitch`, so the camera
   keeps the face mid-frame.
 
@@ -155,7 +156,8 @@ access to the simulator's truth except through what the camera would see:
     shoulder-width assumptions are off);
   - detection dropouts, more when a face is small or turned;
   - 100 to 200 ms of frame latency;
-  - the phone's heading reading noisy and drifting, as the policy already trains with.
+  - a bearing error on top: noise and slow drift, like the heading noise the policy
+    already trains with.
 - **The commands:** a script of voice commands through the run: "follow me", "come
   closer", "go further back", "stay" then "follow me", and "come". The set distance
   therefore changes live, and the stays hold.
@@ -177,8 +179,7 @@ It reports, over time and in summary:
 
 It passes when the robot keeps the person in frame through the whole script, settles
 to the set distance after each command, holds still on "stay", never switches to a
-distractor, and doesn't fall. The
-thresholds get set once there's a baseline. The same harness first runs on each single
+distractor, and doesn't fall. The thresholds get set once there's a baseline. The same harness first runs on each single
 skill (with the follower limited to that skill's mode) for that baseline.
 
 ## Order of work
