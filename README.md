@@ -492,6 +492,7 @@ doing only if the CPU runs prove too slow.
 | `growbot_train/surfaces.py` | Contact materials and floors |
 | `growbot_train/gait.py` | Open-loop gaits, and cloning one into a policy before PPO (`train.warm_gait`) |
 | `research/locomotion/` | Gait and body-change search on a fast open-loop bench (its README) |
+| `hardware/cam_foot_leg/` | Printable left and right legs with the bench's winning cam sole, on upstream's horn mount (its README) |
 | `growbot_train/train.py` | PPO training, checkpoints, export at the end |
 | `growbot_train/export.py` | Trained network to the app's JSON, with a match check |
 | `growbot_train/evaluate.py` | Scores an exported JSON, optional robustness sweep |

@@ -16,7 +16,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest==9.2.0", "ruff==0.17.5"]
+# cad builds hardware/cam_foot_leg; dev includes it so CI tests the leg.
+cad = ["manifold3d==3.5.5", "shapely==2.2.0"]
+dev = ["pytest==9.2.0", "ruff==0.17.5", "manifold3d==3.5.5", "shapely==2.2.0"]
 
 [build-system]
 requires = ["setuptools>=68"]
