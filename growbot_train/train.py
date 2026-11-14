@@ -93,6 +93,10 @@ class Checkpoint(BaseCallback):
         self.folder = folder
         self.next = every
 
+    def _init_callback(self) -> None:
+        # A resumed run starts mid-count; the next save is the next boundary after it.
+        self.next = (self.model.num_timesteps // self.every + 1) * self.every
+
     def _on_step(self) -> bool:
         if self.num_timesteps >= self.next:
             self.next += self.every
@@ -116,18 +120,23 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--envs", type=int, help="override train.n_envs")
     ap.add_argument("--set", action="append", default=[], metavar="SECTION.KEY=VALUE")
     ap.add_argument(
-        "--resume", help="a model_*.zip to continue from (its vecnormalize file must sit beside it)"
+        "--resume",
+        help="a checkpoints/model_*.zip or final_model.zip to continue from; the run's "
+        "config.json is reused",
     )
     args = ap.parse_args(argv)
 
-    cfg = config_mod.load(args.config, args.set)
+    out = Path(args.out)
+    # A resumed run keeps the settings it was started with (its own config.json), so a
+    # one-off --set from the first launch isn't silently dropped; new --set still apply.
+    saved = out / "config.json"
+    cfg = config_mod.load(saved if args.resume and saved.exists() else args.config, args.set)
     if args.steps:
         cfg.train.total_steps = args.steps
     if args.envs:
         cfg.train.n_envs = args.envs
     t = cfg.train
     n_envs = t.n_envs or default_n_envs()
-    out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     cfg.save(out / "config.json")
     # The learner is small; a few threads are plenty and leave the cores to the sims.
@@ -137,8 +146,10 @@ def main(argv: list[str] | None = None) -> int:
     vec = build_vec_env(cfg, n_envs, t.seed)
     if args.resume:
         resume = Path(args.resume)
-        norm_path = resume.with_name(resume.name.replace("model_", "vecnormalize_")).with_suffix(
-            ".pkl"
+        norm_path = (
+            resume.with_name(resume.name.replace("model_", "vecnormalize_")).with_suffix(".pkl")
+            if resume.name.startswith("model_")
+            else resume.with_name("vecnormalize.pkl")
         )
         vec = VecNormalize.load(str(norm_path), vec)
         vec.training = True

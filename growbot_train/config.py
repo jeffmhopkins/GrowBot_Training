@@ -157,8 +157,11 @@ def from_dict(data: dict[str, Any]) -> Config:
 
 
 def load(path: str | Path | None, overrides: list[str] | None = None) -> Config:
+    """A TOML config file, or a run's saved ``config.json``, plus ``--set`` overrides."""
     data: dict[str, Any] = {}
-    if path is not None:
+    if path is not None and str(path).endswith(".json"):
+        data = json.loads(Path(path).read_text())
+    elif path is not None:
         with open(path, "rb") as fh:
             data = tomllib.load(fh)
     for item in overrides or []:

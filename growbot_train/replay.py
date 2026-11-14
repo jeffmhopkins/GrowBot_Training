@@ -57,6 +57,7 @@ def record(
         seed=seed,
         options={"retarget": False, "target_error_deg": start_error, "nominal": nominal},
     )
+    env.max_steps = 10**9  # a replay may run longer than a training episode
     m, d = env.model, env.data
     ids = _geoms(env)
     shapes = [
@@ -90,13 +91,11 @@ def record(
     for i in range(1, round(seconds / CONTROL_DT) + 1):
         if every and i % every == 0:
             env.target_deg = wrap_deg(env.target_deg + 90.0)
-        obs, _, term, trunc, info = env.step(policy.env_action(obs))
+        obs, _, term, _, info = env.step(policy.env_action(obs))
         frames.append(snapshot(info))
         if term:
             fell = True
             break
-        if trunc:  # keep walking past the training episode length
-            env.step_index = 0
     return {"shapes": shapes, "frames": frames, "fell": fell}
 
 

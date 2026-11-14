@@ -68,6 +68,7 @@ def interactive(env: GrowBotHeadingEnv, policy: JsonPolicy, seed: int) -> None:
             state["reset"] = True
 
     obs, _ = env.reset(seed=seed, options={"retarget": False})
+    env.max_steps = 10**9  # walk for as long as the window is open
     with mujoco.viewer.launch_passive(env.model, env.data, key_callback=on_key) as v:
         v.cam.distance, v.cam.elevation = 0.7, -25.0
         last_print = 0.0
@@ -86,12 +87,12 @@ def interactive(env: GrowBotHeadingEnv, policy: JsonPolicy, seed: int) -> None:
             if state["ahead"]:
                 env.target_deg = env.yaw_deg()
                 state["ahead"] = False
-            obs, _, term, trunc, info = env.step(policy.env_action(obs))
+            obs, _, term, _, info = env.step(policy.env_action(obs))
             if term:
                 print("-- fell over; restarting")
-                obs, _ = env.reset(seed=seed, options={"retarget": False})
-            elif trunc:  # keep walking past the training episode length
-                env.step_index = 0
+                obs, _ = env.reset(
+                    seed=seed, options={"retarget": False, "nominal": state["nominal"]}
+                )
             v.cam.lookat[:] = env.data.qpos[0:3]
             with v.lock():
                 _target_arrow(v.user_scn, env)
@@ -118,6 +119,7 @@ def record(
     import imageio.v2 as imageio
 
     obs, _ = env.reset(seed=seed, options={"retarget": False})
+    env.max_steps = 10**9
     renderer = mujoco.Renderer(env.model, 480, 640)
     cam = mujoco.MjvCamera()
     cam.distance, cam.azimuth, cam.elevation = 0.7, 135.0, -25.0

@@ -82,6 +82,17 @@ def _rot(axis_angle: np.ndarray) -> np.ndarray:
     return np.eye(3) + math.sin(angle) * K + (1 - math.cos(angle)) * K @ K
 
 
+def _rot_onto_z(v: np.ndarray) -> np.ndarray:
+    """The smallest rotation taking direction ``v`` onto +z (the app runner's rotZto,
+    inverted): it tilts, never spins about the vertical, so x stays toward the nose."""
+    u = v / np.linalg.norm(v)
+    axis = np.cross(u, [0.0, 0.0, 1.0])
+    s = float(np.linalg.norm(axis))
+    if s < 1e-9:
+        return np.eye(3) if u[2] > 0 else np.diag([1.0, -1.0, -1.0])
+    return _rot(axis / s * math.atan2(s, float(u[2])))
+
+
 @dataclass
 class Episode:
     """Per-episode draws: the randomised body and the sensor/relay imperfections."""
@@ -177,7 +188,9 @@ class GrowBotHeadingEnv(gym.Env):
                 "com": np.array([self._u(r.com_x_m), self._u(r.com_y_m), self._u(r.com_z_m)]),
                 "leg_scale": [shared * self._u(r.leg_asymmetry) for _ in range(2)],
                 "gain": self._u(r.servo_gain_scale),
-                "friction": rng.uniform(r.friction[0], r.friction[1], ng),
+                # One value for every geom: MuJoCo takes the larger of two touching
+                # geoms' friction, so per-geom draws would skew the floor grippy.
+                "friction": np.full(ng, self._u(r.friction)),
             }
             ep = Episode(
                 slew=rng.uniform(*r.servo_slew_rad_s, 2),
@@ -234,6 +247,7 @@ class GrowBotHeadingEnv(gym.Env):
         self._noisy = randomize
 
         m, d = self.model, self.data
+        mujoco.mj_setConst(m, d)  # mass-derived constants follow the randomised body
         mujoco.mj_resetData(m, d)
         yaw0 = float(self.np_random.uniform(-math.pi, math.pi))
         tilt = self.np_random.uniform(-0.03, 0.03, 2)
@@ -250,6 +264,11 @@ class GrowBotHeadingEnv(gym.Env):
         # This body rests nose-up (about 34 degrees on the nominal build), so "upright"
         # means "as it stood at the start", the same reference the app's tip check uses.
         self._up0 = self._up_in_body()
+        # Level the IMU the way the app does after its stance settle: rotate the phone's
+        # readings so the gravity it measures right now reads straight +z. The policy
+        # then sees the same "level" whatever the body's resting pitch or the mount.
+        self._level = np.eye(3)
+        self._level = _rot_onto_z(self._imu_raw()[0])
 
         self.step_index = 0
         self.motor = np.zeros(2)
@@ -357,10 +376,17 @@ class GrowBotHeadingEnv(gym.Env):
             err = wrap_deg(err + self.np_random.normal(0, self.cfg.randomization.heading_noise_deg))
         self._err_obs = err
 
+    def _imu_raw(self) -> tuple[np.ndarray, np.ndarray]:
+        """Accel and gyro as the (possibly crooked) phone reads them, then levelled."""
+        d = self.data
+        rot = self._level @ self.ep.imu_rot
+        acc = rot @ d.sensordata[self._accel_adr : self._accel_adr + 3]
+        gyro = rot @ d.sensordata[self._gyro_adr : self._gyro_adr + 3]
+        return acc, gyro
+
     def _frame(self) -> np.ndarray:
-        d, r = self.data, self.cfg.randomization
-        acc = self.ep.imu_rot @ d.sensordata[self._accel_adr : self._accel_adr + 3]
-        gyro = self.ep.imu_rot @ d.sensordata[self._gyro_adr : self._gyro_adr + 3]
+        r = self.cfg.randomization
+        acc, gyro = self._imu_raw()
         if self._noisy:
             acc = acc + self.np_random.normal(0, r.accel_noise_m_s2, 3)
             gyro = gyro + self.ep.gyro_bias + self.np_random.normal(0, r.gyro_noise_rad_s, 3)

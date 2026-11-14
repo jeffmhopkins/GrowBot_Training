@@ -74,9 +74,11 @@ def build_policy(model: PPO, norm: Any, cfg: config_mod.Config, name: str) -> di
             "imu_frame": {
                 "up": "+z",
                 "note": (
-                    "body frame: x toward the nose, y to the robot's left, z up through "
-                    "the torso; accel is accelerationIncludingGravity in m/s^2 (reads "
-                    "about +9.8 on the up axis at rest), gyro in rad/s"
+                    "levelled body frame: after the legs-neutral stance settles, rotate "
+                    "the phone's readings by the smallest rotation that makes the "
+                    "gravity it measures read +z (so x stays toward the nose, y to the "
+                    "robot's left); accel is accelerationIncludingGravity in m/s^2, "
+                    "gyro in rad/s; IMU_SIGN must be [1, 1, 1] for this policy"
                 ),
             },
             "segments": [

@@ -90,8 +90,9 @@ export any checkpoint:
 .venv/bin/python -m growbot_train.export runs/first-try --model checkpoints/model_10000000.zip
 ```
 
-A stopped run can be continued with
-`python -m growbot_train.train --out runs/first-try --resume runs/first-try/checkpoints/model_10000000.zip`.
+A stopped run can be continued, with the settings it started with (its `config.json`)
+and `--steps` more steps:
+`python -m growbot_train.train --out runs/first-try --resume runs/first-try/checkpoints/model_10000000.zip --steps 20000000`.
 
 ## What the robot sees and does
 
@@ -99,7 +100,7 @@ Every 40 ms (25 times a second) the policy gets the last 5 ticks of:
 
 | Input | What it is |
 | --- | --- |
-| `accel_x/y/z` | accelerometer, gravity included, m/s². Body frame: x toward the nose, y to the robot's left, z up through the torso |
+| `accel_x/y/z` | accelerometer, gravity included, m/s², levelled at the starting stance so gravity reads straight up (+z). x toward the nose, y to the robot's left |
 | `gyro_x/y/z` | turn rate, rad/s, same frame |
 | `prev_action_0/1` | the leg commands it sent last tick |
 | `cmd_yaw` | the heading error divided by 180, so -1 to 1. **Positive means the target is to the left** (counter-clockwise seen from above) |
@@ -207,10 +208,15 @@ What the app still needs before it can drive with one (app-side, not done here):
 2. **A gait entry** that loads the file (for example under `policies/`), runs the usual
    1.2 s legs-neutral stance first (the simulator starts each episode the same way), and
    ticks at the file's `control_hz` (25).
-3. **Axes.** The policy expects body-frame axes: x to the nose, y to the robot's left,
-   z up. The runner applies the phone's `IMU_SIGN` calibration (default flips y) on top,
-   so check on the bench that tipping the nose up and turning left read the same signs
-   as in the simulator before walking it.
+3. **Levelling and axes.** The policy sees the IMU *levelled at its stance*: after the
+   legs-neutral settle, the readings are rotated by the smallest rotation that makes the
+   gravity measured right then read straight up (+z). That way the body's own nose-up
+   rest (about 34 degrees) and a crooked phone mount both disappear, and x stays toward
+   the nose, y to the robot's left. The runner already has this rotation (`rotZto`), but
+   today's walk path levels only about the phone's x axis (`imuRot`), so this walk needs
+   the full version. The runner's `IMU_SIGN` calibration must be `[1, 1, 1]` for it (the
+   default flips y). Check on the bench that tipping the nose up and turning left read
+   the same signs as in the simulator before walking it.
 
 ## Keeping results
 

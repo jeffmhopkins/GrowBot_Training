@@ -35,7 +35,9 @@ def test_standing_still_is_stable_and_reads_gravity(body: str) -> None:
     assert obs.shape == (NCH * env.frames,)
     acc = np.array([ch(obs, "accel_x"), ch(obs, "accel_y"), ch(obs, "accel_z")])
     assert abs(np.linalg.norm(acc) - 9.81) < 0.3
-    assert acc[2] > 7.0  # z is up through the torso
+    # Levelled at the stance like the app does: gravity reads straight +z even though
+    # this body rests nose-up.
+    assert abs(acc[0]) < 0.3 and abs(acc[1]) < 0.3
     for _ in range(125):  # 5 s of zero commands: nothing falls over
         obs, _, term, _, info = env.step(np.zeros(2))
         assert not term
@@ -116,3 +118,15 @@ def test_progress_is_capped_and_overspeed_penalised() -> None:
         _, _, _, _, info = env.step(np.zeros(2))
     assert info["terms"]["progress"] == pytest.approx(env.cfg.reward.progress, rel=1e-6)
     assert info["terms"]["overspeed"] < -1.0
+
+
+def test_levelling_is_a_pure_tilt() -> None:
+    from growbot_train.env import _rot_onto_z
+
+    for v in ([5.59, 0.0, 8.06], [0.1, -3.0, 9.0], [0.0, 0.0, -9.8]):
+        R = _rot_onto_z(np.array(v))
+        np.testing.assert_allclose(R @ np.array(v), [0, 0, np.linalg.norm(v)], atol=1e-9)
+        np.testing.assert_allclose(R @ R.T, np.eye(3), atol=1e-12)
+    # A nose-up pitch is undone by pitching, so the nose (x) stays in the x-z plane.
+    R = _rot_onto_z(np.array([5.59, 0.0, 8.06]))
+    assert abs((R @ [1.0, 0, 0])[1]) < 1e-12

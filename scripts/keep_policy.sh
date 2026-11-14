@@ -13,8 +13,9 @@ if [ -f "$SRC" ]; then
   TMP=$(mktemp -d)
   trap 'rm -rf "$TMP"' EXIT
   tar xzf "$SRC" -C "$TMP"
-  SRC=$(find "$TMP" -name config.json -printf '%h\n' | head -n 1)
-  [ -n "$SRC" ] || { echo "no run folder inside the tarball"; exit 1; }
+  CFG=$(find "$TMP" -name config.json | head -n 1)
+  [ -n "$CFG" ] || { echo "no run folder inside the tarball"; exit 1; }
+  SRC=$(dirname "$CFG")
 fi
 NAME=${2:-$(basename "$SRC")}
 DEST="policies/$NAME"

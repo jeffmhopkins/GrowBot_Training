@@ -43,3 +43,11 @@ def test_round_trip_through_saved_json(tmp_path: Path) -> None:
     cfg.save(tmp_path / "c.json")
     again = config_mod.from_dict(json.loads((tmp_path / "c.json").read_text()))
     assert again.to_dict() == cfg.to_dict()
+
+
+def test_load_reads_a_saved_run_config_with_overrides(tmp_path: Path) -> None:
+    cfg = config_mod.load(SHIPPED, ["reward.speed_cap_m_s=0.04"])
+    cfg.save(tmp_path / "config.json")
+    again = config_mod.load(tmp_path / "config.json", ["train.n_envs=2"])
+    assert again.reward.speed_cap_m_s == 0.04
+    assert again.train.n_envs == 2
