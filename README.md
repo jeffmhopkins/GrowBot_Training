@@ -183,21 +183,25 @@ camera sees, the robot has to walk tail first. That's the second config,
   thing the camera is looking at is dead ahead. The app puts the face's left-right angle
   in the frame there.
 - `reward.stance = 0.5` with `task.stand_lift_deg = 6`: a bonus for holding the body 6
-  degrees more nose-up than it rests, which tips the camera's view up and forward.
-- `task.lying_start_prob = 0.3`: 3 in 10 episodes start folded flat (legs tucked), so it
+  degrees more nose-up than it rests, which tilts the camera's view down from the sky
+  toward the horizon behind it, where faces are.
+- `task.lying_start_prob = 0.3`: 3 in 10 episodes start folded (legs tucked, body lower), so it
   learns to push itself up and then go.
 
 **How tall can it stand?** Not much, with this body. In the sim, the nominal build rests
 at about 35 degrees nose-up. With both legs pushed all the way forward it reaches about 41
 degrees, and past that it rolls onto its back. Across the randomised bodies the most it
-gets is about 8 degrees above rest on average. So the aim is 6 degrees, not "upright". If
+gets is about 8 degrees above rest on average. So the aim is 6 degrees above its own
+resting stance, not "upright". (About 1 in 5 randomised bodies carry their weight far
+enough forward to rest nearly flat; for those, "taller" and "folded" are measured from
+that flatter rest, so the same goal still makes sense.) If
 you want the camera much closer to level, the bigger lever is the mount: a wedge under
 the phone. The policy needs no retraining for a wedge as far as the sensors go, because
 the IMU is levelled at the stance anyway (the extra weight up high is a separate
 question).
 
 **Why not a separate stand-up policy?** This robot never really falls over: switched off
-it sits on its tail and feet, and folded flat it's a leg push away from standing. Getting
+it sits on its tail and feet, and folded it's a leg push away from standing. Getting
 up is part of walking here, so one policy learns both. Episodes that start folded are
 mixed in from the beginning rather than in a later phase, which is simpler and works for
 a skill this small. A separate policy would make sense if it ever has to right itself
@@ -292,7 +296,7 @@ Every run keeps a `live/` folder up to date, and the Launcher shows it on the jo
 | File | What | Updated |
 | --- | --- | --- |
 | `progress.json` | percent done, time left, speed toward the target, heading error, falls | after every batch of experience (a few seconds) |
-| `replay.html` | 3D replay of the network as it is now: three short walks, played in a loop; the open page reloads itself between walks, so it picks up the newest one on its own | every half million steps (`train.live_replay_every_steps`; a few minutes apart on the box) |
+| `replay.html` | 3D replay of the network as it is now: three 24-second walks, played in a loop; the open page reloads itself between walks, so it picks up the newest one on its own | every half million steps (`train.live_replay_every_steps`; a few minutes apart on the box) |
 | `policy_latest.json` | that network as an app policy | with the replay |
 
 Its `state` goes from "training" to "finishing" while the run evaluates and draws the

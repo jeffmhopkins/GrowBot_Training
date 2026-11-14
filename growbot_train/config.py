@@ -64,10 +64,11 @@ class TaskConfig:
     # Only rewarded when reward.stance > 0; the tilt penalty then measures from this
     # taller stance instead of the resting one.
     stand_lift_deg: float = 0.0
-    # Share of episodes that start folded flat (legs tucked to lying_leg_rad) instead of
+    # Share of episodes that start folded (both legs tucked to one angle drawn from
+    # lying_leg_rad, inside what the policy itself can command) instead of
     # standing on neutral legs, so the policy learns to get up before it walks.
     lying_start_prob: float = 0.0
-    lying_leg_rad: tuple[float, float] = (-1.2, -0.8)
+    lying_leg_rad: tuple[float, float] = (-0.95, -0.75)
 
 
 @dataclass

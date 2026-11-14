@@ -27,7 +27,7 @@ stance_tol_deg = 6.0    # how close to the taller stance counts (degrees)
 [task]
 body = "rollout"            # "rollout" (upstream public build) or "olie" (enclosure build)
 episode_seconds = 20.0
-initial_error_deg = 180.0   # first target: up to this many degrees off the robot's nose
+initial_error_deg = 180.0   # first target: up to this many degrees off the camera end
 retarget_every_s = [6.0, 14.0]  # the target moves every 6-14 s...
 retarget_max_deg = 120.0        # ...by up to this much
 gait_hz = 1.0               # the clock the policy sees; roughly one step cycle a second
@@ -37,7 +37,7 @@ fall_tilt_deg = 55.0        # tipped this far from the starting stance = fallen 
 facing = "camera"           # CHANGED: tail first, toward what the camera sees
 stand_lift_deg = 6.0        # CHANGED: about all this body can lift (see README)
 lying_start_prob = 0.3      # CHANGED: 3 in 10 start folded flat and must get up first
-lying_leg_rad = [-1.2, -0.8]  # how far the legs tuck for a folded start
+lying_leg_rad = [-0.95, -0.75]  # how far both legs tuck for a folded start (radians)
 
 [randomization]
 # Every episode gets a slightly different robot, so the policy works on the real one.

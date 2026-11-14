@@ -4,9 +4,10 @@
     python -m growbot_train.view runs/my_run/policy_heading_walk.json --video walk.mp4
 
 In the window: Left / Right arrow turn the target 30 degrees, Up points it back at the
-robot's nose, Backspace restarts on a new random body, N toggles the nominal body. The
-red arrow is the target direction; the console prints speed and heading error once a
-second. ``--video`` renders without a window (set MUJOCO_GL=egl on a headless machine).
+robot's front (its nose, or its camera end for the camera walk), Backspace restarts on a
+new random body, N toggles the nominal body. The red arrow is the target direction; the
+console prints speed and heading error once a second. ``--video`` renders without a
+window (set MUJOCO_GL=egl on a headless machine).
 """
 
 from __future__ import annotations
