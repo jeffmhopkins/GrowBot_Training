@@ -22,7 +22,6 @@ stance = 0.5            # as camera walk: bonus for standing taller than at rest
 stance_tol_deg = 6.0    # how close to the taller stance counts (degrees)
 back_lean = 2.0         # as camera walk: penalty for leaning back past the stance + margin
 back_lean_margin_deg = 12.0  # how far past the stance before that penalty starts
-speed_track_tol = 1.5   # with a speed input: pay drops to zero this far (x cap) from the wanted speed
 wobble = 0.05           # CHANGED: penalty for rocking, for a steady camera
 
 [task]

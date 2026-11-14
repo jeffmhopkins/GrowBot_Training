@@ -43,10 +43,11 @@ class RewardConfig:
     back_lean: float = 0.0
     back_lean_margin_deg: float = 12.0
     # With task.speed "command" or "still", progress pays for matching the wanted
-    # velocity instead: weight * max(0, 1 - miss / (tol * cap)), where miss is how far the
-    # averaged velocity is from the wanted one (direction included), in m/s. Linear, not
-    # a bell curve, so standing still when told to walk still feels a pull to move.
-    speed_track_tol: float = 1.5
+    # velocity instead: weight * (|wanted| - miss) / cap, floored at -weight, where miss is
+    # how far the averaged velocity is from the wanted one (direction included), in m/s.
+    # Standing still always scores exactly zero, as it does in "cap" mode: an earlier
+    # form paid most of the weight for standing still, which outbid the heading reward,
+    # and both the first camera walk and look runs learned to freeze instead of turning.
     # Rocking costs weight * (roll rate^2 + pitch rate^2), rad/s: a steadier camera.
     wobble: float = 0.0
 

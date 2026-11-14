@@ -20,7 +20,6 @@ stance = 0.0            # bonus for standing taller than at rest (off: this walk
 stance_tol_deg = 6.0    # how close to the taller stance counts (degrees)
 back_lean = 0.0         # penalty for leaning back past the stance + margin (off here)
 back_lean_margin_deg = 12.0  # how far past the stance before that penalty starts
-speed_track_tol = 1.5   # with a speed input: pay drops to zero this far (x cap) from the wanted speed
 wobble = 0.0            # penalty for rocking (roll and pitch spin, squared; off here)
 
 [task]
