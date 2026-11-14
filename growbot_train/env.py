@@ -502,6 +502,7 @@ class GrowBotHeadingEnv(gym.Env):
         self.queue = np.tile(legs, (DELAY_SLOTS, 1))
         self.prev_action = np.clip(legs / self.cfg.task.action_to_rad, -1.0, 1.0)
         self.vel_avg = np.zeros(2)
+        self.anchor = self.data.qpos[0:2].copy()
         self.heading_bias = 0.0
         if "target_error_deg" in options:
             first_err = float(options["target_error_deg"])
@@ -591,6 +592,14 @@ class GrowBotHeadingEnv(gym.Env):
         }
         if r.turn:
             terms["turn"] = r.turn * (err0 - err_score)
+        drift_m = 0.0
+        if cfg.task.speed != "cap":
+            if self.speed_cmd != 0.0:
+                self.anchor = d.qpos[0:2].copy()
+            else:
+                drift_m = float(np.linalg.norm(d.qpos[0:2] - self.anchor))
+                if r.anchor:
+                    terms["anchor"] = -r.anchor * max(0.0, drift_m - r.anchor_free_m) / 0.05
         if r.wobble:
             # Free-joint angular velocity is in the body frame: x is roll, y is pitch.
             terms["wobble"] = -r.wobble * float(d.qvel[3] ** 2 + d.qvel[4] ** 2)
@@ -628,6 +637,7 @@ class GrowBotHeadingEnv(gym.Env):
             "abs_err_deg": err_score,
             "fell": fell,
             "pitch_deg": pitch,
+            "drift_m": drift_m,
             # From the same base the stance reward uses, so it reads against want_lift_deg.
             "lift_deg": pitch - max(self._rest_pitch, self._nominal_rest_pitch),
             "speed_miss": speed_miss,

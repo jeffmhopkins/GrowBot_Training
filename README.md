@@ -329,7 +329,9 @@ dead behind within 13 seconds on the nominal body (2 degrees off after), and ave
 randomisation ramps up over the first 15M steps, as for lift and fall. That run turned, but slid about 1 cm/s
 (mostly backward) while it did: the spin pivots near the tail, and drift up to 1.5 cm/s
 was free. Only 0.45 cm/s is free now (`reward.stop_drift_free = 0.15`), so it has to
-turn on the spot. It keeps the camera height input. Unlike the camera walk it trains on
+turn on the spot. Slower drift still adds up, so wandering from where it started also
+costs (`reward.anchor`, past the first 2 cm). The policy isn't told how far it has gone,
+as the phone can't measure that; it has to learn a turn that doesn't wander. It keeps the camera height input. Unlike the camera walk it trains on
 the printed build with bare-print surfaces (see [Bodies](#bodies)), like the heading walk.
 It's the camera walk otherwise, and only the lines marked CHANGED differ from that file.
 From JBrain it's the "GrowBot look" job.

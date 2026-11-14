@@ -52,6 +52,13 @@ class RewardConfig:
     # for it outbid the heading reward: the first camera walk and look runs froze rather
     # than turn to face the target.
     stop_drift_free: float = 0.5
+    # While stopped (speed command 0, or always in "still" mode), wandering from where the
+    # stop began costs weight * (distance - anchor_free_m) / 5 cm, per tick. The speed band
+    # above only sees drift faster than stop_drift_free; slower drift adds up unseen.
+    # The policy isn't told the offset (the phone can't measure it), so it has to learn a
+    # turn that doesn't wander. 0 = off.
+    anchor: float = 0.0
+    anchor_free_m: float = 0.02
     # Rocking costs weight * (roll rate^2 + pitch rate^2), rad/s: a steadier camera.
     wobble: float = 0.0
     # Pay per degree the heading error shrank this tick (negative when it grew), measured
