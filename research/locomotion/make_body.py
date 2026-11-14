@@ -33,13 +33,17 @@ PLATE_HALF = (0.084, 0.040)  # the backplate overhangs the tray a little all rou
 # The tray's ends are cut back at the bottom (Jeff's print, 2026-11-14). Measured from the
 # STL's outline along its length: (end at the bottom, end where the cut meets the wall,
 # height of that meeting above the bottom), metres. One end is cut longer and shallower
-# (about 30 degrees from upright) than the other (about 45). TAIL_END says which is the
-# tail, where the batteries sit; flip it if the build is the other way round.
+# (about 30 degrees from upright) than the other (about 45). The batteries, and so the
+# tail, sit at the steep end: the side wall's one opening, for the board's power switch,
+# is in the shallow half (STL y -36 to -26 mm), and the board sits opposite the
+# batteries (Jeff, 2026-11-14).
 ENDS = {
     "shallow": (0.0715, 0.0805, 0.0156),
     "steep": (0.0686, 0.0801, 0.0115),
 }
-TAIL_END = "shallow"
+TAIL_END = "steep"
+# The tail surface: the backplate's overhang, the cut and the first few mm of the bottom.
+TAIL_PAD_M = round(PLATE_HALF[0] - ENDS[TAIL_END][0] + 0.005, 4)
 NOSE_END = "steep" if TAIL_END == "shallow" else "shallow"
 AXLE_Z = -HALF[2] + 0.0185  # servo axle height in the body frame (origin at box centre)
 LEG_REACH = 0.074
@@ -145,6 +149,10 @@ def xml() -> str:
     <joint damping="0.03" armature="0.002"/>
     <position kp="0.75" kv="0.05" ctrlrange="-1.57 1.57" forcerange="-1.5 1.5"/>
   </default>
+  <custom>
+    <!-- How far in from the backplate's end the tail runs: past the cut, onto the edge it rests on. -->
+    <numeric name="tail_pad_m" data="{TAIL_PAD_M}"/>
+  </custom>
   <worldbody>
     <light name="sun" pos="0 0 3" dir="0 0 -1" diffuse="0.8 0.8 0.8"/>
     <geom name="floor" type="plane" size="0 0 0.05" rgba="0.76 0.87 0.70 1"/>

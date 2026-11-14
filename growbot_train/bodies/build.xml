@@ -7,17 +7,21 @@
     <joint damping="0.03" armature="0.002"/>
     <position kp="0.75" kv="0.05" ctrlrange="-1.57 1.57" forcerange="-1.5 1.5"/>
   </default>
+  <custom>
+    <!-- How far in from the backplate's end the tail runs: past the cut, onto the edge it rests on. -->
+    <numeric name="tail_pad_m" data="0.0204"/>
+  </custom>
   <worldbody>
     <light name="sun" pos="0 0 3" dir="0 0 -1" diffuse="0.8 0.8 0.8"/>
     <geom name="floor" type="plane" size="0 0 0.05" rgba="0.76 0.87 0.70 1"/>
     <body name="base_body" pos="0 0 0.3">
       <joint name="root_joint" type="free"/>
       <inertial pos="-0.008040 0.000000 0.010861" mass="0.472000" fullinertia="0.00032732595 0.001168222 0.0013136974 0 -6.5141755e-05 0"/>
-      <geom name="torso_core" type="box" size="0.07005 0.03770 0.01250" pos="-0.00145 0 -0.00240" rgba="0.15 0.15 0.15 1"/>
-      <geom name="torso_tail_wall" type="box" size="0.00450 0.03770 0.00470" pos="-0.07600 0 0.00540" rgba="0.15 0.15 0.15 1"/>
-      <geom name="torso_nose_wall" type="box" size="0.00575 0.03770 0.00675" pos="0.07435 0 0.00335" rgba="0.15 0.15 0.15 1"/>
-      <geom name="torso_tail_cut" type="box" size="0.00900 0.03770 0.00420" pos="-0.07236 0 -0.00500" euler="0 -119.9816 0" rgba="0.15 0.15 0.15 1"/>
-      <geom name="torso_nose_cut" type="box" size="0.00813 0.03770 0.00420" pos="0.07138 0 -0.00618" euler="0 -45.0000 0" rgba="0.15 0.15 0.15 1"/>
+      <geom name="torso_core" type="box" size="0.07005 0.03770 0.01250" pos="0.00145 0 -0.00240" rgba="0.15 0.15 0.15 1"/>
+      <geom name="torso_tail_wall" type="box" size="0.00575 0.03770 0.00675" pos="-0.07435 0 0.00335" rgba="0.15 0.15 0.15 1"/>
+      <geom name="torso_nose_wall" type="box" size="0.00450 0.03770 0.00470" pos="0.07600 0 0.00540" rgba="0.15 0.15 0.15 1"/>
+      <geom name="torso_tail_cut" type="box" size="0.00813 0.03770 0.00420" pos="-0.07138 0 -0.00618" euler="0 -135.0000 0" rgba="0.15 0.15 0.15 1"/>
+      <geom name="torso_nose_cut" type="box" size="0.00900 0.03770 0.00420" pos="0.07236 0 -0.00500" euler="0 -60.0184 0" rgba="0.15 0.15 0.15 1"/>
       <geom name="torso_plate" type="box" size="0.08400 0.04000 0.00240" pos="0.00000 0 0.01250" rgba="0.15 0.15 0.15 1"/>
       <site name="imu" pos="0 0 0.022" size="0.005"/>
       <geom name="phone" type="box" size="0.0819 0.04205 0.0071" pos="0 0 0.022" contype="0" conaffinity="0" mass="0" rgba="0.3 0.3 0.35 1"/>
