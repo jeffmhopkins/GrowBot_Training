@@ -80,6 +80,8 @@ heading_drift_deg_per_s = 0.5
 heading_refresh_ticks = [1, 6]
 push_every_s = [0.0, 0.0]   # a sudden shove this often (off here)
 push_pitch_rad_s = 0.0      # how hard a shove spins it (pitch, rad/s)
+ramp_steps = 0              # curriculum: widen every range from ramp_from of its width over this many steps (0 = full from the start)
+ramp_from = 0.15
 
 [train]
 total_steps = 30000000

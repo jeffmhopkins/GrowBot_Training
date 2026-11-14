@@ -632,3 +632,28 @@ def test_the_shipped_look_config_scores_the_lens() -> None:
     assert cfg.task.heading_from == "lens"
     env = GrowBotHeadingEnv(cfg)
     assert env._lens
+
+
+def test_the_curriculum_narrows_every_draw_toward_the_built_robot() -> None:
+    env = GrowBotHeadingEnv(Config())
+    env.dr_scale = 0.1
+    r = env.cfg.randomization
+    for seed in range(8):
+        env.reset(seed=seed)
+        assert abs(env._body_params["mass_scale"] - 1.0) <= 0.1 * 0.25 + 1e-9
+        assert abs(env.ep.delay_s - 0.04) <= 0.1 * 0.12 + 1e-9
+        assert np.all(np.abs(env.ep.trim) <= 0.1 * r.trim_err_rad + 1e-9)
+        # The first target starts close to straight ahead, too.
+        assert abs(wrap_deg(env.target_deg - env.yaw_deg())) <= 0.1 * 180.0 + 1e-6
+
+
+def test_the_curriculum_ramps_to_the_full_ranges() -> None:
+    from growbot_train.train import ramp_scale
+
+    cfg = Config()
+    assert ramp_scale(cfg, 0) == 1.0  # off by default
+    cfg.randomization.ramp_steps = 1000
+    cfg.randomization.ramp_from = 0.2
+    assert ramp_scale(cfg, 0) == pytest.approx(0.2)
+    assert ramp_scale(cfg, 500) == pytest.approx(0.6)
+    assert ramp_scale(cfg, 5000) == 1.0

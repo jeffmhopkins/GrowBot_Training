@@ -283,13 +283,17 @@ most of their range about 2.3 times a second, hold the body up around 60 degrees
 feet alone two-thirds of the time, and each time it drops back onto its tail it lands a
 little further tail first: about 5 cm/s on the as-built robot on both floors. Open loop it only works on robots close
 to the as-built one; `configs/lift_fall.toml` clones it (`configs/gaits/lift_fall.json`)
-and lets PPO add the feedback that keeps it going on the rest, steered with the camera
-walk's heading and speed (walk up camera first, or stop and face it). It isn't asked to
-back away yet: the cloned gait has one speed, so a command it can't follow would pay it
-to freeze, as the camera walk's runs did.
-The speed cap is 5 cm/s, the stance bonus and lean-back penalty are off as the body
-bounces through every height, and only going over onto the screen (past 88 degrees) or
-forwards ends an episode. From JBrain it's the "GrowBot lift and fall" job.
+and lets PPO add the feedback that keeps it going on the rest, steered by the heading.
+Two earlier runs from it froze, and the reason was measurable: played open loop under
+the full randomisation, the gait earns less than standing still, so PPO unlearns it in
+the first million steps. So this one starts on robots close to the as-built one
+(`randomization.ramp_steps`: every body, servo, friction and sensor-offset range, and
+how far off the target starts and jumps, begins at 15% of its width and widens to the
+full range over the first 25M steps, half of a full run), walks at the cap with no speed input (the gait has one speed), and explores with
+less noise (`train.log_std_init = -1.5`) so its timing survives the first updates. The
+speed cap is 5 cm/s, the stance bonus and lean-back penalty are off as the body bounces,
+and only going over onto the screen (past 88 degrees) or forwards ends an episode.
+From JBrain it's the "GrowBot lift and fall" job.
 
 ## The look policy
 
@@ -322,7 +326,12 @@ noise and bias. On top of that, from the ranges upstream's shipped walks
 1.2x an MG90S's, each leg's zero off by up to 5 degrees (trim), the phone's readings
 arriving up to 120 ms late, the foot's contact width down to 57% of the printed 21 mm,
 and friction from 0.2 to 2.2 (0.5 to 1.6x a floor's own with per-surface materials). The heading error gets noise, a slow drift (like a gyro-integrated
-heading) and a random refresh rate (like a camera target). All of it is under
+heading) and a random refresh rate (like a camera target). `ramp_steps` turns on a
+curriculum: every body, servo, friction and sensor-offset range starts at `ramp_from` of
+its width around the as-built robot and widens to the full range over that many steps.
+The sensor noise, the heading's refresh rate and the choice of floor stay at full
+strength throughout. The ramp counts absolute steps, so a run cut shorter than
+`ramp_steps` ends before reaching the full ranges. All of it is under
 `[randomization]` in the config, and `enabled = false` turns it off for experiments.
 
 ## Bodies

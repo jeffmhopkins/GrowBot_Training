@@ -213,6 +213,10 @@ class GrowBotHeadingEnv(gym.Env):
         self.action_space = gym.spaces.Box(-ACTION_LIMIT, ACTION_LIMIT, (2,), np.float32)
         self._renderer: mujoco.Renderer | None = None
         self.target_deg = 0.0
+        # The curriculum's share of the full randomisation, set by the trainer as it goes
+        # (randomization.ramp_steps); 1 is the full ranges. It narrows how far off the
+        # target starts and jumps too, so an early gait that only walks straight pays.
+        self.dr_scale = 1.0
 
     def _settled_pitch(self) -> float:
         """Resting pitch of the as-built body on neutral legs. A randomised body can rest
@@ -337,37 +341,46 @@ class GrowBotHeadingEnv(gym.Env):
         else:
             m.geom_friction[:, 0] = params["friction"]
 
+    def _near(self, lo_hi: tuple[float, float], nominal: float) -> tuple[float, float]:
+        """A range drawn in toward the as-built value by the curriculum (dr_scale)."""
+        k = self.dr_scale
+        if k >= 1.0:
+            return lo_hi
+        return (nominal + (lo_hi[0] - nominal) * k, nominal + (lo_hi[1] - nominal) * k)
+
     def _draw(self, overrides: dict[str, Any], randomize: bool) -> tuple[dict[str, Any], Episode]:
         r = self.cfg.randomization
         rng = self.np_random
         ng = self.model.ngeom
+        near, k = self._near, min(1.0, self.dr_scale)
         if randomize:
-            shared = self._u(r.leg_length_scale)
+            shared = self._u(near(r.leg_length_scale, 1.0))
+            fr = r.friction
             body = {
-                "mass_scale": self._u(r.mass_scale),
-                "com": np.array([self._u(r.com_x_m), self._u(r.com_y_m), self._u(r.com_z_m)]),
-                "leg_scale": [shared * self._u(r.leg_asymmetry) for _ in range(2)],
-                "gain": self._u(r.servo_gain_scale),
-                "torque_scale": self._u_if(r.servo_torque_scale),
-                "foot_width": self._u_if(r.foot_width_scale),
+                "mass_scale": self._u(near(r.mass_scale, 1.0)),
+                "com": np.array([self._u(near(c, 0.0)) for c in (r.com_x_m, r.com_y_m, r.com_z_m)]),
+                "leg_scale": [shared * self._u(near(r.leg_asymmetry, 1.0)) for _ in range(2)],
+                "gain": self._u(near(r.servo_gain_scale, 1.0)),
+                "torque_scale": self._u_if(near(r.servo_torque_scale, 1.0)),
+                "foot_width": self._u_if(near(r.foot_width_scale, 1.0)),
                 # One value for every geom: MuJoCo takes the larger of two touching
                 # geoms' friction, so per-geom draws would skew the floor grippy.
-                "friction": np.full(ng, self._u(r.friction)),
+                "friction": np.full(ng, self._u(near(fr, (fr[0] + fr[1]) / 2))),
             }
             ep = Episode(
-                slew=rng.uniform(*r.servo_slew_rad_s, 2),
-                lag=rng.uniform(*r.servo_lag_s, 2),
-                delay_s=self._u(r.relay_delay_s),
-                sensor_delay_s=self._u_if(r.sensor_delay_s),
+                slew=rng.uniform(*near(r.servo_slew_rad_s, 9.6), 2),
+                lag=rng.uniform(*near(r.servo_lag_s, 0.025), 2),
+                delay_s=self._u(near(r.relay_delay_s, 0.04)),
+                sensor_delay_s=self._u_if(near(r.sensor_delay_s, 0.0)),
                 trim=(
-                    rng.uniform(-r.trim_err_rad, r.trim_err_rad, 2)
+                    rng.uniform(-r.trim_err_rad * k, r.trim_err_rad * k, 2)
                     if r.trim_err_rad
                     else np.zeros(2)
                 ),
-                imu_rot=_rot(rng.uniform(-r.imu_tilt_rad, r.imu_tilt_rad, 3)),
-                gyro_bias=rng.uniform(-r.gyro_bias_rad_s, r.gyro_bias_rad_s, 3),
+                imu_rot=_rot(rng.uniform(-r.imu_tilt_rad * k, r.imu_tilt_rad * k, 3)),
+                gyro_bias=rng.uniform(-r.gyro_bias_rad_s * k, r.gyro_bias_rad_s * k, 3),
                 heading_drift_deg_s=self._u(
-                    (-r.heading_drift_deg_per_s, r.heading_drift_deg_per_s)
+                    (-r.heading_drift_deg_per_s * k, r.heading_drift_deg_per_s * k)
                 ),
                 heading_refresh=int(
                     rng.integers(r.heading_refresh_ticks[0], r.heading_refresh_ticks[1] + 1)
@@ -378,8 +391,10 @@ class GrowBotHeadingEnv(gym.Env):
                 # together), and the whole floor on top: dust, polish, pile.
                 floors = self.cfg.task.floors
                 body["floor"] = floors[int(rng.integers(len(floors)))]
-                body["surface_scale"] = {s: self._u(r.surface_friction_scale) for s in SURFACES}
-                body["floor_scale"] = self._u(r.floor_friction_scale)
+                body["surface_scale"] = {
+                    s: self._u(near(r.surface_friction_scale, 1.0)) for s in SURFACES
+                }
+                body["floor_scale"] = self._u(near(r.floor_friction_scale, 1.0))
         else:
             body = self._nominal_body()
             ep = Episode(
@@ -488,7 +503,7 @@ class GrowBotHeadingEnv(gym.Env):
         if "target_error_deg" in options:
             first_err = float(options["target_error_deg"])
         else:
-            lim = self.cfg.task.initial_error_deg
+            lim = self.cfg.task.initial_error_deg * min(1.0, self.dr_scale)
             first_err = float(self.np_random.uniform(-lim, lim))
         self.target_deg = wrap_deg(self.yaw_deg() + first_err)
         self.retarget = bool(options.get("retarget", True))
@@ -527,7 +542,7 @@ class GrowBotHeadingEnv(gym.Env):
             self._next_push = t + self._u(cfg.randomization.push_every_s)
 
         if self.retarget and t >= self._next_retarget:
-            lim = cfg.task.retarget_max_deg
+            lim = cfg.task.retarget_max_deg * min(1.0, self.dr_scale)
             self.target_deg = wrap_deg(self.target_deg + self._u((-lim, lim)))
             self._next_retarget = t + self._u(cfg.task.retarget_every_s)
 
@@ -662,7 +677,8 @@ class GrowBotHeadingEnv(gym.Env):
         """The relay and servo between the phone's command and the joint: dropped
         packets, a fractional delay, a slew-rate limit and a first-order lag."""
         ep = self.ep
-        if self._noisy and self.np_random.random() < self.cfg.randomization.relay_drop_prob:
+        drop = self.cfg.randomization.relay_drop_prob * min(1.0, self.dr_scale)
+        if self._noisy and self.np_random.random() < drop:
             cmd_rad = self.queue[0]
         self.queue = np.concatenate([cmd_rad[None], self.queue[:-1]])
         idx = min(ep.delay_s / CONTROL_DT, DELAY_SLOTS - 1.001)

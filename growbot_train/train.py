@@ -51,6 +51,30 @@ def build_vec_env(cfg: config_mod.Config, n_envs: int, seed: int) -> VecMonitor:
     return VecMonitor(vec)
 
 
+def ramp_scale(cfg: config_mod.Config, steps: int) -> float:
+    """The curriculum's share of the full randomisation after `steps` (1 = full)."""
+    r = cfg.randomization
+    if r.ramp_steps <= 0:
+        return 1.0
+    return min(1.0, r.ramp_from + (1.0 - r.ramp_from) * steps / r.ramp_steps)
+
+
+class Curriculum(BaseCallback):
+    """Widens the randomisation as training goes (randomization.ramp_steps)."""
+
+    def __init__(self, cfg: config_mod.Config) -> None:
+        super().__init__()
+        self.cfg = cfg
+
+    def _on_rollout_start(self) -> None:
+        k = ramp_scale(self.cfg, self.num_timesteps)
+        self.training_env.set_attr("dr_scale", k)
+        self.logger.record("walk/dr_scale", k)
+
+    def _on_step(self) -> bool:
+        return True
+
+
 class Diagnostics(BaseCallback):
     """Logs what the walk is actually doing (speed along the target, heading error,
     falls, each reward term) so a reward change can be judged by more than one number."""
@@ -193,6 +217,9 @@ def main(argv: list[str] | None = None) -> int:
         vec.training = True
         model = PPO.load(resume, env=vec, device="cpu")
         reset = False
+        # learn() resets the envs before the first rollout callback, so a resumed run
+        # would spend its first episodes at full randomisation without this.
+        vec.set_attr("dr_scale", ramp_scale(cfg, model.num_timesteps))
     else:
         vec = VecNormalize(vec, norm_obs=True, norm_reward=True, clip_obs=CLIP_OBS, gamma=t.gamma)
         model = PPO(
@@ -217,6 +244,8 @@ def main(argv: list[str] | None = None) -> int:
             verbose=1,
         )
         reset = True
+        # The clone samples the robots the curriculum starts on.
+        vec.set_attr("dr_scale", ramp_scale(cfg, 0))
         if t.warm_gait:
             from growbot_train.gait import Keyframes, clone_gait
 
@@ -233,6 +262,7 @@ def main(argv: list[str] | None = None) -> int:
     live = Live(out, cfg, t.total_steps, start_steps=0 if reset else model.num_timesteps)
     callbacks = CallbackList(
         [
+            Curriculum(cfg),
             Diagnostics(live),
             Checkpoint(t.checkpoint_every_steps, out / "checkpoints"),
             LiveReplay(t.live_replay_every_steps, live),
