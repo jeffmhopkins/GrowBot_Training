@@ -143,13 +143,24 @@ class RandomizationConfig:
     leg_length_scale: tuple[float, float] = (0.85, 1.15)
     leg_asymmetry: tuple[float, float] = (0.96, 1.04)
     servo_gain_scale: tuple[float, float] = (0.75, 1.25)
-    friction: tuple[float, float] = (0.6, 1.4)
+    # Upstream's shipped walks train on 0.2 to 2.2 (policies/forward-0930's dr).
+    friction: tuple[float, float] = (0.2, 2.2)
     # With task.surfaces, friction is drawn per surface and per floor instead.
     surface_friction_scale: tuple[float, float] = (0.7, 1.3)
-    floor_friction_scale: tuple[float, float] = (0.7, 1.3)
+    floor_friction_scale: tuple[float, float] = (0.5, 1.6)
     servo_slew_rad_s: tuple[float, float] = (8.7, 10.5)
     servo_lag_s: tuple[float, float] = (0.015, 0.035)
-    relay_delay_s: tuple[float, float] = (0.020, 0.090)
+    relay_delay_s: tuple[float, float] = (0.020, 0.160)
+    # Scales the servo torque limit: upstream draws 0.13 to 0.3 N m, MG90Ss vary that much.
+    servo_torque_scale: tuple[float, float] = (0.5, 1.2)
+    # Each leg's zero is off by up to this much (rad): a horn is seated a spline tooth
+    # out, or the trim is set by eye. Upstream draws +-4 to 5 degrees.
+    trim_err_rad: float = 0.087
+    # The phone's sensors arrive this late (s), separate from the relay's delay.
+    sensor_delay_s: tuple[float, float] = (0.0, 0.12)
+    # The foot's width along the body, as a share of the printed 21 mm: a worn or
+    # rounded edge stands on less. Upstream draws a 6 to 10.5 mm half-width.
+    foot_width_scale: tuple[float, float] = (0.57, 1.0)
     relay_drop_prob: float = 0.08
     imu_tilt_rad: float = 0.15
     accel_noise_m_s2: float = 0.3
@@ -245,6 +256,13 @@ def _coerce(cls: type, key: str, value: Any) -> Any:
 # A run saved before task.surfaces existed ran the old physics: one friction on every
 # geom, set down level, no torque cap. Its config.json must not pick up today's defaults.
 _LEGACY_TASK = {"surfaces": (), "start_pitch_deg": 0.0, "servo_torque_nm": 0.0}
+# Likewise a run saved before the servo-torque, trim, sensor-delay and foot-width draws.
+_LEGACY_RANDOMIZATION = {
+    "servo_torque_scale": (1.0, 1.0),
+    "trim_err_rad": 0.0,
+    "sensor_delay_s": (0.0, 0.0),
+    "foot_width_scale": (1.0, 1.0),
+}
 
 
 def from_dict(data: dict[str, Any], saved: bool = False) -> Config:
@@ -253,6 +271,9 @@ def from_dict(data: dict[str, Any], saved: bool = False) -> Config:
     if saved and "surfaces" not in data.get("task", {}):
         for k, v in _LEGACY_TASK.items():
             setattr(cfg.task, k, v)
+    if saved and "trim_err_rad" not in data.get("randomization", {}):
+        for k, v in _LEGACY_RANDOMIZATION.items():
+            setattr(cfg.randomization, k, v)
     for key, value in data.items():
         if key == "name":
             cfg.name = str(value)

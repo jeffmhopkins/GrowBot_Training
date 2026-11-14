@@ -287,9 +287,13 @@ From JBrain it's the "GrowBot look" job.
 No two GrowBots are the same, and the simulator is not the real world. So every episode
 gets a slightly different robot, using the ranges upstream's DR/RMA walk was trained
 with: weight (80 to 125%), where the battery sits, leg length and left/right mismatch,
-servo strength, speed and lag, floor friction, a 20 to 90 ms delay on the relay to the
+servo strength, speed and lag, floor friction, a 20 to 160 ms delay on the relay to the
 legs with 8% of commands dropped, a phone mounted up to 0.15 rad crooked, and sensor
-noise and bias. The heading error gets noise, a slow drift (like a gyro-integrated
+noise and bias. On top of that, from the ranges upstream's shipped walks
+(`app/policies/forward-0930`, `diy-v1`) were trained with: servo torque from half to
+1.2x an MG90S's, each leg's zero off by up to 5 degrees (trim), the phone's readings
+arriving up to 120 ms late, the foot's contact width down to 57% of the printed 21 mm,
+and friction from 0.2 to 2.2 (0.5 to 1.6x a floor's own with per-surface materials). The heading error gets noise, a slow drift (like a gyro-integrated
 heading) and a random refresh rate (like a camera target). All of it is under
 `[randomization]` in the config, and `enabled = false` turns it off for experiments.
 

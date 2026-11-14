@@ -83,7 +83,6 @@ def test_camera_walk_differs_only_where_it_says() -> None:
         ("task", "body"),
         ("task", "surfaces"),
         ("task", "start_pitch_deg"),
-        ("task", "servo_torque_nm"),
     }
     assert cam["name"] == "camera_walk"
     marked = SHIPPED.with_name("camera_walk.toml").read_text().count("# CHANGED:")
@@ -114,7 +113,6 @@ def test_look_differs_from_the_camera_walk_only_where_it_says() -> None:
         ("task", "body"),
         ("task", "surfaces"),
         ("task", "start_pitch_deg"),
-        ("task", "servo_torque_nm"),
     }
     assert look["name"] == "look"
     assert SHIPPED.with_name("look.toml").read_text().count("# CHANGED:") == len(changed)

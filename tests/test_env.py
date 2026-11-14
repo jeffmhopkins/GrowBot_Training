@@ -430,3 +430,52 @@ def test_a_config_without_the_new_inputs_draws_no_extra_random_numbers() -> None
     env2 = GrowBotHeadingEnv(cfg2)
     env2.reset(seed=7)
     assert env2.np_random.random() != after_reset
+
+
+def test_servo_torque_and_foot_width_draws_land_and_restore() -> None:
+    env = GrowBotHeadingEnv(Config())
+    env.reset(seed=0, options={"nominal": True})
+    torque0 = env.model.actuator_forcerange.copy()
+    width0 = {g: env.model.geom_size[g, 0] for leg in env._leg_all for g in leg}
+    pos0 = {g: env.model.geom_pos[g, 0] for leg in env._leg_all for g in leg}
+    env.reset(seed=0, options={"overrides": {"torque_scale": 0.5, "foot_width": 0.6}})
+    np.testing.assert_allclose(env.model.actuator_forcerange, torque0 * 0.5)
+    for g, w in width0.items():
+        assert env.model.geom_size[g, 0] == pytest.approx(w * 0.6)
+        # The tail-side and nose-side halves stay side by side, inside the narrower foot.
+        assert env.model.geom_pos[g, 0] == pytest.approx(pos0[g] * 0.6)
+    env.reset(seed=0, options={"nominal": True})
+    np.testing.assert_allclose(env.model.actuator_forcerange, torque0)
+
+
+def test_a_mis_trimmed_leg_holds_off_its_command() -> None:
+    env = GrowBotHeadingEnv(Config())
+    env.reset(seed=0, options={"overrides": {"trim": np.array([0.08, -0.05])}})
+    env.step(np.zeros(2))
+    np.testing.assert_allclose(env.data.ctrl, env.motor + [0.08, -0.05])
+
+
+def test_late_sensors_show_the_reading_from_ticks_ago() -> None:
+    cfg = Config()
+    cfg.randomization.enabled = False
+    env = GrowBotHeadingEnv(cfg)
+    env.reset(seed=0, options={"overrides": {"sensor_delay_s": 2 * CONTROL_DT}})
+    raw = []
+    for _ in range(6):
+        env.step(np.array([0.9, -0.9]))  # swing the legs so the gyro moves
+        raw.append(env._imu_raw()[1].copy())
+        seen = env.hist[0, CHANNELS.index("gyro_x") : CHANNELS.index("gyro_x") + 3]
+    np.testing.assert_allclose(seen, raw[-3], atol=1e-9)
+    assert not np.allclose(raw[-3], raw[-1])
+
+
+def test_a_run_saved_before_the_new_draws_keeps_its_old_randomisation(tmp_path) -> None:
+    from growbot_train import config as config_mod
+
+    data = Config().to_dict()
+    for k in ("servo_torque_scale", "trim_err_rad", "sensor_delay_s", "foot_width_scale"):
+        del data["randomization"][k]
+    (tmp_path / "config.json").write_text(json.dumps(data))
+    old = config_mod.load(tmp_path / "config.json").randomization
+    assert old.servo_torque_scale == (1.0, 1.0) and old.trim_err_rad == 0.0
+    assert old.sensor_delay_s == (0.0, 0.0) and old.foot_width_scale == (1.0, 1.0)
