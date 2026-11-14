@@ -11,7 +11,7 @@ it.
 Where this is heading, phase by phase: [docs/ROADMAP.md](docs/ROADMAP.md).
 
 Everything here runs on a normal Linux machine with plain MuJoCo and Stable-Baselines3
-PPO on the CPU, one simulator per core. A finished run comes out as one JSON file in
+PPO on the CPU, one or more simulators per core. A finished run comes out as one JSON file in
 the format the JBrain2 app's policy runner loads.
 
 There are four walks, each a config file:
@@ -104,7 +104,13 @@ to near the cap), `abs_err_deg` (should fall), `speed` (should stay under the ca
 The default run is 30 million steps, about 330 hours of simulated walking. In the
 sandbox this was built in, 4 cores did about 1,500 steps a second. A 16-core Strix
 Halo running 32 simulators should manage several times that, so expect roughly one to
-two hours. A run saves a checkpoint every 2 million steps, so you can stop early and
+two hours. On the box, one simulator per worker process kept the cores only 14% busy: every tick
+the learner sends each simulator its action over a pipe and waits for the reply, and
+that round trip cost more than the physics. `train.envs_per_worker` (look uses 4) has
+each worker process step that many simulators per round trip, with `n_steps` cut by
+the same factor so a rollout holds the same number of samples (`growbot_train/vec.py`).
+
+A run saves a checkpoint every 2 million steps, so you can stop early and
 export any checkpoint:
 
 ```bash
@@ -531,6 +537,7 @@ doing only if the CPU runs prove too slow.
 | `research/locomotion/` | Gait and body-change search on a fast open-loop bench (its README) |
 | `hardware/cam_foot_leg/` | Printable left and right legs with the bench's winning cam sole, on upstream's horn mount (its README) |
 | `growbot_train/train.py` | PPO training, checkpoints, export at the end |
+| `growbot_train/vec.py` | Several simulators per worker process (`train.envs_per_worker`) |
 | `growbot_train/export.py` | Trained network to the app's JSON, with a match check |
 | `growbot_train/evaluate.py` | Scores an exported JSON, optional robustness sweep |
 | `growbot_train/replay.py` | Writes the browser 3D replay page (`replay_template.html`) |

@@ -123,6 +123,8 @@ def test_look_differs_from_the_camera_walk_only_where_it_says() -> None:
         ("task", "retarget_every_s"),
         ("task", "speed"),
         ("train", "total_steps"),
+        ("train", "envs_per_worker"),
+        ("train", "n_steps"),
         ("task", "body"),
         ("task", "surfaces"),
         ("task", "start_pitch_deg"),

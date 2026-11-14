@@ -207,8 +207,13 @@ class RandomizationConfig:
 @dataclass
 class TrainConfig:
     total_steps: int = 30_000_000
-    # 0 = one environment per CPU thread.
+    # 0 = one environment per CPU thread, times envs_per_worker.
     n_envs: int = 0
+    # Simulators each worker process steps per round trip (growbot_train/vec.py). 1 is
+    # SB3's one process per simulator, which on the 32-thread box left the cores 86%
+    # idle waiting on pipes. More per worker means more simulators in all, so a rollout
+    # holds n_steps * n_envs samples: lower n_steps to keep it the same size.
+    envs_per_worker: int = 1
     n_steps: int = 256
     batch_size: int = 4096
     n_epochs: int = 5

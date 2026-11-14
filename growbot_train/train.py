@@ -23,6 +23,7 @@ from stable_baselines3.common.callbacks import BaseCallback, CallbackList
 from stable_baselines3.common.vec_env import (
     DummyVecEnv,
     SubprocVecEnv,
+    VecEnv,
     VecMonitor,
     VecNormalize,
 )
@@ -45,9 +46,18 @@ def make_env(cfg: config_mod.Config, rank: int, seed: int):
     return _init
 
 
-def build_vec_env(cfg: config_mod.Config, n_envs: int, seed: int) -> VecMonitor:
+def build_vec_env(
+    cfg: config_mod.Config, n_envs: int, seed: int, workers: int | None = None
+) -> VecMonitor:
     fns = [make_env(cfg, i, seed) for i in range(n_envs)]
-    vec = SubprocVecEnv(fns, start_method="fork") if n_envs > 1 else DummyVecEnv(fns)
+    if workers is not None and 1 < workers < n_envs:
+        from growbot_train.vec import BlockSubprocVecEnv
+
+        vec: VecEnv = BlockSubprocVecEnv(fns, workers)
+    elif n_envs > 1:
+        vec = SubprocVecEnv(fns, start_method="fork")
+    else:
+        vec = DummyVecEnv(fns)
     return VecMonitor(vec)
 
 
@@ -181,7 +191,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--config", default="configs/heading_walk.toml")
     ap.add_argument("--out", required=True, help="run folder to write into")
     ap.add_argument("--steps", type=int, help="override train.total_steps")
-    ap.add_argument("--envs", type=int, help="override train.n_envs")
+    ap.add_argument(
+        "--envs",
+        type=int,
+        help="override train.n_envs (the total; envs_per_worker then sets nothing, and"
+        " n_steps * envs is the rollout size)",
+    )
     ap.add_argument("--set", action="append", default=[], metavar="SECTION.KEY=VALUE")
     ap.add_argument(
         "--resume",
@@ -200,14 +215,19 @@ def main(argv: list[str] | None = None) -> int:
     if args.envs:
         cfg.train.n_envs = args.envs
     t = cfg.train
-    n_envs = t.n_envs or default_n_envs()
+    n_envs = t.n_envs or default_n_envs() * max(1, t.envs_per_worker)
+    workers = min(n_envs, default_n_envs())
     out.mkdir(parents=True, exist_ok=True)
     cfg.save(out / "config.json")
     # The learner is small; a few threads are plenty and leave the cores to the sims.
     torch.set_num_threads(max(1, min(8, (os.cpu_count() or 2) // 4)))
-    print(f"== training {cfg.name}: {t.total_steps:,} steps on {n_envs} simulators ==", flush=True)
+    print(
+        f"== training {cfg.name}: {t.total_steps:,} steps on {n_envs} simulators "
+        f"in {workers} workers ==",
+        flush=True,
+    )
 
-    vec = build_vec_env(cfg, n_envs, t.seed)
+    vec = build_vec_env(cfg, n_envs, t.seed, workers)
     if args.resume:
         resume = Path(args.resume)
         norm_path = (

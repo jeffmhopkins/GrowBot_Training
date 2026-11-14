@@ -92,7 +92,8 @@ push_pitch_rad_s = 0.0      # as camera walk: off for now
 [train]
 total_steps = 40000000      # CHANGED: no walking to learn, so a shorter run
 n_envs = 0                  # 0 = one simulator per CPU thread
-n_steps = 256
+envs_per_worker = 4         # CHANGED: four simulators per worker process, so the cores stay busy
+n_steps = 64                # CHANGED: a quarter of 256, so 4x the simulators keep the rollout the same size
 batch_size = 4096
 n_epochs = 5
 learning_rate = 3e-4
