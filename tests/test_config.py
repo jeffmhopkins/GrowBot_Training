@@ -125,7 +125,6 @@ def test_look_differs_from_the_camera_walk_only_where_it_says() -> None:
         ("train", "total_steps"),
         ("train", "envs_per_worker"),
         ("train", "n_steps"),
-        ("reward", "stop_drift_free_final"),
         ("reward", "stance"),
         ("train", "warm_gait_tilt_offset"),
         ("task", "body"),

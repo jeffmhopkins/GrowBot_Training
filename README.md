@@ -348,13 +348,18 @@ score better than turning, which is how earlier runs froze. The run with those (
 of it inside the free speed band, and it held the camera about 37 degrees up whatever
 the camera height asked (42 to 68). The clone had held one posture whatever the input,
 so the policy learned to ignore it. So the clone now lowers or raises both legs with the
-camera height input (`train.warm_gait_tilt_offset`; the spin aims the camera about 65
-degrees up at -1 and 47 at +1, where standing still with the legs level gives 48),
-holding the asked height pays twice as much (`reward.stance = 1`), and the free speed
-band narrows from 1.5 to 0.75 cm/s as the curriculum ramps
-(`reward.stop_drift_free_final`). Checked offline against standing still: the
-crept-back policy still beat it by a clear margin at the narrow band, while the clone
-it starts from only about ties it at the wide one, so the band starts wide. It keeps the camera height input. Unlike the camera walk it trains on
+camera height input (`train.warm_gait_tilt_offset`), and holding the asked height pays
+twice as much (`reward.stance = 1`). That run (v5) followed the camera height (65
+degrees up when asked 68, 38 when asked 42), but a free speed band narrowing to 0.75
+cm/s (`reward.stop_drift_free_final`) only made it turn less: it still slid about 1.4
+cm/s, 28 cm over a 30 s episode. The slide came from the spin it cloned, which pivots
+near the tail and travels about 2 cm/s on its own. So look now clones
+`configs/gaits/look_spin_still.json`, from a CMA-ES search on the bench scored on turn
+rate minus net travel: on the nominal body it spins about 24 degrees a second
+travelling 0.4 cm/s (the first spin: 12 and 2.0), and on held-out random bodies at half
+the randomisation 17 and 1.1 (the first: 11 and 1.8). Its legs swing up to 1.25 rad,
+so `task.action_to_rad` is 1.45, and the band is back at 1.5 cm/s. A rubber tail pad
+cut the first spin's travel by a third in the simulator, but the new spin needs none. It keeps the camera height input. Unlike the camera walk it trains on
 the printed build with bare-print surfaces (see [Bodies](#bodies)), like the heading walk.
 It's the camera walk otherwise, and only the lines marked CHANGED differ from that file.
 From JBrain it's the "GrowBot look" job.

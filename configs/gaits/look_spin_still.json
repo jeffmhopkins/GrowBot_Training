@@ -1,0 +1,26 @@
+{
+ "source": "CMA-ES over 8 keyframes per leg at 1 Hz on the look stance (printed build, bare print, action_to_rad 1.3), scored on turn rate (up to 20 deg/s) minus 8 deg/s per cm/s of net travel, over the nominal and 3 random bodies: spins counter-clockwise about 24 deg/s on the nominal body travelling 0.4 cm/s (the first look spin: 12 deg/s, 2.0 cm/s); legs swapped, it spins clockwise",
+ "hz": 1.0,
+ "keys_rad": [
+  [
+   -0.0774,
+   -0.7396,
+   -1.25,
+   0.6346,
+   1.25,
+   0.608,
+   0.548,
+   0.9736
+  ],
+  [
+   -0.9285,
+   -0.7331,
+   -0.3962,
+   -0.5476,
+   -0.4224,
+   -0.5443,
+   -1.25,
+   -1.25
+  ]
+ ]
+}
