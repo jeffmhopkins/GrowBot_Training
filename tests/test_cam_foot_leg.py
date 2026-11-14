@@ -77,6 +77,13 @@ def test_outer_face_is_sculpted_only_on_the_shaft() -> None:
     assert t[3] > leg_mod.THICK - leg_mod.ROUND_DROP - leg_mod.WAIST_DEPTH - 0.01
 
 
+def test_printed_leg_keeps_full_thickness_at_the_hub_and_sole(legs) -> None:
+    # On the built leg, not just thickness(): the face's blur must not carve these.
+    for x, z in ((6.0, -18.0), (-2.0, -64.0), (8.0, 3.0)):
+        probe = mf.Manifold.cube([0.2, 15.0, 0.2]).translate([x - 0.1, -14.0, z - 0.1])
+        assert (legs["right"] ^ probe).bounding_box()[1] == pytest.approx(-leg_mod.THICK, abs=1e-4)
+
+
 def test_both_legs_are_closed_solids_and_mirror_images(legs) -> None:
     left, right = legs["left"], legs["right"]
     for leg in (left, right):
