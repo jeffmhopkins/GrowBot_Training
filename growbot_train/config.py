@@ -32,6 +32,11 @@ class RewardConfig:
     fall: float = 10.0
     action_rate: float = 0.05
     effort: float = 0.01
+    # Paid for standing taller than the body's resting stance: weight * exp(-(miss/tol)^2),
+    # where "miss" is how far the body's pitch is from its resting pitch plus
+    # task.stand_lift_deg. 0 turns it off (the first policy just keeps its resting stance).
+    stance: float = 0.0
+    stance_tol_deg: float = 6.0
 
 
 @dataclass
@@ -50,6 +55,20 @@ class TaskConfig:
     # action [-1, 1] -> servo angle in radians; 1.0 rad is about 57 degrees each way.
     action_to_rad: float = 1.0
     fall_tilt_deg: float = 55.0
+    # Which end walks first. "nose" is the end the legs lean toward; "camera" is the
+    # other end, where the phone's rear camera looks when it lies on top of a nose-up
+    # body. The heading error is measured from this end, so for "camera" a heading error
+    # of 0 means "the face the camera sees is straight ahead".
+    facing: str = "nose"
+    # How much higher than its resting stance to hold the body (nose-up pitch, degrees).
+    # Only rewarded when reward.stance > 0; the tilt penalty then measures from this
+    # taller stance instead of the resting one.
+    stand_lift_deg: float = 0.0
+    # Share of episodes that start folded (both legs tucked to one angle drawn from
+    # lying_leg_rad, inside what the policy itself can command) instead of
+    # standing on neutral legs, so the policy learns to get up before it walks.
+    lying_start_prob: float = 0.0
+    lying_leg_rad: tuple[float, float] = (-0.95, -0.75)
 
 
 @dataclass

@@ -51,3 +51,24 @@ def test_load_reads_a_saved_run_config_with_overrides(tmp_path: Path) -> None:
     again = config_mod.load(tmp_path / "config.json", ["train.n_envs=2"])
     assert again.reward.speed_cap_m_s == 0.04
     assert again.train.n_envs == 2
+
+
+def test_camera_walk_differs_only_where_it_says() -> None:
+    cam = config_mod.load(SHIPPED.with_name("camera_walk.toml")).to_dict()
+    base = config_mod.Config().to_dict()
+    changed = {
+        (section, key)
+        for section, values in cam.items()
+        if isinstance(values, dict)
+        for key, value in values.items()
+        if base[section][key] != value
+    }
+    assert changed == {
+        ("reward", "stance"),
+        ("task", "facing"),
+        ("task", "stand_lift_deg"),
+        ("task", "lying_start_prob"),
+    }
+    assert cam["name"] == "camera_walk"
+    marked = SHIPPED.with_name("camera_walk.toml").read_text().count("# CHANGED:")
+    assert marked == len(changed)

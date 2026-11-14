@@ -52,6 +52,11 @@ def wrap_deg(x: float) -> float:
     return (x + 180.0) % 360.0 - 180.0
 
 
+def _pitch_deg(up_in_body: np.ndarray) -> float:
+    """Nose-up pitch of the body, from world up expressed in the body frame."""
+    return math.degrees(math.atan2(up_in_body[0], up_in_body[2]))
+
+
 def body_xml(name: str) -> str:
     """The body's MJCF with an IMU site and its two sensors added to the torso."""
     path = BODIES_DIR / f"{name}.xml"
@@ -117,6 +122,9 @@ class GrowBotHeadingEnv(gym.Env):
         self.n_substeps = max(1, round(CONTROL_DT / self.model.opt.timestep))
         self.max_steps = round(cfg.task.episode_seconds / CONTROL_DT)
         m = self.model
+        if cfg.task.facing not in ("nose", "camera"):
+            raise ValueError(f'task.facing must be "nose" or "camera", not {cfg.task.facing!r}')
+        self._camera_first = cfg.task.facing == "camera"
         self._torso = m.body("base_body").id
         self._legs = [m.body("right_leg").id, m.body("left_leg").id]
         self._leg_geoms = [m.geom("lower_leg_1").id, m.geom("lower_leg_2").id]
@@ -269,11 +277,28 @@ class GrowBotHeadingEnv(gym.Env):
         # then sees the same "level" whatever the body's resting pitch or the mount.
         self._level = np.eye(3)
         self._level = _rot_onto_z(self._imu_raw()[0])
+        self._rest_pitch = _pitch_deg(self._up0)
+        if self.cfg.task.stand_lift_deg:
+            lift = math.radians(self._rest_pitch + self.cfg.task.stand_lift_deg)
+            self._stance_up = np.array([math.sin(lift), 0.0, math.cos(lift)])
+        else:
+            self._stance_up = self._up0
+        # A folded start: legs tucked, body lying nearly flat. The levelling above was
+        # already done on neutral legs, as the app does, so this only changes the pose.
+        prob = self.cfg.task.lying_start_prob
+        lying = prob > 0 and self.np_random.random() < prob
+        legs = np.zeros(2)
+        if lying:
+            legs[:] = self._u(self.cfg.task.lying_leg_rad)
+            d.ctrl[:] = legs
+            for _ in range(round(0.6 / m.opt.timestep)):
+                mujoco.mj_step(m, d)
+            d.time = 0.0
 
         self.step_index = 0
-        self.motor = np.zeros(2)
-        self.queue = np.zeros((DELAY_SLOTS, 2))
-        self.prev_action = np.zeros(2)
+        self.motor = legs.copy()
+        self.queue = np.tile(legs, (DELAY_SLOTS, 1))
+        self.prev_action = np.clip(legs / self.cfg.task.action_to_rad, -1.0, 1.0)
         self.vel_avg = np.zeros(2)
         self.heading_bias = 0.0
         if "target_error_deg" in options:
@@ -310,7 +335,9 @@ class GrowBotHeadingEnv(gym.Env):
         k = min(1.0, CONTROL_DT / max(cfg.reward.speed_window_s, CONTROL_DT))
         self.vel_avg = (1 - k) * self.vel_avg + k * vel
         err_true = wrap_deg(self.target_deg - self.yaw_deg())
-        stance_cos = float(np.dot(self._up_in_body(), self._up0))
+        up = self._up_in_body()
+        stance_cos = float(np.dot(up, self._up0))
+        tall_cos = float(np.dot(up, self._stance_up))
         r = cfg.reward
         cap = r.speed_cap_m_s
         tr = math.radians(self.target_deg)
@@ -320,10 +347,13 @@ class GrowBotHeadingEnv(gym.Env):
             "progress": r.progress * min(v_along, cap) / cap,
             "heading": r.heading * (1 + math.cos(math.radians(err_true))) / 2,
             "overspeed": -r.overspeed * (max(0.0, speed - cap) / cap) ** 2,
-            "tilt": -r.tilt * (1 - stance_cos),
+            "tilt": -r.tilt * (1 - tall_cos),
             "action_rate": -r.action_rate * float(np.sum((a - self.prev_action) ** 2)),
             "effort": -r.effort * float(np.sum(a**2)),
         }
+        if r.stance:
+            miss = math.degrees(math.acos(max(-1.0, min(1.0, tall_cos))))
+            terms["stance"] = r.stance * math.exp(-((miss / r.stance_tol_deg) ** 2))
         fell = stance_cos < math.cos(math.radians(cfg.task.fall_tilt_deg))
         if fell:
             terms["fall"] = -r.fall
@@ -339,6 +369,8 @@ class GrowBotHeadingEnv(gym.Env):
             "speed": speed,
             "abs_err_deg": abs(err_true),
             "fell": fell,
+            "pitch_deg": _pitch_deg(up),
+            "lift_deg": _pitch_deg(up) - self._rest_pitch,
         }
         return self._obs(), reward, fell, truncated, info
 
@@ -365,8 +397,10 @@ class GrowBotHeadingEnv(gym.Env):
         return self.data.xmat[self._torso][6:9].copy()
 
     def yaw_deg(self) -> float:
+        """The heading of the end that walks first (task.facing), degrees CCW from +x."""
         xm = self.data.xmat[self._torso]
-        return math.degrees(math.atan2(xm[3], xm[0]))
+        nose = math.degrees(math.atan2(xm[3], xm[0]))
+        return wrap_deg(nose + 180.0) if self._camera_first else nose
 
     def _observe_heading(self, force: bool = False) -> None:
         if not force and self.step_index % self.ep.heading_refresh:

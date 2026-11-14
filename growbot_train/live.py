@@ -30,10 +30,11 @@ from growbot_train import config as config_mod
 
 LIVE = "live"
 HISTORY_MAX = 400
-# The live replay is a quick look, not the full set: three walks of 12 s each keep a
-# checkpoint's pause in training to a second or two.
+# The live replay is a quick look, not the full set: three walks of 24 s each (owner,
+# 2026-11-14: 12 s was too short to see a walk settle) cost a few seconds of training
+# per refresh.
 LIVE_SCENARIOS = ("Target ahead", "Target 90 degrees left", "Target turns every 6 s")
-LIVE_SECONDS = 12.0
+LIVE_SECONDS = 24.0
 
 
 def _write(path: Path, text: str) -> None:
@@ -128,6 +129,14 @@ class Live:
                 {"label": "Heading error", "value": f"{m['abs_err_deg']:.0f}°"},
                 {"label": "Falls", "value": f"{m['falls_per_1k_steps']:.1f} per 1,000 steps"},
             ]
+            if self.cfg.reward.stance and "lift_deg" in m:
+                want = self.cfg.task.stand_lift_deg
+                summary.append(
+                    {
+                        "label": "Standing taller",
+                        "value": f"{m['lift_deg']:+.1f}° (aim {want:+.0f}°)",
+                    }
+                )
         if self.replay_steps is not None:
             summary.append({"label": "Latest replay", "value": f"at {self.replay_steps:,} steps"})
         doc = {

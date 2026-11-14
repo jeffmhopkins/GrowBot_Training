@@ -12,6 +12,16 @@ Everything here runs on a normal Linux machine with plain MuJoCo and Stable-Base
 PPO on the CPU, one simulator per core. A finished run comes out as one JSON file in
 the format the JBrain2 app's policy runner loads.
 
+There are two walks, each a config file:
+
+| Config | Walks | Stance | Starts |
+| --- | --- | --- | --- |
+| [`heading_walk.toml`](configs/heading_walk.toml) | nose first | its resting stance (about 34 degrees nose-up) | standing |
+| [`camera_walk.toml`](configs/camera_walk.toml) | **tail first, toward what the phone's camera sees** | a few degrees taller, to lift the camera's view | 3 in 10 folded flat, so it learns to get up |
+
+See [The camera walk](#the-camera-walk) for why the second one exists and what it can and
+can't do with this body.
+
 > Status: sim-only. The pipeline is tested end to end, but no policy from it has been
 > tried on a real robot yet.
 
@@ -131,6 +141,7 @@ Every tick the reward is the sum of these terms. All the weights live in
 | fall | `fall = 10.0` | A one-off penalty when it tips more than `fall_tilt_deg` (55 degrees) from its stance. The episode ends there, so it also loses all the reward it would have earned. |
 | action_rate | `action_rate = 0.05` | Jerky leg commands: the change since last tick, squared. |
 | effort | `effort = 0.01` | Big leg angles, a little. |
+| stance | `stance = 0.0` (camera walk: 0.5) | Standing `stand_lift_deg` taller than its resting stance: full value on target, fading out a `stance_tol_deg` (6 degrees) or so either side. Off for the first walk. When it's on, `tilt` measures from the taller stance. |
 
 Speeds are averaged over `speed_window_s` (1 second) before the cap is checked, because a
 paddling gait lurches within each step.
@@ -160,6 +171,44 @@ What to try when the result isn't right:
 Change one thing at a time and compare runs in TensorBoard and in their replays. A weight
 that's much larger than the others drowns them out: if `overspeed` is 50 the safest move
 is to stand still, and it will learn exactly that.
+
+## The camera walk
+
+The phone lies on top of the body with its rear camera facing up. The body rests nose-up,
+so that camera actually looks up and back over the **tail**. To walk toward a face the
+camera sees, the robot has to walk tail first. That's the second config,
+`configs/camera_walk.toml`, and it changes four things:
+
+- `task.facing = "camera"`: the heading error is measured from the tail end. 0 means the
+  thing the camera is looking at is dead ahead. The app puts the face's left-right angle
+  in the frame there.
+- `reward.stance = 0.5` with `task.stand_lift_deg = 6`: a bonus for holding the body 6
+  degrees more nose-up than it rests, which tilts the camera's view down from the sky
+  toward the horizon behind it, where faces are.
+- `task.lying_start_prob = 0.3`: 3 in 10 episodes start folded (legs tucked, body lower), so it
+  learns to push itself up and then go.
+
+**How tall can it stand?** Not much, with this body. In the sim, the nominal build rests
+at about 35 degrees nose-up. With both legs pushed all the way forward it reaches about 41
+degrees, and past that it rolls onto its back. Across the randomised bodies the most it
+gets is about 8 degrees above rest on average. So the aim is 6 degrees above its own
+resting stance, not "upright". (About 1 in 5 randomised bodies carry their weight far
+enough forward to rest nearly flat; for those, "taller" and "folded" are measured from
+that flatter rest, so the same goal still makes sense.) If
+you want the camera much closer to level, the bigger lever is the mount: a wedge under
+the phone. The policy needs no retraining for a wedge as far as the sensors go, because
+the IMU is levelled at the stance anyway (the extra weight up high is a separate
+question).
+
+**Why not a separate stand-up policy?** This robot never really falls over: switched off
+it sits on its tail and feet, and folded it's a leg push away from standing. Getting
+up is part of walking here, so one policy learns both. Episodes that start folded are
+mixed in from the beginning rather than in a later phase, which is simpler and works for
+a skill this small. A separate policy would make sense if it ever has to right itself
+from lying on its back. That's out of scope.
+
+Run it with `./run.sh camera-try --config configs/camera_walk.toml`, or from JBrain's Math
+launcher ("GrowBot camera walk").
 
 ## Training on a different robot every time (randomisation)
 
@@ -232,8 +281,10 @@ ready to commit.
 
 ## Running it from JBrain
 
-JBrain's Launcher has a **GrowBot heading walk** job that clones this repo on the box,
-runs `./install.sh` and the tests, trains with `./run.sh`, and hands back the run's
+JBrain's Launcher (the Math tile) has a **GrowBot heading walk** job and a **GrowBot
+camera walk** job. Each clones this repo on the box, runs `./install.sh` and the tests,
+trains with `./run.sh` (the camera walk with `--config configs/camera_walk.toml`), and
+hands back the run's
 `.tar.gz` (policy, replay page, checkpoints, evaluation, TensorBoard logs) as the job's
 download. Its results page shows the export check and the evaluation summary.
 
@@ -245,7 +296,7 @@ Every run keeps a `live/` folder up to date, and the Launcher shows it on the jo
 | File | What | Updated |
 | --- | --- | --- |
 | `progress.json` | percent done, time left, speed toward the target, heading error, falls | after every batch of experience (a few seconds) |
-| `replay.html` | 3D replay of the network as it is now: three short walks, played in a loop; the open page reloads itself between walks, so it picks up the newest one on its own | every half million steps (`train.live_replay_every_steps`; a few minutes apart on the box) |
+| `replay.html` | 3D replay of the network as it is now: three 24-second walks, played in a loop; the open page reloads itself between walks, so it picks up the newest one on its own | every half million steps (`train.live_replay_every_steps`; a few minutes apart on the box) |
 | `policy_latest.json` | that network as an app policy | with the replay |
 
 Its `state` goes from "training" to "finishing" while the run evaluates and draws the
