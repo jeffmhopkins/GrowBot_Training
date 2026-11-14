@@ -54,13 +54,21 @@ def _steer(want: np.ndarray, vec, deadband_deg: float) -> np.ndarray:
     return out
 
 
+def _tilt_offset(vec, offset: tuple[float, ...]) -> np.ndarray:
+    lo, hi = offset
+    tilt = np.array(vec.get_attr("tilt_cmd"), dtype=float)
+    return lo + (tilt + 1.0) / 2.0 * (hi - lo)
+
+
 def clone_gait(model, vec, cfg, gait: Keyframes, samples: int, epochs: int, log=print) -> float:
     """Fit the policy's mean action to the gait, from states the gait itself visits (with
     some action noise so it also sees how to get back onto the gait). Also warms the
     observation normaliser. Returns the final mean squared error (pre-squash action).
 
     With cfg.train.warm_gait_steer the gait is a counter-clockwise spin, cloned mirrored
-    (legs swapped) toward a clockwise target and as zero action near the target."""
+    (legs swapped) toward a clockwise target and as zero action near the target. With
+    cfg.train.warm_gait_tilt_offset both legs are shifted with the camera height
+    command, so the clone already holds the asked camera height."""
     import torch
 
     from growbot_train.env import CONTROL_DT
@@ -73,6 +81,9 @@ def clone_gait(model, vec, cfg, gait: Keyframes, samples: int, epochs: int, log=
     rng = np.random.default_rng(cfg.train.seed)
     lim = math.tanh(3.0)  # leave the policy room either side of the gait
     raw, targets = [], []
+    offset = tuple(cfg.train.warm_gait_tilt_offset)
+    if offset and not cfg.task.tilt_command:
+        raise ValueError("train.warm_gait_tilt_offset needs task.tilt_command")
     if cfg.train.warm_gait_steer:
         # Targets all the way round, even while the curriculum keeps the bodies narrow.
         vec.set_attr("target_scale", 1.0)
@@ -82,6 +93,8 @@ def clone_gait(model, vec, cfg, gait: Keyframes, samples: int, epochs: int, log=
         want = np.array([gait(ti) for ti in t]) / cfg.task.action_to_rad
         if cfg.train.warm_gait_steer:
             want = _steer(want, vec, cfg.train.warm_gait_deadband_deg)
+        if offset:
+            want = want + _tilt_offset(vec, offset)[:, None]
         a = np.arctanh(np.clip(want, -lim, lim))
         raw.append(vec.get_original_obs().copy())
         targets.append(a)

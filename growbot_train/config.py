@@ -55,6 +55,11 @@ class RewardConfig:
     # for it outbid the heading reward: the first camera walk and look runs froze rather
     # than turn to face the target.
     stop_drift_free: float = 0.5
+    # When 0 or more, the free band narrows from stop_drift_free to this as the
+    # curriculum ramps (randomization.ramp_steps): a policy that has already learned to
+    # turn can be charged for the slow creep that would have frozen it at the start.
+    # -1 = no narrowing.
+    stop_drift_free_final: float = -1.0
     # While stopped (speed command 0, or always in "still" mode), wandering from where the
     # stop began (or the target last moved) costs weight * (distance - anchor_free_m) / 15 cm
     # per tick, at most weight. The speed band above only sees drift faster than
@@ -241,6 +246,11 @@ class TrainConfig:
     # target and stops on it.
     warm_gait_steer: bool = False
     warm_gait_deadband_deg: float = 10.0
+    # Legs offset (both the same, in action units) added to the cloned gait at camera
+    # height command -1 and +1, linear between: without it the clone holds one posture
+    # whatever the command, and the policy learned to ignore the input. Negative lowers
+    # the body and aims the camera higher. Empty = no offset.
+    warm_gait_tilt_offset: tuple[float, ...] = ()
 
 
 @dataclass

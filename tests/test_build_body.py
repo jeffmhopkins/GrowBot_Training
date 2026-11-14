@@ -255,6 +255,33 @@ def test_a_steered_clone_sees_targets_all_the_way_round(tmp_path) -> None:
     assert vec.get_attr("target_scale") == [None, None]
 
 
+class _TiltVec:
+    def __init__(self, tilts: list[float]) -> None:
+        self.tilts = tilts
+
+    def get_attr(self, name: str) -> list[float]:
+        assert name == "tilt_cmd"
+        return self.tilts
+
+
+def test_the_clone_shifts_both_legs_with_the_camera_height_command() -> None:
+    from growbot_train.gait import _tilt_offset
+
+    out = _tilt_offset(_TiltVec([-1.0, 0.0, 1.0]), (-0.55, 0.15))
+    np.testing.assert_allclose(out, [-0.55, -0.2, 0.15])
+
+
+def test_a_tilt_offset_clone_needs_a_camera_height_input(tmp_path) -> None:
+    cfg = _build_cfg()
+    cfg.task.gait_hz = 2.0
+    cfg.task.tilt_command = False
+    cfg.train.warm_gait_tilt_offset = (-0.5, 0.1)
+    vec = VecNormalize(DummyVecEnv([lambda: GrowBotHeadingEnv(cfg)]), clip_obs=CLIP_OBS)
+    model = PPO("MlpPolicy", vec, n_steps=64, batch_size=64, device="cpu")
+    with pytest.raises(ValueError, match="tilt_command"):
+        clone_gait(model, vec, cfg, Keyframes.load(_gait_json(tmp_path, 2.0)), 64, 1)
+
+
 def _spin_deg_s(gait: Keyframes, cfg: Config) -> float:
     from growbot_train.env import wrap_deg
 

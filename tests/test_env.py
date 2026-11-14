@@ -754,3 +754,18 @@ def test_the_anchor_follows_a_walk_and_holds_from_a_stop() -> None:
     env.speed_cmd = 0.0
     _, _, _, _, info = env.step(np.zeros(2))
     assert info["drift_m"] < 0.01  # the stop anchors where the walk left it
+
+
+def test_the_stop_drift_band_narrows_with_the_curriculum() -> None:
+    cfg = Config()
+    cfg.reward.stop_drift_free = 0.5
+    cfg.randomization.ramp_from = 0.2
+    env = GrowBotHeadingEnv(cfg)
+    env.dr_scale = 0.2
+    assert env._stop_drift_free() == 0.5  # no final set: fixed
+    cfg.reward.stop_drift_free_final = 0.25
+    assert env._stop_drift_free() == pytest.approx(0.5)
+    env.dr_scale = 0.6
+    assert env._stop_drift_free() == pytest.approx(0.375)
+    env.dr_scale = 1.0  # full ramp, and evaluation
+    assert env._stop_drift_free() == pytest.approx(0.25)

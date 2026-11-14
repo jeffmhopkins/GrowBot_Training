@@ -580,7 +580,7 @@ class GrowBotHeadingEnv(gym.Env):
             want = self.speed_cmd * cap * np.array([math.cos(tr), math.sin(tr)])
             miss = speed_miss = float(np.linalg.norm(self.vel_avg - want))
             if self.speed_cmd == 0.0:
-                miss = max(0.0, miss - r.stop_drift_free * cap)
+                miss = max(0.0, miss - self._stop_drift_free() * cap)
             gain = (float(np.linalg.norm(want)) - miss) / cap
             progress = r.progress * max(-1.0, gain)
         err_score = self.scored_err_deg()
@@ -730,6 +730,14 @@ class GrowBotHeadingEnv(gym.Env):
         if self._lens:
             return self._lens_deg(xm, tail)
         return tail if self._camera_first else nose
+
+    def _stop_drift_free(self) -> float:
+        r = self.cfg.reward
+        if r.stop_drift_free_final < 0:
+            return r.stop_drift_free
+        start = self.cfg.randomization.ramp_from
+        k = 1.0 if start >= 1.0 else min(1.0, max(0.0, (self.dr_scale - start) / (1 - start)))
+        return r.stop_drift_free + k * (r.stop_drift_free_final - r.stop_drift_free)
 
     def lens_dir(self) -> np.ndarray:
         """Where the phone's camera points, as a world unit vector: the torso's up axis."""
