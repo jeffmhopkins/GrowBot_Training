@@ -116,7 +116,7 @@ Every 40 ms (25 times a second) the policy gets the last 5 ticks of:
 | `cmd_yaw` | the heading error divided by 180, so -1 to 1. **Positive means the target is to the left** (counter-clockwise seen from above) |
 | `cmd_forward` | camera walk only: the speed command, -1 to 1 (see "The camera walk") |
 | `cmd_pitch` | camera walk only: the camera-height command, -1 to 1 (see "The camera walk") |
-| `cycle:gait_sin/cos` | a steady 1 Hz clock that starts at zero when the walk starts, to help it keep a rhythm |
+| `cycle:gait_sin/cos` | a steady clock (`task.gait_hz`: 1 Hz, camera walk 2 Hz) that starts at zero when the walk starts, to help it keep a rhythm |
 
 It answers with two numbers between -1 and 1, the right leg and the left leg, which
 become servo angles of up to 1 radian (about 57 degrees) either side of straight down.
@@ -139,7 +139,7 @@ Every tick the reward is the sum of these terms. All the weights live in
 | --- | --- | --- |
 | progress | `progress = 2.0` | Moving in the target direction. Full value at the speed cap, a fraction below it, nothing extra above it, negative when moving away. |
 | heading | `heading = 0.5` | Pointing the nose at the target. Full value dead on, half at 90 degrees off, zero facing away. |
-| overspeed | `overspeed = 4.0` | Going faster than `speed_cap_m_s` (3 cm/s). Grows with the square of the excess, so a little over is mild and a lot over is harsh. |
+| overspeed | `overspeed = 4.0` | Going faster than `speed_cap_m_s` (3 cm/s; camera walk 1 cm/s with `overspeed = 1.0`). Grows with the square of the excess, so a little over is mild and a lot over is harsh. |
 | tilt | `tilt = 1.0` | Leaning away from how it stood at the start. (This body naturally rests nose-up at about 34 degrees, so "upright" means its own starting stance, the same reference the app's tip check uses.) |
 | fall | `fall = 10.0` | A one-off penalty when it tips more than `fall_tilt_deg` (55 degrees) from its stance. The episode ends there, so it also loses all the reward it would have earned. |
 | action_rate | `action_rate = 0.05` | Jerky leg commands: the change since last tick, squared. |
@@ -208,7 +208,10 @@ camera sees, the robot has to walk tail first. That's the second config,
   allowed any rhythm and rocking found a fast rock-and-shuffle, about two beats a
   second, that scoots tail first at about 0.9 cm/s on the standard body. So the camera
   walk's speed cap is 1 cm/s (`reward.speed_cap_m_s = 0.01`) and the policy's clock
-  runs at 2 Hz (`task.gait_hz = 2`). The first two camera walk runs, at 3 cm/s and 1 Hz,
+  runs at 2 Hz (`task.gait_hz = 2`). Turning on the spot still drifts more than that
+  cap, so a stop keeps the old 1.5 cm/s of free drift (`reward.stop_drift_free = 1.5`)
+  and overspeed is gentler (`reward.overspeed = 1`). The look policy, which never walks,
+  keeps the 3 cm/s cap and 1 Hz clock. The first two camera walk runs, at 3 cm/s and 1 Hz,
   never moved.
 - Folded starts and shoves (`task.lying_start_prob`, `randomization.push_every_s`) are
   off until a run shows it can scoot; they made the first runs harder still.

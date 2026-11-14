@@ -11,9 +11,10 @@ name = "look"
 # cares more about that thing. See README "The reward" for what each one does.
 progress = 2.0          # here only a cost: drifting more than stop_drift_free x the cap
 heading = 1.5           # CHANGED: facing the target is the whole job here
-speed_cap_m_s = 0.01    # as camera walk: 1 cm/s. Tail first this body can only scoot (see README)
+speed_cap_m_s = 0.03    # CHANGED: 3 cm/s. Look never walks, so the cap only sets how much drift a turn may have
 speed_window_s = 1.0    # speed is averaged over this long before the cap is checked
-overspeed = 4.0         # penalty for going faster than the cap (grows with the square)
+overspeed = 4.0         # CHANGED: penalty for going faster than the cap (grows with the square)
+stop_drift_free = 0.5   # CHANGED: drift up to this x the cap is free (1.5 cm/s)
 tilt = 1.0              # penalty for leaning away from the taller stance
 fall = 10.0             # one-off penalty when it tips past fall_tilt_deg (episode ends)
 action_rate = 0.05      # penalty for jerky leg commands (change since last tick, squared)
@@ -31,7 +32,7 @@ episode_seconds = 30.0      # as camera walk: longer, so each episode holds seve
 initial_error_deg = 180.0   # first target: up to this many degrees off the camera end
 retarget_every_s = [5.0, 12.0]  # CHANGED: the target moves every 5-12 s (turning on the spot is ~8 deg/s)...
 retarget_max_deg = 120.0        # ...by up to this much
-gait_hz = 2.0               # as camera walk: the clock the policy sees; the scoot rocks about twice a second
+gait_hz = 1.0               # CHANGED: the clock the policy sees; about one turning step a second
 history_frames = 5          # how many past ticks of sensors the policy sees
 action_to_rad = 1.0         # full action = 1 radian (~57 degrees) of leg swing
 fall_tilt_deg = 55.0        # tipped this far from the starting stance = fallen (the app aborts at 55)
