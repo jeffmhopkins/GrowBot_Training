@@ -1,0 +1,17 @@
+# The kept walks JBrain's Body tab offers. Its "Trained walks" sheet has a Refresh that
+# reads this file from main, and the box's library then matches it: a new entry is added,
+# an entry whose file changed is updated in place (the owner's name and choices for it
+# stay), and an entry taken out is removed from the library.
+#
+# Keep a run with scripts/keep_policy.sh, which copies it to policies/<slug>/ and prints
+# the entry to paste here. Only runs worth driving belong here (owner, 2026-11-14: "the
+# ones we pick").
+#
+#   slug   a-z, 0-9 and - (1-48): the folder, and how the box tells entries apart
+#   title  the name the Body tab shows first (up to 60 characters)
+#   job    the growbot_ training job that made it; the Body tab groups walks by it
+#   file   the policy JSON, policies/<folder>/<name>.json
+#   run    optional: the Jobs run id it came from
+#   notes  optional
+#
+# tests/test_policies_index.py checks this file the way the box does.

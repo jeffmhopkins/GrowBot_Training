@@ -381,7 +381,18 @@ scripts/keep_policy.sh ~/Downloads/growbot_heading_walk_artifacts.tar.gz my-walk
 ```
 
 That copies the policy JSON, the config that made it, its evaluation and its replay page,
-ready to commit.
+ready to commit, and prints the entry that offers it in JBrain.
+
+### Driving a kept policy from JBrain
+
+[`policies/index.toml`](policies/index.toml) lists the kept walks JBrain's Body tab
+offers. Paste the entry `keep_policy.sh` printed, fix its title, and merge to `main`.
+Then tap **Refresh** under "From the training repo" in the Body tab's Trained walks sheet
+(or a debug token calls `POST /api/debug/growbot/policies/refresh`). New entries are
+added to the box's library. An entry whose file changed is updated in place, and the name
+and choices you gave it stay. An entry you take out is removed. Only runs worth driving
+go in (owner, 2026-11-14: "the ones we pick"). `tests/test_policies_index.py` checks the
+file the way the box does, and that every listed policy loads.
 
 ## Running it from JBrain
 
@@ -459,5 +470,5 @@ doing only if the CPU runs prove too slow.
 | `install.sh`, `run.sh` | Set up; train, export, evaluate, replay and pack in one go |
 | `scripts/keep_policy.sh` | Copy a result into `policies/` |
 | `scripts/try_jax_rocm.sh` | Optional: does JAX see the GPU? |
-| `policies/` | Kept results |
+| `policies/` | Kept results; `policies/index.toml` lists the ones JBrain's Body tab offers |
 | `tests/` | `pytest`; the parity test needs node and a JBrain2 checkout |
