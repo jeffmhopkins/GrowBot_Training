@@ -64,7 +64,7 @@ class RewardConfig:
 
 @dataclass
 class TaskConfig:
-    body: str = "rollout"
+    body: str = "build"
     episode_seconds: float = 20.0
     # How far off the first target may be, in degrees either side of where the robot
     # starts out facing. 180 means anywhere.
@@ -115,6 +115,20 @@ class TaskConfig:
     tilt_lift_deg: tuple[float, float] = (-30.0, 6.0)
     tilt_command_every_s: tuple[float, float] = (3.0, 8.0)
     tilt_tall_prob: float = 0.5
+    # The robot as built: "build" is the printed body with a phone on top (from upstream's
+    # STLs, research/locomotion/make_body.py), "rollout" and "olie" upstream's sim bodies.
+    # What each floor-touching surface is made of, one material per surface in
+    # growbot_train/surfaces.py order (tail, belly, toe_tail, toe_nose), e.g. "pla" bare
+    # print or "rubber" liquid dip. Empty = the original setup, one friction on every geom.
+    surfaces: tuple[str, ...] = ("pla", "pla", "pla", "pla")
+    # With surfaces: the floors an episode may be on, one drawn each episode.
+    floors: tuple[str, ...] = ("hard", "carpet")
+    # Set down tail first at this nose-up angle (degrees) and let it settle, instead of
+    # level. The printed build needs it: level, it balances on its soles.
+    start_pitch_deg: float = 25.0
+    # Servo torque limit (N m); 0 keeps the body file's. An MG90S stalls near 0.2 N m,
+    # upstream's model allows 1.5.
+    servo_torque_nm: float = 0.25
 
 
 @dataclass
@@ -128,6 +142,9 @@ class RandomizationConfig:
     leg_asymmetry: tuple[float, float] = (0.96, 1.04)
     servo_gain_scale: tuple[float, float] = (0.75, 1.25)
     friction: tuple[float, float] = (0.6, 1.4)
+    # With task.surfaces, friction is drawn per surface and per floor instead.
+    surface_friction_scale: tuple[float, float] = (0.7, 1.3)
+    floor_friction_scale: tuple[float, float] = (0.7, 1.3)
     servo_slew_rad_s: tuple[float, float] = (8.7, 10.5)
     servo_lag_s: tuple[float, float] = (0.015, 0.035)
     relay_delay_s: tuple[float, float] = (0.020, 0.090)
@@ -167,6 +184,12 @@ class TrainConfig:
     checkpoint_every_steps: int = 2_000_000
     live_replay_every_steps: int = 500_000
     seed: int = 0
+    # Before PPO, clone this open-loop gait (a JSON from configs/gaits/, see
+    # growbot_train/gait.py) into the policy so training starts from a moving robot.
+    # Its hz must equal task.gait_hz. Empty = start from scratch.
+    warm_gait: str = ""
+    warm_gait_samples: int = 200_000
+    warm_gait_epochs: int = 40
 
 
 @dataclass

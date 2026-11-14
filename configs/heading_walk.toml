@@ -24,7 +24,11 @@ wobble = 0.0            # penalty for rocking (roll and pitch spin, squared; off
 turn = 0.0              # pay per degree the heading error shrinks (off here)
 
 [task]
-body = "rollout"            # "rollout" (upstream public build) or "olie" (enclosure build)
+body = "build"              # the printed body with a Pixel on top; "rollout"/"olie" are upstream's sim bodies
+surfaces = ["pla", "pla", "pla", "pla"]  # tail, belly, tail-side and nose-side halves of each foot: bare print (see growbot_train/surfaces.py)
+floors = ["hard", "carpet"] # each episode on one of these floors
+start_pitch_deg = 25.0      # set down tail first, as the real one is (level, the printed build balances on its soles)
+servo_torque_nm = 0.25      # an MG90S's real torque (upstream's model allows 1.5)
 episode_seconds = 20.0
 initial_error_deg = 180.0   # first target: up to this many degrees off the robot's nose
 retarget_every_s = [6.0, 14.0]  # the target moves every 6-14 s...

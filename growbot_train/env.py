@@ -29,6 +29,7 @@ import mujoco
 import numpy as np
 
 from growbot_train.config import Config
+from growbot_train.surfaces import FLOORS, SURFACES, split_contacts, surface_geoms
 
 BODIES_DIR = Path(__file__).parent / "bodies"
 CONTROL_DT = 0.04  # 25 Hz, the rate the app's runner ticks at
@@ -75,8 +76,10 @@ def _pitch_deg(up_in_body: np.ndarray) -> float:
     return math.degrees(math.atan2(up_in_body[0], up_in_body[2]))
 
 
-def body_xml(name: str) -> str:
-    """The body's MJCF with an IMU site and its two sensors added to the torso."""
+def body_xml(name: str, split: bool = False, torque_nm: float = 0.0) -> str:
+    """The body's MJCF with an IMU site and its two sensors added to the torso; with
+    `split`, contact surfaces split out for per-surface materials (surfaces.py), and with
+    `torque_nm`, the servos' torque limited to it."""
     path = BODIES_DIR / f"{name}.xml"
     if not path.exists():
         known = sorted(p.stem for p in BODIES_DIR.glob("*.xml"))
@@ -87,12 +90,17 @@ def body_xml(name: str) -> str:
         raise ValueError(f"{path} has no base_body")
     # The phone lies on the torso's top face; its exact spot barely changes the readings
     # of a body this small, and the mount tilt is randomised anyway.
-    ET.SubElement(torso, "site", name="imu", pos="0 0 0.01", size="0.005")
+    if torso.find("site[@name='imu']") is None:  # the build body places its own, in the phone
+        ET.SubElement(torso, "site", name="imu", pos="0 0 0.01", size="0.005")
     sensor = root.find("sensor")
     if sensor is None:
         sensor = ET.SubElement(root, "sensor")
     ET.SubElement(sensor, "accelerometer", name="accel", site="imu")
     ET.SubElement(sensor, "gyro", name="gyro", site="imu")
+    if split:
+        split_contacts(root)
+    if torque_nm:
+        root.find("default/position").set("forcerange", f"{-torque_nm} {torque_nm}")
     return ET.tostring(root, encoding="unicode")
 
 
@@ -135,7 +143,12 @@ class GrowBotHeadingEnv(gym.Env):
     def __init__(self, cfg: Config, render_mode: str | None = None) -> None:
         self.cfg = cfg
         self.render_mode = render_mode
-        self.model = mujoco.MjModel.from_xml_string(body_xml(cfg.task.body))
+        self._split = bool(cfg.task.surfaces)
+        if self._split:
+            self._check_surfaces()
+        self.model = mujoco.MjModel.from_xml_string(
+            body_xml(cfg.task.body, self._split, cfg.task.servo_torque_nm)
+        )
         self.data = mujoco.MjData(self.model)
         self.n_substeps = max(1, round(CONTROL_DT / self.model.opt.timestep))
         self.max_steps = round(cfg.task.episode_seconds / CONTROL_DT)
@@ -149,6 +162,10 @@ class GrowBotHeadingEnv(gym.Env):
         self._torso = m.body("base_body").id
         self._legs = [m.body("right_leg").id, m.body("left_leg").id]
         self._leg_geoms = [m.geom("lower_leg_1").id, m.geom("lower_leg_2").id]
+        # Every geom of each leg (the mass box, plus the contact halves when split), so a
+        # longer or shorter leg moves them all.
+        self._leg_all = [[g for g in range(m.ngeom) if m.geom_bodyid[g] == b] for b in self._legs]
+        self._surface_geoms = surface_geoms(m) if self._split else {}
         self._accel_adr = m.sensor_adr[m.sensor("accel").id]
         self._gyro_adr = m.sensor_adr[m.sensor("gyro").id]
         self._nominal = {
@@ -161,10 +178,14 @@ class GrowBotHeadingEnv(gym.Env):
                 "geom_pos",
                 "geom_rbound",
                 "geom_friction",
+                "geom_solref",
+                "geom_solimp",
                 "actuator_gainprm",
                 "actuator_biasprm",
             )
         }
+        if self._split:
+            self._apply_body(self._nominal_body())
         self._nominal_rest_pitch = self._settled_pitch()
         self.frames = cfg.task.history_frames
         n_obs = len(self.channels) * self.frames
@@ -181,10 +202,39 @@ class GrowBotHeadingEnv(gym.Env):
         d = mujoco.MjData(m)
         leg_top = m.body_pos[self._legs[0], 2]
         half = float(m.geom_size[self._leg_geoms[0], 2])
-        d.qpos[2] = 2 * half - leg_top + 0.003
-        for _ in range(round(1.0 / m.opt.timestep)):
+        self._place(d, 2 * half - leg_top + 0.003, np.array([1.0, 0, 0, 0]))
+        for _ in range(round(self._settle_s() / m.opt.timestep)):
             mujoco.mj_step(m, d)
         return _pitch_deg(d.xmat[self._torso][6:9])
+
+    def _settle_s(self) -> float:
+        return 1.5 if self.cfg.task.start_pitch_deg else 1.0
+
+    def _place(self, d: mujoco.MjData, z: float, q: np.ndarray) -> None:
+        """Put the body down: level at height z, or with task.start_pitch_deg, lowered
+        tail first. The printed build's weight sits nearly over its feet, so set down
+        level it can balance on its soles, which the real one doesn't hold once a leg
+        moves; tail first it settles onto its tail as the real one is put down."""
+        pitch = math.radians(self.cfg.task.start_pitch_deg)
+        if pitch:
+            nose_up = np.array([math.cos(pitch / 2), 0.0, -math.sin(pitch / 2), 0.0])
+            out = np.zeros(4)
+            mujoco.mju_mulQuat(out, q, nose_up)
+            q = out
+            z += 0.09 * math.sin(pitch)
+        d.qpos[0:3] = [0.0, 0.0, z]
+        d.qpos[3:7] = q
+
+    def _check_surfaces(self) -> None:
+        task = self.cfg.task
+        if len(task.surfaces) != len(SURFACES):
+            raise ValueError(f"task.surfaces needs one material each for {SURFACES}")
+        for floor in task.floors:
+            if floor not in FLOORS:
+                raise ValueError(f"unknown floor {floor!r}; known: {sorted(FLOORS)}")
+            for mat in task.surfaces:
+                if not isinstance(FLOORS[floor].materials.get(mat), float):
+                    raise ValueError(f"{mat!r} is not a plain material on {floor!r}")
 
     # ---------------------------------------------------------------- randomisation
     def _u(self, lo_hi: tuple[float, float]) -> float:
@@ -199,13 +249,18 @@ class GrowBotHeadingEnv(gym.Env):
         m.body_inertia[:] = nom["body_inertia"] * ms
         m.body_ipos[self._torso] = nom["body_ipos"][self._torso] + params["com"]
         self._leg_half = []
-        for leg, geom, s in zip(self._legs, self._leg_geoms, params["leg_scale"], strict=True):
+        for leg, geom, s, every in zip(
+            self._legs, self._leg_geoms, params["leg_scale"], self._leg_all, strict=True
+        ):
             half0 = nom["geom_size"][geom, 2]
             half = half0 * s
             hx, hy = nom["geom_size"][geom, 0], nom["geom_size"][geom, 1]
             mass = nom["body_mass"][leg] * s * ms
-            m.geom_size[geom, 2] = half
-            m.geom_pos[geom, 2] = -half
+            for g in every:
+                m.geom_size[g, 2] = half
+                m.geom_pos[g, 2] = -half
+                gx, gy = nom["geom_size"][g, 0], nom["geom_size"][g, 1]
+                m.geom_rbound[g] = math.sqrt(gx * gx + gy * gy + half * half)
             m.body_mass[leg] = mass
             m.body_ipos[leg, 2] = -half
             a, b, c = 2 * hx, 2 * hy, 2 * half
@@ -218,7 +273,15 @@ class GrowBotHeadingEnv(gym.Env):
             self._leg_half.append(half)
         m.actuator_gainprm[:] = nom["actuator_gainprm"] * params["gain"]
         m.actuator_biasprm[:] = nom["actuator_biasprm"] * params["gain"]
-        m.geom_friction[:, 0] = params["friction"]
+        if self._split:
+            floor = FLOORS[params["floor"]]
+            for surf, mat in zip(SURFACES, self.cfg.task.surfaces, strict=True):
+                k = params["surface_scale"][surf] * params["floor_scale"]
+                m.geom_friction[self._surface_geoms[surf], 0] = floor.materials[mat] * k
+            m.geom_solref[:] = floor.solref
+            m.geom_solimp[:, :3] = floor.solimp
+        else:
+            m.geom_friction[:, 0] = params["friction"]
 
     def _draw(self, overrides: dict[str, Any], randomize: bool) -> tuple[dict[str, Any], Episode]:
         r = self.cfg.randomization
@@ -248,14 +311,15 @@ class GrowBotHeadingEnv(gym.Env):
                     rng.integers(r.heading_refresh_ticks[0], r.heading_refresh_ticks[1] + 1)
                 ),
             )
+            if self._split:
+                # Each surface drifts on its own (a coating and bare print don't wear
+                # together), and the whole floor on top: dust, polish, pile.
+                floors = self.cfg.task.floors
+                body["floor"] = floors[int(rng.integers(len(floors)))]
+                body["surface_scale"] = {s: self._u(r.surface_friction_scale) for s in SURFACES}
+                body["floor_scale"] = self._u(r.floor_friction_scale)
         else:
-            body = {
-                "mass_scale": 1.0,
-                "com": np.zeros(3),
-                "leg_scale": [1.0, 1.0],
-                "gain": 1.0,
-                "friction": self._nominal["geom_friction"][:, 0].copy(),
-            }
+            body = self._nominal_body()
             ep = Episode(
                 slew=np.full(2, 9.6),
                 lag=np.full(2, 0.025),
@@ -267,7 +331,9 @@ class GrowBotHeadingEnv(gym.Env):
             )
         # A robustness sweep pins single parameters to the edge of their range.
         for k, v in overrides.items():
-            if k == "friction":
+            if k == "friction" and self._split:
+                body["floor_scale"] = float(v)  # the sweep's slippery/grippy edges
+            elif k == "friction":
                 body["friction"] = np.full(ng, float(v))
             elif k in body:
                 body[k] = v
@@ -276,6 +342,20 @@ class GrowBotHeadingEnv(gym.Env):
             else:
                 raise KeyError(f"unknown override {k!r}")
         return body, ep
+
+    def _nominal_body(self) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "mass_scale": 1.0,
+            "com": np.zeros(3),
+            "leg_scale": [1.0, 1.0],
+            "gain": 1.0,
+            "friction": self._nominal["geom_friction"][:, 0].copy(),
+        }
+        if self._split:
+            body["floor"] = self.cfg.task.floors[0]
+            body["surface_scale"] = dict.fromkeys(SURFACES, 1.0)
+            body["floor_scale"] = 1.0
+        return body
 
     # ---------------------------------------------------------------------- gym API
     def reset(
@@ -297,11 +377,10 @@ class GrowBotHeadingEnv(gym.Env):
         q = np.zeros(4)
         mujoco.mju_euler2Quat(q, np.array([tilt[0], tilt[1], yaw0]), "xyz")
         leg_top = m.body_pos[self._legs[0], 2]
-        d.qpos[0:3] = [0.0, 0.0, 2 * max(self._leg_half) - leg_top + 0.003]
-        d.qpos[3:7] = q
+        self._place(d, 2 * max(self._leg_half) - leg_top + 0.003, q)
         d.qpos[7:9] = self.np_random.uniform(-0.05, 0.05, 2)
         d.ctrl[:] = 0.0
-        for _ in range(round(1.0 / m.opt.timestep)):  # settle onto the feet
+        for _ in range(round(self._settle_s() / m.opt.timestep)):  # settle onto the feet
             mujoco.mj_step(m, d)
         d.time = 0.0
         # This body rests nose-up (about 34 degrees on the nominal build), so "upright"

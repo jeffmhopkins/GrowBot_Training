@@ -29,7 +29,7 @@ def test_wrap() -> None:
     assert wrap_deg(0) == 0
 
 
-@pytest.mark.parametrize("body", ["rollout", "olie"])
+@pytest.mark.parametrize("body", ["rollout", "olie", "build"])
 def test_standing_still_is_stable_and_reads_gravity(body: str) -> None:
     env = _env(body=body)
     obs, _ = env.reset(seed=0, options={"nominal": True, "retarget": False})
@@ -159,7 +159,11 @@ def test_folded_start_lies_flatter_and_holds_its_legs() -> None:
 
 
 def test_stance_bonus_pays_for_standing_taller() -> None:
+    # Upstream's body: it can barely rise, so 0.9 of full swing lands near the 6 degrees
+    # asked for. (The printed build stands far taller and would overshoot it.)
     cfg = Config()
+    cfg.task.body, cfg.task.surfaces = "rollout", ()
+    cfg.task.start_pitch_deg, cfg.task.servo_torque_nm = 0.0, 0.0
     cfg.task.stand_lift_deg = 6.0
     cfg.reward.stance = 0.5
     env = GrowBotHeadingEnv(cfg)

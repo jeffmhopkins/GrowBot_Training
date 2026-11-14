@@ -1,0 +1,92 @@
+"""Open-loop gaits, and warm-starting a policy from one.
+
+A gait is each leg's angle traced through K evenly spaced keyframes per cycle, linearly
+interpolated and repeated at `hz` (the shape research/locomotion/search.py optimises).
+Saved as JSON: {"hz": 2.0, "keys_rad": [[right leg x K], [left leg x K]]}.
+
+Why warm-start: PPO starting from Gaussian noise around standing still never stumbles
+on a coordinated tail-first scoot (the first camera walk runs sat at zero speed for tens
+of millions of steps). Cloning a gait the search already found, before PPO, starts it
+from a moving robot; PPO then adds steering, speed and the camera height on top. The
+gait is driven by the policy's own gait_sin/cos clock, so the app's runner needs nothing
+new.
+"""
+
+from __future__ import annotations
+
+import json
+import math
+from pathlib import Path
+
+import numpy as np
+
+
+class Keyframes:
+    def __init__(self, hz: float, keys_rad: list[list[float]]) -> None:
+        self.hz = float(hz)
+        self.keys = np.asarray(keys_rad, dtype=float)
+        if self.keys.ndim != 2 or self.keys.shape[0] != 2 or self.keys.shape[1] < 2:
+            raise ValueError("keys_rad must be two lists (right leg, left leg) of 2+ angles")
+
+    @classmethod
+    def load(cls, path: str | Path) -> Keyframes:
+        data = json.loads(Path(path).read_text())
+        g = data.get("gait", data)  # a search result file or a bare gait
+        return cls(g["hz"], g["keys_rad"])
+
+    def __call__(self, t: float) -> np.ndarray:
+        k = self.keys.shape[1]
+        ph = (t * self.hz % 1.0) * k
+        i = int(ph)
+        f = ph - i
+        return (1 - f) * self.keys[:, i] + f * self.keys[:, (i + 1) % k]
+
+
+def clone_gait(model, vec, cfg, gait: Keyframes, samples: int, epochs: int, log=print) -> float:
+    """Fit the policy's mean action to the gait, from states the gait itself visits (with
+    some action noise so it also sees how to get back onto the gait). Also warms the
+    observation normaliser. Returns the final mean squared error (pre-squash action)."""
+    import torch
+
+    from growbot_train.env import CONTROL_DT
+
+    if abs(gait.hz - cfg.task.gait_hz) > 1e-6:
+        raise ValueError(
+            f"the gait runs at {gait.hz} Hz but task.gait_hz is {cfg.task.gait_hz}: the "
+            "policy's clock must tick at the gait's rate"
+        )
+    rng = np.random.default_rng(cfg.train.seed)
+    lim = math.tanh(3.0)  # leave the policy room either side of the gait
+    raw, targets = [], []
+    vec.reset()
+    while len(raw) * vec.num_envs < samples:
+        t = np.array(vec.get_attr("step_index"), dtype=float) * CONTROL_DT
+        want = np.array([gait(ti) for ti in t]) / cfg.task.action_to_rad
+        a = np.arctanh(np.clip(want, -lim, lim))
+        raw.append(vec.get_original_obs().copy())
+        targets.append(a)
+        vec.step((a + rng.normal(0.0, 0.3, a.shape)).astype(np.float32))
+    obs = torch.as_tensor(vec.normalize_obs(np.concatenate(raw)), dtype=torch.float32)
+    act = torch.as_tensor(np.concatenate(targets), dtype=torch.float32)
+    policy = model.policy
+    params = list(policy.mlp_extractor.policy_net.parameters()) + list(
+        policy.action_net.parameters()
+    )
+    opt = torch.optim.Adam(params, lr=1e-3)
+    n = len(obs)
+    loss_v = float("nan")
+    for epoch in range(epochs):
+        perm = torch.randperm(n)
+        total = 0.0
+        for i in range(0, n, 2048):
+            idx = perm[i : i + 2048]
+            mean = policy.get_distribution(obs[idx]).distribution.mean
+            loss = torch.mean((mean - act[idx]) ** 2)
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
+            total += float(loss.detach()) * len(idx)
+        loss_v = total / n
+        if epoch % 5 == 0 or epoch == epochs - 1:
+            log(f"   clone epoch {epoch:3d}: mse {loss_v:.4f}")
+    return loss_v

@@ -105,7 +105,9 @@ def score(
 
 def sweep_cases(cfg: config_mod.Config) -> dict[str, dict[str, Any]]:
     r = cfg.randomization
+    floors = {f: {"floor": f} for f in cfg.task.floors} if cfg.task.surfaces else {}
     return {
+        **floors,
         "light": {"mass_scale": r.mass_scale[0]},
         "heavy": {"mass_scale": r.mass_scale[1]},
         "short_legs": {"leg_scale": [r.leg_length_scale[0]] * 2},
