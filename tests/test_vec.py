@@ -184,3 +184,18 @@ def test_build_vec_env_picks_block_only_when_workers_share() -> None:
             assert vec.num_envs == n
         finally:
             vec.close()
+
+
+def test_a_pinned_run_sizes_itself_to_its_cores(monkeypatch) -> None:
+    # The launcher pins side-by-side runs to their own cores; each must size its
+    # simulators to that share, not to the whole machine.
+    from growbot_train import train
+
+    monkeypatch.setattr(
+        train.os, "sched_getaffinity", lambda _pid: {0, 1, 2, 16, 17, 18}, raising=False
+    )
+    monkeypatch.setattr(train.os, "cpu_count", lambda: 32)
+    assert train.usable_cpus() == 6
+    assert train.default_n_envs() == 6
+    monkeypatch.delattr(train.os, "sched_getaffinity")
+    assert train.usable_cpus() == 32
