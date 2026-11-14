@@ -111,6 +111,7 @@ def test_look_differs_from_the_camera_walk_only_where_it_says() -> None:
         ("train", "warm_gait"),
         ("train", "warm_gait_steer"),
         ("reward", "anchor"),
+        ("reward", "heading_width_deg"),
         ("task", "action_to_rad"),
         ("train", "warm_gait_samples"),
         ("train", "warm_gait_epochs"),

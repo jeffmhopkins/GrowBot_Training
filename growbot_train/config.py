@@ -23,8 +23,11 @@ class RewardConfig:
     # use the speed averaged over ``speed_window_s``, so a paddling gait's lurches within
     # one step don't count as speeding.
     progress: float = 2.0
-    # Paid for pointing the right way: weight * (1 + cos(error)) / 2.
+    # Paid for pointing the right way: weight * (1 + cos(error)) / 2, or with
+    # heading_width_deg > 0, weight * exp(-(error / width)^2): pays only near the target,
+    # so facing it is worth far more than sitting 60 degrees off (the cosine pays 75% there).
     heading: float = 0.5
+    heading_width_deg: float = 0.0
     speed_cap_m_s: float = 0.03
     speed_window_s: float = 1.0
     overspeed: float = 4.0
@@ -53,8 +56,9 @@ class RewardConfig:
     # than turn to face the target.
     stop_drift_free: float = 0.5
     # While stopped (speed command 0, or always in "still" mode), wandering from where the
-    # stop began costs weight * (distance - anchor_free_m) / 5 cm, per tick. The speed band
-    # above only sees drift faster than stop_drift_free; slower drift adds up unseen.
+    # stop began (or the target last moved) costs weight * (distance - anchor_free_m) / 5 cm
+    # per tick, at most weight. The speed band above only sees drift faster than
+    # stop_drift_free; slower drift adds up unseen.
     # The policy isn't told the offset (the phone can't measure it), so it has to learn a
     # turn that doesn't wander. 0 = off.
     anchor: float = 0.0
