@@ -109,9 +109,10 @@ the learner sends each simulator its action over a pipe and waits for the reply,
 that round trip cost more than the physics. `train.envs_per_worker` (look uses 4) has
 each worker process step that many simulators per round trip, with `n_steps` cut by
 the same factor so a rollout holds the same number of samples (`growbot_train/vec.py`).
-A run counts only the cores it is allowed to use, not the whole machine: the launcher
-can run up to three jobs side by side, each pinned to its own third of the cores, and
-each sizes its simulators and learner threads to that share.
+The launcher can run up to three jobs side by side, each pinned to its own third of the
+cores. A pinned run keeps the whole machine's simulator count, so its rollouts and
+results match a run on every core, but starts only one worker process per core it may
+use (each stepping several simulators) and sizes the learner's threads to its share.
 
 A run saves a checkpoint every 2 million steps, so you can stop early and
 export any checkpoint:

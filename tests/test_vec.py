@@ -196,6 +196,7 @@ def test_a_pinned_run_sizes_itself_to_its_cores(monkeypatch) -> None:
     )
     monkeypatch.setattr(train.os, "cpu_count", lambda: 32)
     assert train.usable_cpus() == 6
-    assert train.default_n_envs() == 6
+    # The rollout stays the whole machine's, so a shared run trains as a lone one does.
+    assert train.default_n_envs() == 32
     monkeypatch.delattr(train.os, "sched_getaffinity")
     assert train.usable_cpus() == 32

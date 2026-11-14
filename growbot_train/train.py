@@ -193,7 +193,10 @@ def usable_cpus() -> int:
 
 
 def default_n_envs() -> int:
-    return usable_cpus()
+    # The whole machine's count, not this run's share: the simulator count sets the
+    # rollout size, so a run pinned to a third of the cores trains exactly as one on
+    # all of them, only its workers each step more simulators.
+    return max(1, os.cpu_count() or 1)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -226,7 +229,7 @@ def main(argv: list[str] | None = None) -> int:
         cfg.train.n_envs = args.envs
     t = cfg.train
     n_envs = t.n_envs or default_n_envs() * max(1, t.envs_per_worker)
-    workers = min(n_envs, default_n_envs())
+    workers = min(n_envs, usable_cpus())
     out.mkdir(parents=True, exist_ok=True)
     cfg.save(out / "config.json")
     # The learner is small; a few threads are plenty and leave the cores to the sims.
