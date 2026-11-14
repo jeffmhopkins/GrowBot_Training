@@ -22,8 +22,9 @@ servo, where the spline comes through) at y = 0, and the outer face, where the h
 opens and the horn drops in, at y = -13. The outer face is the sculpted one. In the right
 leg's file +x points to the nose; the left leg is its mirror image. The STLs are written
 lying flat for printing, inner face down (--leg-frame keeps this frame): every void
-widens upward and the sculpted face is a heightfield on top, so nothing overhangs and no
-supports are needed.
+widens upward and the sculpted face is a heightfield on top, so no supports are needed.
+The only roofs are the chamfers' 0.2 mm steps and the engraved letter's 1 mm-wide strokes,
+which bridge.
 """
 
 from __future__ import annotations
@@ -314,6 +315,11 @@ def _label(side: str, prof: Polygon) -> Polygon:
     return mark.intersection(prof.buffer(-CHAMFER - 0.4))
 
 
+def print_pose(leg: mf.Manifold) -> mf.Manifold:
+    """Flat for the slicer: inner face on the bed (z = 0), sculpted outer face up."""
+    return leg.rotate([-90.0, 0.0, 0.0])
+
+
 def write_stl(leg: mf.Manifold, path: Path, name: str) -> None:
     mesh = leg.to_mesh()
     v = np.asarray(mesh.vert_properties)[:, :3].astype(np.float32)
@@ -340,8 +346,7 @@ def main() -> None:
     for side in ("right", "left"):
         leg = build(stock, args.dip, side)
         path = args.out / f"cam_foot_leg_{side}.stl"
-        # Flat for the slicer: inner face on the bed (z = 0), sculpted outer face up.
-        out = leg if args.leg_frame else leg.rotate([-90.0, 0.0, 0.0])
+        out = leg if args.leg_frame else print_pose(leg)
         write_stl(out, path, f"GrowBot cam-foot leg ({side}), dip {args.dip} mm")
         print(f"{path}: {leg.volume() / 1000:.1f} cm^3 (stock {stock.volume() / 1000:.1f})")
 

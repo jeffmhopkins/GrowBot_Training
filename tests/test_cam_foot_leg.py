@@ -15,6 +15,7 @@ import pytest
 
 mf = pytest.importorskip("manifold3d")
 geometry = pytest.importorskip("shapely.geometry")
+affinity = pytest.importorskip("shapely.affinity")
 
 _PATH = Path(__file__).resolve().parents[1] / "hardware" / "cam_foot_leg" / "make_leg.py"
 _spec = importlib.util.spec_from_file_location("make_leg", _PATH)
@@ -101,17 +102,27 @@ def test_hub_voids_are_the_stock_legs_exactly(legs, stock) -> None:
         assert (new - old).volume() + (old - new).volume() == pytest.approx(0.0, abs=1e-3)
 
 
-def test_nothing_overhangs_printed_inner_face_down(legs) -> None:
-    mesh = legs["right"].to_mesh()
+def _faces(leg):
+    mesh = leg.to_mesh()
     v = np.asarray(mesh.vert_properties)[:, :3]
     tri = v[np.asarray(mesh.tri_verts)]
     n = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
     area = np.linalg.norm(n, axis=1) / 2
-    ny = n[:, 1] / np.maximum(2 * area, 1e-12)
-    cy = tri[:, :, 1].mean(axis=1)
-    # Faces looking at the bed (the inner face, +y) above it, past the chamfer's steps and
-    # the engraved label's floor.
-    over = (ny > 0.5) & (cy < -leg_mod.CHAMFER - 0.05)
+    return n / np.maximum(2 * area, 1e-12)[:, None], area, tri.mean(axis=1)
+
+
+@pytest.mark.parametrize("side", ["left", "right"])
+def test_prints_inner_face_down_with_nothing_overhanging(legs, side) -> None:
+    flat = leg_mod.print_pose(legs[side])
+    assert flat.bounding_box()[2] == pytest.approx(0.0, abs=1e-6)
+    assert flat.bounding_box()[5] == pytest.approx(leg_mod.THICK, abs=1e-6)
+    n, area, c = _faces(flat)
+    # The bed face is the flat inner face, not the sculpted one.
+    on_bed = (n[:, 2] < -0.99) & (c[:, 2] < 1e-6)
+    inner = (_faces(legs[side])[0][:, 1] > 0.99) & (np.abs(_faces(legs[side])[2][:, 1]) < 1e-6)
+    assert area[on_bed].sum() == pytest.approx(area[inner].sum(), rel=1e-6)
+    # Faces looking at the bed above it, past the chamfer's steps and the engraved label.
+    over = (n[:, 2] < -0.5) & (c[:, 2] > leg_mod.CHAMFER + 0.05)
     assert area[over].sum() == pytest.approx(0.0, abs=1e-6)
 
 
@@ -124,6 +135,17 @@ def test_labels_stay_clear_of_the_edge_and_the_spline_hole() -> None:
         assert mark.area > 5.0
         assert mark.difference(inner).is_empty
         assert mark.distance(hole) > 1.0
+
+
+@pytest.mark.parametrize("side", ["left", "right"])
+def test_labels_read_right_way_round_on_the_fitted_inner_face(side) -> None:
+    mark = leg_mod._label(side, leg_mod.face(0.75))
+    # Seen from +y +x runs leftward; the left leg's mirror flips its label once more.
+    seen = affinity.scale(mark, xfact=-1 if side == "right" else 1, origin=(0, 0))
+    x0, y0, _, y1 = seen.bounds
+    # L and R both have a solid upright stem on the reader's left.
+    stem = seen.intersection(geometry.box(x0, y0, x0 + 0.8, y1))
+    assert stem.area > 0.85 * 0.8 * (y1 - y0)
 
 
 def test_writes_a_binary_stl(tmp_path, legs) -> None:

@@ -36,13 +36,14 @@ by hash) into `.upstream/`.
   width are untouched. The outer face is the one the horn drops into, so the sculpting
   shows once fitted. It's a heightfield on the flat inner face, so it prints as plain top
   layers. Each leg uses 22.2 cm³ of plastic (the stock leg uses 21.1).
-- Every edge of the flat inner face, and of the full-thickness hub and sole, has a 0.8 mm
-  chamfer.
+- Every outside edge of the flat inner face, and of the full-thickness hub and sole, has a
+  0.8 mm chamfer. The horn slot and screw hole keep the stock leg's own edges.
 
 ## Printing and fitting
 
 - The STLs lie flat, inner face down, sculpted outer face up. Every void widens upward,
-  so print in PLA with no supports, like upstream's legs. The 0.8 mm chamfers are
+  so print in PLA with no supports, like upstream's legs. The engraved letter's strokes
+  are 1 mm wide and 0.6 mm deep, so they just bridge. The 0.8 mm chamfers are
   modelled as 0.2 mm steps, so print at 0.2 mm layers or finer.
 - Fit it like the stock leg: the inner face goes against the servo, the horn drops into
   the slot on the outer face, and the horn screw goes through into the spline.
