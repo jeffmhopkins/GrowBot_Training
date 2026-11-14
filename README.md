@@ -108,7 +108,7 @@ two hours. On the box, one simulator per worker process kept the cores only 14% 
 the learner sends each simulator its action over a pipe and waits for the reply, and
 that round trip cost more than the physics. `train.envs_per_worker` (look uses 4) has
 each worker process step that many simulators per round trip, with `n_steps` cut by
-the same factor so a rollout stays the same size (`growbot_train/vec.py`).
+the same factor so a rollout holds the same number of samples (`growbot_train/vec.py`).
 
 A run saves a checkpoint every 2 million steps, so you can stop early and
 export any checkpoint:

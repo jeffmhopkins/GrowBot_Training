@@ -191,7 +191,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--config", default="configs/heading_walk.toml")
     ap.add_argument("--out", required=True, help="run folder to write into")
     ap.add_argument("--steps", type=int, help="override train.total_steps")
-    ap.add_argument("--envs", type=int, help="override train.n_envs")
+    ap.add_argument(
+        "--envs",
+        type=int,
+        help="override train.n_envs (the total; envs_per_worker then sets nothing, and"
+        " n_steps * envs is the rollout size)",
+    )
     ap.add_argument("--set", action="append", default=[], metavar="SECTION.KEY=VALUE")
     ap.add_argument(
         "--resume",

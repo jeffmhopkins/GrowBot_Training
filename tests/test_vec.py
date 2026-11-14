@@ -37,6 +37,11 @@ class Counter(gym.Env):
         return self.ident * k
 
 
+class Crashes(Counter):
+    def step(self, action):
+        raise RuntimeError("simulator blew up")
+
+
 def _fns(n: int, limit: int = 3):
     return [lambda i=i: Counter(i, limit) for i in range(n)]
 
@@ -45,7 +50,8 @@ def _run(vec, actions_list):
     out = [vec.reset()]
     for actions in actions_list:
         obs, rew, done, infos = vec.step(actions)
-        out.append((obs, rew, done, [sorted(i.items(), key=str) for i in infos]))
+        resets = [sorted(r.items(), key=str) for r in vec.reset_infos]
+        out.append((obs, rew, done, [sorted(i.items(), key=str) for i in infos], resets))
     return out
 
 
@@ -57,11 +63,12 @@ def test_it_steps_exactly_like_subproc() -> None:
     try:
         got, want = _run(block, actions), _run(sub, actions)
         np.testing.assert_array_equal(got[0], want[0])
-        for (go, gr, gd, gi), (wo, wr, wd, wi) in zip(got[1:], want[1:], strict=True):
+        for (go, gr, gd, gi, gz), (wo, wr, wd, wi, wz) in zip(got[1:], want[1:], strict=True):
             np.testing.assert_array_equal(go, wo)
             np.testing.assert_array_equal(gr, wr)
             np.testing.assert_array_equal(gd, wd)
             assert repr(gi) == repr(wi)
+            assert repr(gz) == repr(wz)
     finally:
         block.close()
         sub.close()
@@ -108,6 +115,8 @@ def test_attributes_and_methods_come_back_in_the_order_asked() -> None:
         assert vec.env_method("scaled", 10, indices=[4, 2]) == [40, 20]
         assert vec.env_method("scaled", k=2) == [0, 2, 4, 6, 8, 10]
         assert vec.env_is_wrapped(gym.Wrapper) == [False] * 6
+        assert vec.has_attr("ident") is True
+        assert vec.has_attr("nope") is False
     finally:
         vec.close()
 
@@ -120,3 +129,51 @@ def test_more_workers_than_simulators_is_one_each() -> None:
     finally:
         vec.close()
         vec.close()
+
+
+def test_a_crash_in_any_worker_fails_the_step_instead_of_hanging() -> None:
+    # Before each pipe was made just before its fork, a sibling worker held a dead
+    # worker's pipe open and the learner waited forever on it.
+    import multiprocessing as mp
+
+    def run(q) -> None:
+        fns = _fns(6)
+        fns[5] = lambda: Crashes(5)
+        vec = BlockSubprocVecEnv(fns, workers=3)
+        vec.reset()
+        try:
+            vec.step(np.ones((6, 1), np.float32))
+        except EOFError:
+            q.put("failed")
+
+    ctx = mp.get_context("fork")
+    q = ctx.Queue()
+    p = ctx.Process(target=run, args=(q,))
+    p.start()
+    p.join(20)
+    hung = p.is_alive()
+    if hung:
+        p.kill()
+    assert not hung
+    assert q.get(timeout=1) == "failed"
+
+
+def test_build_vec_env_picks_block_only_when_workers_share() -> None:
+    from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
+
+    from growbot_train.config import Config
+    from growbot_train.train import build_vec_env
+
+    cfg = Config()
+    for n, workers, kind in [
+        (4, 2, BlockSubprocVecEnv),
+        (2, 2, SubprocVecEnv),
+        (2, None, SubprocVecEnv),
+        (1, 1, DummyVecEnv),
+    ]:
+        vec = build_vec_env(cfg, n, seed=0, workers=workers)
+        try:
+            assert type(vec.venv) is kind
+            assert vec.num_envs == n
+        finally:
+            vec.close()

@@ -27,11 +27,12 @@ from stable_baselines3.common.vec_env.base_vec_env import (
 )
 
 
-def _step_one(env: gym.Env, action: np.ndarray) -> tuple[Any, float, bool, dict, dict]:
+def _step_one(
+    env: gym.Env, action: np.ndarray, reset_info: dict
+) -> tuple[Any, float, bool, dict, dict]:
     obs, reward, terminated, truncated, info = env.step(action)
     done = terminated or truncated
     info["TimeLimit.truncated"] = truncated and not terminated
-    reset_info: dict = {}
     if done:
         info["terminal_observation"] = obs
         obs, reset_info = env.reset()
@@ -43,14 +44,24 @@ def _worker(remote: Any, parent_remote: Any, fns_wrapper: CloudpickleWrapper) ->
 
     parent_remote.close()
     envs: list[gym.Env] = [fn() for fn in fns_wrapper.var]
+    # As SB3: an env that didn't reset this step reports its last reset's info again.
+    last_reset: list[dict] = [{} for _ in envs]
+    try:
+        _serve(remote, envs, last_reset, is_wrapped)
+    except KeyboardInterrupt:
+        pass
+
+
+def _serve(remote: Any, envs: list[gym.Env], last_reset: list[dict], is_wrapped: Any) -> None:
     while True:
         try:
             cmd, data = remote.recv()
-        except (EOFError, KeyboardInterrupt):
+        except EOFError:
             break
         if cmd == "step":
-            out = [_step_one(env, a) for env, a in zip(envs, data, strict=True)]
+            out = [_step_one(env, a, ri) for env, a, ri in zip(envs, data, last_reset, strict=True)]
             obs, rews, dones, infos, reset_infos = zip(*out, strict=True)
+            last_reset[:] = reset_infos
             remote.send((np.stack(obs), np.array(rews), np.array(dones), infos, reset_infos))
         elif cmd == "reset":
             seeds, options = data
@@ -58,9 +69,20 @@ def _worker(remote: Any, parent_remote: Any, fns_wrapper: CloudpickleWrapper) ->
             for env, seed, opt in zip(envs, seeds, options, strict=True):
                 out.append(env.reset(seed=seed, **({"options": opt} if opt else {})))
             obs, reset_infos = zip(*out, strict=True)
+            last_reset[:] = reset_infos
             remote.send((np.stack(obs), reset_infos))
         elif cmd == "get_spaces":
             remote.send((envs[0].observation_space, envs[0].action_space))
+        elif cmd == "has_attr":
+            name, local = data
+            out = []
+            for i in local:
+                try:
+                    envs[i].get_wrapper_attr(name)
+                    out.append(True)
+                except AttributeError:
+                    out.append(False)
+            remote.send(out)
         elif cmd == "get_attr":
             name, local = data
             remote.send([envs[i].get_wrapper_attr(name) for i in local])
@@ -94,9 +116,15 @@ class BlockSubprocVecEnv(VecEnv):
         self._blocks = [range(bounds[w], bounds[w + 1]) for w in range(workers)]
         self._where = [(w, i - blk.start) for w, blk in enumerate(self._blocks) for i in blk]
         ctx = mp.get_context("fork")
-        self.remotes, work_remotes = zip(*[ctx.Pipe() for _ in range(workers)], strict=True)
+        self.remotes = []
         self.processes = []
-        for work, remote, blk in zip(work_remotes, self.remotes, self._blocks, strict=True):
+        # Each pipe is made just before its worker forks, and its child end closed right
+        # after, so no other worker inherits it. Otherwise a dead worker's pipe stays
+        # open in its siblings, the learner never sees EOF, and training hangs instead
+        # of failing.
+        for blk in self._blocks:
+            remote, work = ctx.Pipe()
+            self.remotes.append(remote)
             fns = CloudpickleWrapper([env_fns[i] for i in blk])
             p = ctx.Process(target=_worker, args=(work, remote, fns), daemon=True)
             p.start()
@@ -157,6 +185,9 @@ class BlockSubprocVecEnv(VecEnv):
             for loc, val in zip(local, replies[w] or [None] * len(local), strict=True)
         }
         return [flat[i] for i in order]
+
+    def has_attr(self, attr_name: str) -> bool:
+        return all(self._ask("has_attr", None, attr_name))
 
     def get_attr(self, attr_name: str, indices: VecEnvIndices = None) -> list[Any]:
         return self._ask("get_attr", indices, attr_name)
