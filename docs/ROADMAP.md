@@ -12,14 +12,14 @@ phase 7. Foot geometry is parked.
 
 ## How work reaches the box
 
-- **One job at a time.** A second start is refused until the first ends.
-- **An Ops → Update kills a running job.** The job is gone after the update, not
-  paused, so updates wait for a gap between runs. Every thread that owns a run says when
+- **One job at a time.** JBrain's launcher refuses a second start until the first ends.
+- **An Ops → Update kills a running job.** Seen on 2026-11-14: the job is gone after
+  the update, not paused, so updates wait for a gap between runs. Every thread that owns a run says when
   the box is free.
 - **No update needed for a new run.** A job clones this repo's `main` when it starts, and
   the Jobs list refreshes from `jobs.toml`, so a config change goes live on merge.
 - **Ownership:** the locomotion thread owns the tall and low gaits (lift and fall, the
-  backing waddle) and foot geometry. The look and spin thread owns look, the follow
+  backing waddle) and foot geometry (parked). The look and spin thread owns look, the follow
   test, the distillation and the final test. Runs are queued between them in the order
   below.
 
@@ -31,7 +31,7 @@ Each skill trains on its own on the printed build.
 | --- | --- | --- | --- |
 | Look: spin in place to a heading, tilt the camera | `configs/look.toml` | look thread | training (steered-spin warm start, #22) |
 | Tall walk: camera first, lift and fall, forward | `configs/lift_fall.toml` | locomotion thread | curriculum fix merged (#21), next run queued |
-| Backing waddle: low, backing away | camera walk or heading walk, retrained on the build | locomotion thread | waiting on which waddle Jeff means |
+| Backing waddle: low, backing away | camera walk (retrained on the build) or heading walk (already on the build, but nose first) | locomotion thread | waiting on which waddle Jeff means |
 
 The tall walk also needs two things it lacks today, as follow-up runs:
 
@@ -40,14 +40,17 @@ The tall walk also needs two things it lacks today, as follow-up runs:
 - **Camera tilt while walking:** a camera-height input, so the camera can stay on a face
   while it walks.
 
-**Exit:**
+Phase 1 also adds eval cases: `evaluate.py` today always commands full speed, standing
+tall, so it can't yet score a commanded speed, backing, or a camera height.
+
+**Exit** (falls counted per evaluation episode):
 
 - **Look:** on random bodies, it faces a target anywhere around it, including dead
-  behind. The heading error settles under 15 degrees, and falls are under 1 in 50.
+  behind. The heading error settles under 15 degrees, and falls are under 1 in 50 episodes.
 - **Tall walk:** forward at its commanded speed within 20% across the speed range. It
-  steers to a heading within 15 degrees, with under 1 fall in 50.
+  steers to a heading within 15 degrees, with under 1 fall in 50 episodes.
 - **Backing waddle:** backs away at its commanded speed and holds its heading, with
-  under 1 fall in 50.
+  under 1 fall in 50 episodes.
 - **Every skill:** passes `evaluate.py --sweep` with no edge case falling more than
   1 in 10.
 
@@ -68,7 +71,8 @@ skill alone:
 
 **Exit:**
 
-- The harness runs end to end on look (speed 0) and on the tall walk (forward).
+- The harness runs end to end on each skill: look (speed 0), the tall walk (forward)
+  and the backing waddle (backing).
 - It reports distance error, aim error, settle times and falls.
 - Those numbers become the baseline phase 4 must beat.
 
@@ -108,7 +112,8 @@ The full simulator acceptance test on the master policy:
 
 - It keeps the person in frame through the script, and settles to each new distance.
 - It holds still on "stay" and never locks onto a distractor.
-- No falls on the nominal body, and under 1 in 20 runs on random bodies.
+- No falls on the nominal body, and under 1 in 20 runs on random bodies. These numbers
+  are provisional: they are revisited against the phase 2 baseline.
 - A replay to watch.
 
 ## Phase 5: the phone app
