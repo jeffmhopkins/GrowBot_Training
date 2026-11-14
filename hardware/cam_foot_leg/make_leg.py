@@ -174,8 +174,9 @@ def _carving(prof: Polygon, x: np.ndarray, z: np.ndarray) -> tuple[np.ndarray, n
 def thickness(prof: Polygon, x: np.ndarray, z: np.ndarray, dip: float) -> np.ndarray:
     """How far the solid reaches from the inner face at each (x, z): THICK at the hub and
     along the sole, rounded over toward the shaft's edges and its slot, and dished a
-    little mid-shaft, like the waist of a long bone. The printed face is this, lightly
-    blurred (_heightfield)."""
+    little mid-shaft, like the waist of a long bone. The printed face blurs the carving
+    before blending it out, so it differs from this by a few tenths of a millimetre on the
+    shaft and not at all at the hub and sole (_heightfield)."""
     carve, full = _carving(prof, x, z)
     return THICK - carve * (1.0 - full)
 
@@ -196,9 +197,10 @@ def _blur(a: np.ndarray, sigma: float) -> np.ndarray:
 
 def _heightfield(prof: Polygon, dip: float) -> mf.Manifold:
     """The solid between the flat inner face and the sculpted outer face: a closed grid
-    mesh, flat beyond the inner face and following thickness() on the outer side. A
-    heightfield has no overhang anywhere, so with the inner face on the bed the sculpting
-    prints as plain top layers."""
+    mesh, flat beyond the inner face and following thickness() on the outer side, except
+    that the carving is blurred (_blur) before it's blended out, and the face is lifted
+    clear where nothing is carved. A heightfield has no overhang anywhere, so with the
+    inner face on the bed the sculpting prints as plain top layers."""
     x0, z0, x1, z1 = prof.bounds
     xs = np.arange(x0 - 1.0, x1 + 1.0 + GRID, GRID)
     zs = np.arange(z0 - 1.0, z1 + 1.0 + GRID, GRID)
