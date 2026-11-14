@@ -217,6 +217,17 @@ def main(argv: list[str] | None = None) -> int:
             verbose=1,
         )
         reset = True
+        if t.warm_gait:
+            from growbot_train.gait import Keyframes, clone_gait
+
+            path = Path(t.warm_gait)
+            if not path.exists():
+                path = Path(__file__).resolve().parents[1] / t.warm_gait
+            print(f"== cloning the gait in {path} before PPO ==", flush=True)
+            mse = clone_gait(
+                model, vec, cfg, Keyframes.load(path), t.warm_gait_samples, t.warm_gait_epochs
+            )
+            print(f"== cloned: mse {mse:.4f} ==", flush=True)
 
     # The live folder (progress, latest replay and policy) is what a phone watches.
     live = Live(out, cfg, t.total_steps, start_steps=0 if reset else model.num_timesteps)

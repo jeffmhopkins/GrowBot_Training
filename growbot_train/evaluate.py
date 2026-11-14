@@ -35,7 +35,7 @@ START_ERRORS = (0.0, 45.0, -45.0, 90.0, -90.0, 180.0)
 
 
 def env_for(policy: JsonPolicy, body: str | None = None) -> GrowBotHeadingEnv:
-    cfg = config_mod.from_dict(policy.config) if policy.config else config_mod.Config()
+    cfg = config_mod.from_dict(policy.config, saved=True) if policy.config else config_mod.Config()
     cfg.task.history_frames = policy.frames
     cfg.task.gait_hz = policy.gait_hz
     cfg.task.action_to_rad = float(policy.data["obs_spec"]["action_to_rad"])
@@ -105,15 +105,20 @@ def score(
 
 def sweep_cases(cfg: config_mod.Config) -> dict[str, dict[str, Any]]:
     r = cfg.randomization
+    floors = {f: {"floor": f} for f in cfg.task.floors} if cfg.task.surfaces else {}
+    # With surfaces, the floor's slickness is drawn from its own range: test its edges.
+    lo, hi = r.floor_friction_scale if cfg.task.surfaces else r.friction
+    key = "floor_scale" if cfg.task.surfaces else "friction"
     return {
+        **floors,
         "light": {"mass_scale": r.mass_scale[0]},
         "heavy": {"mass_scale": r.mass_scale[1]},
         "short_legs": {"leg_scale": [r.leg_length_scale[0]] * 2},
         "long_legs": {"leg_scale": [r.leg_length_scale[1]] * 2},
         "weak_servos": {"gain": r.servo_gain_scale[0]},
         "strong_servos": {"gain": r.servo_gain_scale[1]},
-        "slippery": {"friction": r.friction[0]},
-        "grippy": {"friction": r.friction[1]},
+        "slippery": {key: lo},
+        "grippy": {key: hi},
         "slow_relay": {"delay_s": r.relay_delay_s[1]},
         "nose_heavy": {"com": np.array([r.com_x_m[1], 0.0, 0.0])},
         "tail_heavy": {"com": np.array([r.com_x_m[0], 0.0, 0.0])},

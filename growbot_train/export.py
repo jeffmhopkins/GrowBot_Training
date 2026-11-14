@@ -181,7 +181,7 @@ def export(
 
 
 def export_run(run: Path, model_name: str = "final_model.zip") -> Path:
-    cfg = config_mod.from_dict(json.loads((run / "config.json").read_text()))
+    cfg = config_mod.from_dict(json.loads((run / "config.json").read_text()), saved=True)
     model_path = run / model_name
     if model_path.name.startswith("model_"):
         norm_path = model_path.with_name(
