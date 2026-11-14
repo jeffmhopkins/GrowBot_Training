@@ -131,7 +131,7 @@ def test_more_workers_than_simulators_is_one_each() -> None:
         vec.close()
 
 
-def test_a_crash_in_any_worker_fails_the_step_instead_of_hanging() -> None:
+def test_a_crash_in_a_later_worker_fails_the_step_instead_of_hanging() -> None:
     # Before each pipe was made just before its fork, a sibling worker held a dead
     # worker's pipe open and the learner waited forever on it.
     import multiprocessing as mp
@@ -140,6 +140,7 @@ def test_a_crash_in_any_worker_fails_the_step_instead_of_hanging() -> None:
         fns = _fns(6)
         fns[5] = lambda: Crashes(5)
         vec = BlockSubprocVecEnv(fns, workers=3)
+        q.put([w.pid for w in vec.processes])
         vec.reset()
         try:
             vec.step(np.ones((6, 1), np.float32))
@@ -150,10 +151,16 @@ def test_a_crash_in_any_worker_fails_the_step_instead_of_hanging() -> None:
     q = ctx.Queue()
     p = ctx.Process(target=run, args=(q,))
     p.start()
+    workers = q.get(timeout=20)
     p.join(20)
     hung = p.is_alive()
     if hung:
-        p.kill()
+        # Its workers too: orphaned, they'd hold each other's pipes open forever.
+        import os
+        import signal
+
+        for pid in [p.pid, *workers]:
+            os.kill(pid, signal.SIGKILL)
     assert not hung
     assert q.get(timeout=1) == "failed"
 
