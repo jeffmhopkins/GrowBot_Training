@@ -116,3 +116,23 @@ def test_look_differs_from_the_camera_walk_only_where_it_says() -> None:
     }
     assert look["name"] == "look"
     assert SHIPPED.with_name("look.toml").read_text().count("# CHANGED:") == len(changed)
+
+
+def test_tall_waddle_differs_from_the_camera_walk_only_where_it_says() -> None:
+    from growbot_train.gait import Keyframes
+
+    path = SHIPPED.with_name("tall_waddle.toml")
+    waddle = config_mod.load(path)
+    cam = config_mod.load(SHIPPED.with_name("camera_walk.toml")).to_dict()
+    changed = {
+        (section, key)
+        for section, values in waddle.to_dict().items()
+        if isinstance(values, dict)
+        for key, value in values.items()
+        if cam[section][key] != value
+    }
+    assert path.read_text().count("# CHANGED:") == len(changed)
+    # The cloned rhythm must tick with the policy's clock and fit inside its action range.
+    gait = Keyframes.load(SHIPPED.parents[1] / waddle.train.warm_gait)
+    assert gait.hz == waddle.task.gait_hz
+    assert abs(gait.keys).max() < 0.9 * waddle.task.action_to_rad

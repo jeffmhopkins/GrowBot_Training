@@ -40,6 +40,17 @@ face, a speed (walk up, stop and keep facing it, or back away) and a camera heig
 walk."""
 
 [[job]]
+name = "growbot_tall_waddle"
+title = "GrowBot tall waddle (upstream's rhythm, steered)"
+config = "configs/tall_waddle.toml"
+est_hours = "2-5 h"
+notes = """Retrains upstream's live-app walk rhythm, a tall side-to-side waddle \
+(configs/tall_waddle.toml), on the printed build with the camera walk's inputs: a heading \
+to face and a signed speed (walk up camera first, stop and face it, or back away nose \
+first). It clones the rhythm first, then PPO finds the direction. Downloads and the Live \
+card work as for the heading walk."""
+
+[[job]]
 name = "growbot_look"
 title = "GrowBot look (stay put, turn to face a direction)"
 config = "configs/look.toml"
