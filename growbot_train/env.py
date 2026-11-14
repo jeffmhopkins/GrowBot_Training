@@ -607,9 +607,10 @@ class GrowBotHeadingEnv(gym.Env):
             else:
                 drift_m = float(np.linalg.norm(d.qpos[0:2] - self.anchor))
                 if r.anchor:
-                    # Saturates 5 cm past the free radius, so it never outbids facing
-                    # the target: a policy that can't see the offset must not freeze.
-                    over = max(0.0, drift_m - r.anchor_free_m) / 0.05
+                    # Saturates 15 cm past the free radius, so it never outbids facing
+                    # the target (a policy that can't see the offset must not freeze),
+                    # yet still slopes through a whole turn's worth of slow drift.
+                    over = max(0.0, drift_m - r.anchor_free_m) / 0.15
                     terms["anchor"] = -r.anchor * min(1.0, over)
         if r.wobble:
             # Free-joint angular velocity is in the body frame: x is roll, y is pitch.

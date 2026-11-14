@@ -329,7 +329,7 @@ dead behind within 13 seconds on the nominal body (2 degrees off after), and ave
 randomisation ramps up over the first 15M steps, as for lift and fall. That run turned, but slid about 1 cm/s
 (mostly backward) while it did (the spin pivots near the tail), and its heading error
 stalled near 56 degrees. Two changes: wandering from where each turn began now costs
-(`reward.anchor`, past the first 2 cm, capped per tick), and facing pays only near the
+(`reward.anchor`, past the first 2 cm, rising over the next 15 cm to a cap per tick), and facing pays only near the
 target (`reward.heading_width_deg = 40`: 60 degrees off earns a tenth, where the cosine
 paid three quarters). The policy isn't told how far it has wandered, as the phone can't
 measure that. The weights were checked against the cloned spin in the simulator:

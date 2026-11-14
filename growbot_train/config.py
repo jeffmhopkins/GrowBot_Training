@@ -56,7 +56,7 @@ class RewardConfig:
     # than turn to face the target.
     stop_drift_free: float = 0.5
     # While stopped (speed command 0, or always in "still" mode), wandering from where the
-    # stop began (or the target last moved) costs weight * (distance - anchor_free_m) / 5 cm
+    # stop began (or the target last moved) costs weight * (distance - anchor_free_m) / 15 cm
     # per tick, at most weight. The speed band above only sees drift faster than
     # stop_drift_free; slower drift adds up unseen.
     # The policy isn't told the offset (the phone can't measure it), so it has to learn a

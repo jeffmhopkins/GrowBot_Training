@@ -700,13 +700,17 @@ def test_wandering_while_stopped_costs_past_the_free_radius() -> None:
     mujoco.mj_forward(env.model, env.data)
     _, _, _, _, info = env.step(np.zeros(2))
     assert info["drift_m"] == pytest.approx(0.10, abs=0.01)
-    # Past 5 cm beyond the free radius it saturates at the weight, so it never outbids
+    assert info["terms"]["anchor"] == pytest.approx(-0.5 * (info["drift_m"] - 0.02) / 0.15)
+    # Past 15 cm beyond the free radius it saturates at the weight, so it never outbids
     # facing the target.
-    assert info["terms"]["anchor"] == pytest.approx(-0.5)
-    env.data.qpos[0] -= 0.06
+    env.data.qpos[0] += 0.20
     mujoco.mj_forward(env.model, env.data)
     _, _, _, _, info = env.step(np.zeros(2))
-    assert info["terms"]["anchor"] == pytest.approx(-0.5 * (info["drift_m"] - 0.02) / 0.05)
+    assert info["terms"]["anchor"] == pytest.approx(-0.5)
+    env.data.qpos[0] -= 0.25
+    mujoco.mj_forward(env.model, env.data)
+    _, _, _, _, info = env.step(np.zeros(2))
+    assert info["terms"]["anchor"] == pytest.approx(-0.5 * (info["drift_m"] - 0.02) / 0.15)
 
 
 def test_a_new_target_starts_a_new_anchor() -> None:
