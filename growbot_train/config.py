@@ -125,7 +125,7 @@ class TaskConfig:
     floors: tuple[str, ...] = ("hard", "carpet")
     # Set down tail first at this nose-up angle (degrees) and let it settle, instead of
     # level. The printed build needs it: level, it balances on its soles. Just under
-    # where it rests (about 37 degrees), so it settles without rocking: from 25 it swung
+    # where it rests (about 40 degrees), so it settles without rocking: from 25 it swung
     # past 55 and a body with long legs went over onto its back.
     start_pitch_deg: float = 35.0
     # Servo torque limit (N m); 0 keeps the body file's. An MG90S stalls near 0.2 N m,

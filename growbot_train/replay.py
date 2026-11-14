@@ -41,7 +41,13 @@ SCENARIOS: tuple[tuple[str, float, float, bool], ...] = (
 
 def _geoms(env: GrowBotHeadingEnv) -> list[int]:
     m = env.model
-    return [g for g in range(m.ngeom) if m.geom_type[g] == mujoco.mjtGeom.mjGEOM_BOX]
+    # A see-through geom is there only for its mass (a leg's box, drawn by its contact
+    # halves); drawn as well it flickers against them.
+    return [
+        g
+        for g in range(m.ngeom)
+        if m.geom_type[g] == mujoco.mjtGeom.mjGEOM_BOX and m.geom_rgba[g, 3] > 0
+    ]
 
 
 def record(
