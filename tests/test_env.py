@@ -315,6 +315,24 @@ def test_the_free_drift_is_only_for_an_exact_stop() -> None:
     assert terms[0.3] < -0.05 * cfg.reward.progress
 
 
+def test_turn_pays_for_closing_the_error_but_not_for_a_retarget() -> None:
+    cfg = Config()
+    cfg.reward.turn = 1.0
+    env = GrowBotHeadingEnv(cfg)
+    env.reset(seed=0, options={"nominal": True})
+    env.target_deg = wrap_deg(env.yaw_deg() + 90.0)
+    env.data.qvel[5] = 2.0  # spinning CCW, toward the target
+    _, _, _, _, info = env.step(np.zeros(2))
+    assert info["terms"]["turn"] > 0.5
+    env.data.qvel[5] = -2.0
+    _, _, _, _, info = env.step(np.zeros(2))
+    assert info["terms"]["turn"] < -0.5
+    env.data.qvel[5] = 0.0
+    env.target_deg = wrap_deg(env.target_deg + 120.0)  # a jump in the target alone pays nothing
+    _, _, _, _, info = env.step(np.zeros(2))
+    assert abs(info["terms"]["turn"]) < 0.5
+
+
 def test_old_runs_with_a_retired_setting_still_load(tmp_path) -> None:
     from growbot_train.config import load
 

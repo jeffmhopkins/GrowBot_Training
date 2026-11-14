@@ -1,6 +1,6 @@
 # GrowBot look: stand in place and turn to face a direction, holding the camera steady.
 # The camera walk at speed 0 already does this; this one never has to walk, so it can be
-# trained harder for a steady view and quick, big turns. Try it if the camera walk wobbles
+# trained harder for a steady view and for turning. Try it if the camera walk wobbles
 # when it stops. Everything else is the camera walk's (camera_walk.toml); only the lines
 # marked CHANGED differ from that file.
 #   python -m growbot_train.train --out runs/x --config configs/look.toml
@@ -23,13 +23,14 @@ stance_tol_deg = 6.0    # how close to the taller stance counts (degrees)
 back_lean = 2.0         # as camera walk: penalty for leaning back past the stance + margin
 back_lean_margin_deg = 12.0  # how far past the stance before that penalty starts
 wobble = 0.05           # CHANGED: penalty for rocking, for a steady camera
+turn = 1.0              # CHANGED: pay per degree the heading error shrinks; turning is the whole job
 
 [task]
 body = "rollout"            # "rollout" (upstream public build) or "olie" (enclosure build)
 episode_seconds = 30.0      # as camera walk: longer, so each episode holds several commands
 initial_error_deg = 180.0   # first target: up to this many degrees off the camera end
-retarget_every_s = [2.0, 6.0]   # CHANGED: the target moves every 2-6 s...
-retarget_max_deg = 180.0        # CHANGED: ...by up to half a turn
+retarget_every_s = [5.0, 12.0]  # CHANGED: the target moves every 5-12 s (turning on the spot is ~8 deg/s)...
+retarget_max_deg = 120.0        # ...by up to this much
 gait_hz = 1.0               # the clock the policy sees; roughly one step cycle a second
 history_frames = 5          # how many past ticks of sensors the policy sees
 action_to_rad = 1.0         # full action = 1 radian (~57 degrees) of leg swing

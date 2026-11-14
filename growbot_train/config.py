@@ -54,6 +54,12 @@ class RewardConfig:
     stop_drift_free: float = 0.5
     # Rocking costs weight * (roll rate^2 + pitch rate^2), rad/s: a steadier camera.
     wobble: float = 0.0
+    # Pay per degree the heading error shrank this tick (negative when it grew), measured
+    # against the current target so a retarget's jump is never paid. It adds up to
+    # weight * (error at start - error at end), so it can't be farmed. Turning on the spot
+    # manages about 8 degrees a second, which moves the (1 + cos) heading term only
+    # ~0.004 a tick: too faint for PPO to find, and the first look run never turned.
+    turn: float = 0.0
 
 
 @dataclass
