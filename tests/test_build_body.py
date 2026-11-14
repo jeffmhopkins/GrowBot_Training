@@ -210,6 +210,80 @@ def test_cloning_refuses_a_clock_that_does_not_match(tmp_path) -> None:
         clone_gait(model, vec, cfg, Keyframes.load(_gait_json(tmp_path, 2.0)), 64, 1)
 
 
+class _FakeVec:
+    def __init__(self, errs: list[float]) -> None:
+        self.errs = errs
+
+    def get_attr(self, name: str) -> list[float]:
+        assert name == "_err_obs"
+        return self.errs
+
+
+def test_a_steered_clone_spins_toward_the_target_and_stops_on_it() -> None:
+    from growbot_train.gait import _steer
+
+    want = np.array([[0.1, 0.9]] * 4)
+    # Observed error counter-clockwise, clockwise, inside and on the deadband edge.
+    out = _steer(want, _FakeVec([90.0, -20.0, 5.0, 10.0]), deadband_deg=10.0)
+    assert out[0].tolist() == [0.1, 0.9]  # the gait as given: counter-clockwise
+    assert out[1].tolist() == [0.9, 0.1]  # clockwise: legs swapped
+    assert out[2].tolist() == [0.0, 0.0]  # on target: stand still
+    assert out[3].tolist() == [0.1, 0.9]  # at the edge it still turns
+
+
+def test_a_steered_clone_sees_targets_all_the_way_round(tmp_path) -> None:
+    from growbot_train.env import wrap_deg
+
+    cfg = _build_cfg()
+    cfg.task.gait_hz = 2.0
+    cfg.task.episode_seconds = 2.0
+    cfg.task.facing = "camera"
+    cfg.train.warm_gait_steer = True
+    seen: list[float] = []
+
+    class Spy(GrowBotHeadingEnv):
+        def step(self, action):  # type: ignore[override]
+            seen.append(abs(wrap_deg(self.target_deg - self.yaw_deg())))
+            return super().step(action)
+
+    vec = VecNormalize(DummyVecEnv([lambda: Spy(cfg), lambda: Spy(cfg)]), clip_obs=CLIP_OBS)
+    vec.set_attr("dr_scale", 0.15)  # the curriculum's start: narrow bodies and targets
+    model = PPO("MlpPolicy", vec, n_steps=64, batch_size=64, seed=0, device="cpu")
+    clone_gait(model, vec, cfg, Keyframes.load(_gait_json(tmp_path, 2.0)), 600, 1, lambda *_: None)
+    assert max(seen) > 90.0
+    # Afterwards the curriculum's narrowing applies to targets again.
+    assert vec.get_attr("target_scale") == [None, None]
+
+
+def _spin_deg_s(gait: Keyframes, cfg: Config) -> float:
+    from growbot_train.env import wrap_deg
+
+    env = GrowBotHeadingEnv(cfg)
+    env.reset(seed=0, options={"nominal": True, "retarget": False, "tilt_cmd": 1.0})
+    prev, turned = env.body_yaw_deg(), 0.0
+    for _ in range(100):
+        a = np.clip(gait(env.step_index * CONTROL_DT) / cfg.task.action_to_rad, -0.99, 0.99)
+        _, _, term, _, _ = env.step(np.arctanh(a))
+        assert not term
+        y = env.body_yaw_deg()
+        turned += wrap_deg(y - prev)
+        prev = y
+    return turned / (100 * CONTROL_DT)
+
+
+def test_the_look_spin_turns_counter_clockwise_and_mirrored_clockwise() -> None:
+    from pathlib import Path
+
+    from growbot_train import config as config_mod
+
+    root = Path(__file__).resolve().parents[1]
+    cfg = config_mod.load(root / "configs" / "look.toml")
+    gait = Keyframes.load(root / cfg.train.warm_gait)
+    assert gait.hz == cfg.task.gait_hz
+    assert _spin_deg_s(gait, cfg) > 8.0
+    assert _spin_deg_s(Keyframes(gait.hz, gait.keys[::-1].tolist()), cfg) < -8.0
+
+
 def test_the_replay_draws_each_leg_once() -> None:
     from growbot_train.replay import _geoms
 

@@ -38,7 +38,7 @@ retarget_every_s = [6.0, 14.0]  # CHANGED: the target moves every 6-14 s, time t
 retarget_max_deg = 180.0        # CHANGED: ...by up to half a turn, so it learns to face what is behind it
 gait_hz = 1.0               # CHANGED: the clock the policy sees; about one turning step a second
 history_frames = 5          # how many past ticks of sensors the policy sees
-action_to_rad = 1.0         # full action = 1 radian (~57 degrees) of leg swing
+action_to_rad = 1.3         # CHANGED: full action = 1.3 radians (~75 degrees), room for the cloned spin's swing
 fall_tilt_deg = 55.0        # tipped this far from the starting stance = fallen (the app aborts at 55)
 facing = "camera"           # as camera walk: tail first, toward what the camera sees
 heading_from = "lens"       # CHANGED: facing is scored on the worse of where the camera points and where the body points, so a lean earns nothing
@@ -58,6 +58,7 @@ tilt_tall_prob = 0.5               # ...half the time standing tall, otherwise a
 [randomization]
 # Every episode gets a slightly different robot, so the policy works on the real one.
 enabled = true
+ramp_steps = 15000000      # CHANGED: start near the as-built robot (the cloned spin only works there open loop) and widen to the full ranges by 15M steps
 mass_scale = [0.80, 1.25]
 com_x_m = [-0.030, 0.030]
 com_y_m = [-0.015, 0.015]
@@ -96,11 +97,15 @@ gamma = 0.99
 gae_lambda = 0.95
 clip_range = 0.2
 ent_coef = 0.0
-log_std_init = -0.5
+log_std_init = -1.5         # CHANGED: less exploration noise, so the cloned spin's timing survives the first updates
 policy_layers = [128, 128]
 value_layers = [256, 256]
 checkpoint_every_steps = 2000000
 # How often the live folder's 3D replay and policy_latest.json are refreshed from the
 # current network (a pause of a second or two each time; a few minutes apart on the box).
 live_replay_every_steps = 500000
+warm_gait = "configs/gaits/look_spin.json"  # CHANGED: clone a spin on the spot before PPO...
+warm_gait_steer = true      # CHANGED: ...steered: spin toward the target, stand still on it
+warm_gait_samples = 400000  # CHANGED: twice the samples...
+warm_gait_epochs = 120      # CHANGED: ...and three times the passes: the steered clone switches direction, harder to fit than a walk
 seed = 0

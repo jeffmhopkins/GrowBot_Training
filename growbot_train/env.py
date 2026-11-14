@@ -217,6 +217,9 @@ class GrowBotHeadingEnv(gym.Env):
         # (randomization.ramp_steps); 1 is the full ranges. It narrows how far off the
         # target starts and jumps too, so an early gait that only walks straight pays.
         self.dr_scale = 1.0
+        # When set, scales the target ranges in place of dr_scale: a steered clone wants
+        # targets all the way round while the bodies are still near the as-built one.
+        self.target_scale: float | None = None
 
     def _settled_pitch(self) -> float:
         """Resting pitch of the as-built body on neutral legs. A randomised body can rest
@@ -503,7 +506,7 @@ class GrowBotHeadingEnv(gym.Env):
         if "target_error_deg" in options:
             first_err = float(options["target_error_deg"])
         else:
-            lim = self.cfg.task.initial_error_deg * min(1.0, self.dr_scale)
+            lim = self.cfg.task.initial_error_deg * self._target_k()
             first_err = float(self.np_random.uniform(-lim, lim))
         self.target_deg = wrap_deg(self.yaw_deg() + first_err)
         self.retarget = bool(options.get("retarget", True))
@@ -542,7 +545,7 @@ class GrowBotHeadingEnv(gym.Env):
             self._next_push = t + self._u(cfg.randomization.push_every_s)
 
         if self.retarget and t >= self._next_retarget:
-            lim = cfg.task.retarget_max_deg * min(1.0, self.dr_scale)
+            lim = cfg.task.retarget_max_deg * self._target_k()
             self.target_deg = wrap_deg(self.target_deg + self._u((-lim, lim)))
             self._next_retarget = t + self._u(cfg.task.retarget_every_s)
 
@@ -705,6 +708,9 @@ class GrowBotHeadingEnv(gym.Env):
         if self._lens:
             return self._lens_deg(xm, tail)
         return tail if self._camera_first else nose
+
+    def _target_k(self) -> float:
+        return min(1.0, self.dr_scale if self.target_scale is None else self.target_scale)
 
     def scored_err_deg(self, yaw: float | None = None, body: float | None = None) -> float:
         """The heading error the reward pays on, degrees, 0..180, now or for the given
