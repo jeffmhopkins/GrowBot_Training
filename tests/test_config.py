@@ -68,6 +68,10 @@ def test_camera_walk_differs_only_where_it_says() -> None:
         ("task", "facing"),
         ("task", "stand_lift_deg"),
         ("task", "lying_start_prob"),
+        ("reward", "back_lean"),
+        ("task", "back_fall_pitch_deg"),
+        ("randomization", "push_every_s"),
+        ("randomization", "push_pitch_rad_s"),
     }
     assert cam["name"] == "camera_walk"
     marked = SHIPPED.with_name("camera_walk.toml").read_text().count("# CHANGED:")

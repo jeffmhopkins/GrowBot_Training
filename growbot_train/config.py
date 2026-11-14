@@ -37,6 +37,11 @@ class RewardConfig:
     # task.stand_lift_deg. 0 turns it off (the first policy just keeps its resting stance).
     stance: float = 0.0
     stance_tol_deg: float = 6.0
+    # Leaning back past the stance it should hold (its resting pitch plus
+    # task.stand_lift_deg plus this margin) costs weight * (excess / 10 degrees)^2, a
+    # warning that grows long before the point of no return. 0 turns it off.
+    back_lean: float = 0.0
+    back_lean_margin_deg: float = 12.0
 
 
 @dataclass
@@ -69,6 +74,10 @@ class TaskConfig:
     # standing on neutral legs, so the policy learns to get up before it walks.
     lying_start_prob: float = 0.0
     lying_leg_rad: tuple[float, float] = (-0.95, -0.75)
+    # Going over backwards: past about 95 degrees nose-up this body lands on its back
+    # with its legs in the air and can't get up. An episode ends as a fall once the
+    # pitch passes this many degrees, well before that point. 0 = only fall_tilt_deg.
+    back_fall_pitch_deg: float = 0.0
 
 
 @dataclass
@@ -95,6 +104,11 @@ class RandomizationConfig:
     heading_noise_deg: float = 3.0
     heading_drift_deg_per_s: float = 0.5
     heading_refresh_ticks: tuple[int, int] = (1, 6)
+    # Shoves: every so often (seconds, drawn from the range) the body gets a sudden
+    # nose-up or nose-down spin of up to push_pitch_rad_s, like a bump or a hand, so the
+    # policy learns to catch itself. (0, 0) = no shoves.
+    push_every_s: tuple[float, float] = (0.0, 0.0)
+    push_pitch_rad_s: float = 0.0
 
 
 @dataclass

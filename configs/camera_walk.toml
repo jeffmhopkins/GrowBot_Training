@@ -23,6 +23,8 @@ action_rate = 0.05      # penalty for jerky leg commands (change since last tick
 effort = 0.01           # small penalty for big leg angles
 stance = 0.5            # CHANGED: bonus for standing taller than at rest
 stance_tol_deg = 6.0    # how close to the taller stance counts (degrees)
+back_lean = 2.0         # CHANGED: penalty for leaning back past the stance + margin
+back_lean_margin_deg = 12.0  # how far past the stance before that penalty starts
 
 [task]
 body = "rollout"            # "rollout" (upstream public build) or "olie" (enclosure build)
@@ -38,6 +40,7 @@ facing = "camera"           # CHANGED: tail first, toward what the camera sees
 stand_lift_deg = 6.0        # CHANGED: about all this body can lift (see README)
 lying_start_prob = 0.3      # CHANGED: 3 in 10 start folded flat and must get up first
 lying_leg_rad = [-0.95, -0.75]  # how far both legs tuck for a folded start (radians)
+back_fall_pitch_deg = 75.0  # CHANGED: past 75 degrees nose-up counts as falling over backwards
 
 [randomization]
 # Every episode gets a slightly different robot, so the policy works on the real one.
@@ -61,6 +64,8 @@ gyro_bias_rad_s = 0.02
 heading_noise_deg = 3.0
 heading_drift_deg_per_s = 0.5
 heading_refresh_ticks = [1, 6]
+push_every_s = [3.0, 8.0]   # CHANGED: a shove every 3-8 s...
+push_pitch_rad_s = 12.0     # CHANGED: ...of up to this much pitch spin, either way
 
 [train]
 total_steps = 30000000

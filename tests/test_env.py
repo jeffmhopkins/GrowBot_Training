@@ -172,3 +172,41 @@ def test_stance_bonus_pays_for_standing_taller() -> None:
     plain = _env()
     plain.reset(seed=0)
     assert "stance" not in plain.step(np.zeros(2))[4]["terms"]  # off by default
+
+
+def test_going_over_backwards_is_a_fall_and_leaning_back_costs() -> None:
+    import mujoco
+
+    cfg = Config()
+    cfg.task.back_fall_pitch_deg = 75.0
+    cfg.reward.back_lean = 2.0
+    env = GrowBotHeadingEnv(cfg)
+    env.reset(seed=0, options={"nominal": True})
+    _, _, fell, _, info = env.step(np.zeros(2))
+    assert not fell and info["terms"]["back_lean"] == 0.0
+    # Tip it to 80 degrees nose-up (nose-up is about -y) and hold it there for a tick.
+    q = np.zeros(4)
+    mujoco.mju_euler2Quat(q, np.array([0.0, -math.radians(80.0), 0.0]), "xyz")
+    env.data.qpos[3:7] = q
+    env.data.qpos[2] = 0.09
+    env.data.qvel[:] = 0.0
+    mujoco.mj_forward(env.model, env.data)
+    _, reward, fell, _, info = env.step(np.zeros(2))
+    assert fell and info["pitch_deg"] > 75.0
+    assert info["terms"]["back_lean"] < -1.0
+
+
+def test_shoves_spin_the_body_only_on_randomised_episodes() -> None:
+    cfg = Config()
+    cfg.randomization.push_every_s = (0.04, 0.04)
+    cfg.randomization.push_pitch_rad_s = 10.0
+    env = GrowBotHeadingEnv(cfg)
+    env.reset(seed=1)
+    spins = []
+    for _ in range(5):
+        env.step(np.zeros(2))
+        spins.append(abs(env.data.qvel[4]))
+    assert max(spins) > 1.0
+    env.reset(seed=1, options={"nominal": True})
+    env.step(np.zeros(2))
+    assert abs(env.data.qvel[4]) < 1.0
