@@ -1,0 +1,132 @@
+from __future__ import annotations
+
+import math
+
+import numpy as np
+import pytest
+
+from growbot_train.config import Config
+from growbot_train.env import CHANNELS, CONTROL_DT, GrowBotHeadingEnv, wrap_deg
+
+NCH = len(CHANNELS)
+
+
+def _env(**task: object) -> GrowBotHeadingEnv:
+    cfg = Config()
+    for k, v in task.items():
+        setattr(cfg.task, k, v)
+    return GrowBotHeadingEnv(cfg)
+
+
+def ch(obs: np.ndarray, name: str, frame: int = 0) -> float:
+    return float(obs[frame * NCH + CHANNELS.index(name)])
+
+
+def test_wrap() -> None:
+    assert wrap_deg(190) == -170
+    assert wrap_deg(-190) == 170
+    assert wrap_deg(0) == 0
+
+
+@pytest.mark.parametrize("body", ["rollout", "olie"])
+def test_standing_still_is_stable_and_reads_gravity(body: str) -> None:
+    env = _env(body=body)
+    obs, _ = env.reset(seed=0, options={"nominal": True, "retarget": False})
+    assert obs.shape == (NCH * env.frames,)
+    acc = np.array([ch(obs, "accel_x"), ch(obs, "accel_y"), ch(obs, "accel_z")])
+    assert abs(np.linalg.norm(acc) - 9.81) < 0.3
+    # Levelled at the stance like the app does: gravity reads straight +z even though
+    # this body rests nose-up.
+    assert abs(acc[0]) < 0.3 and abs(acc[1]) < 0.3
+    for _ in range(125):  # 5 s of zero commands: nothing falls over
+        obs, _, term, _, info = env.step(np.zeros(2))
+        assert not term
+    assert info["speed"] < 0.005
+
+
+def test_frame_layout_matches_the_app_runner() -> None:
+    env = _env()
+    obs, _ = env.reset(
+        seed=1, options={"nominal": True, "retarget": False, "target_error_deg": 36.0}
+    )
+    # First frame: no previous action, clock at phase zero, older frames still zero
+    # (the runner starts its ring with zero frames too).
+    assert ch(obs, "prev_action_0") == 0 and ch(obs, "prev_action_1") == 0
+    assert ch(obs, "cycle:gait_sin") == pytest.approx(0.0)
+    assert ch(obs, "cycle:gait_cos") == pytest.approx(1.0)
+    assert ch(obs, "cmd_yaw") == pytest.approx(36.0 / 180.0, abs=1e-6)
+    assert not np.any(obs[NCH:])
+
+    raw = np.array([0.3, -0.7])
+    obs, *_ = env.step(raw)
+    assert ch(obs, "prev_action_0") == pytest.approx(math.tanh(0.3))
+    assert ch(obs, "prev_action_1") == pytest.approx(math.tanh(-0.7))
+    phase = 2 * math.pi * env.cfg.task.gait_hz * CONTROL_DT
+    assert ch(obs, "cycle:gait_sin") == pytest.approx(math.sin(phase))
+    # The previous newest frame shifted one slot older.
+    assert ch(obs, "cmd_yaw", frame=1) == pytest.approx(36.0 / 180.0, abs=1e-6)
+
+
+@pytest.mark.parametrize("err", [30.0, -30.0, 179.0])
+def test_heading_error_sign(err: float) -> None:
+    env = _env()
+    obs, _ = env.reset(seed=2, options={"nominal": True, "target_error_deg": err})
+    # Positive = target counter-clockwise of the nose = turn left.
+    assert wrap_deg(env.target_deg - env.yaw_deg()) == pytest.approx(err, abs=1e-6)
+    assert ch(obs, "cmd_yaw") * 180 == pytest.approx(err, abs=1e-4)
+
+
+def test_randomisation_stays_in_range_and_restores_nominal() -> None:
+    env = _env()
+    nominal = env.model.body_mass.copy()
+    lo, hi = env.cfg.randomization.mass_scale
+    seen = set()
+    for seed in range(5):
+        env.reset(seed=seed)
+        scale = env.model.body_mass[env._torso] / nominal[env._torso]
+        assert lo - 1e-9 <= scale <= hi + 1e-9
+        seen.add(round(scale, 6))
+    assert len(seen) > 1
+    env.reset(seed=0, options={"nominal": True})
+    np.testing.assert_allclose(env.model.body_mass, nominal)
+
+
+def test_tipping_over_ends_the_episode_with_the_fall_penalty() -> None:
+    env = _env()
+    env.reset(seed=3, options={"nominal": True})
+    env.data.qpos[3:7] = [math.cos(math.pi / 4), math.sin(math.pi / 4), 0, 0]  # 90 deg roll
+    _, reward, term, _, info = env.step(np.zeros(2))
+    assert term and info["fell"]
+    assert info["terms"]["fall"] == -env.cfg.reward.fall
+    assert reward < -env.cfg.reward.fall + 3
+
+
+def test_progress_is_capped_and_overspeed_penalised() -> None:
+    env = _env()
+    env.reset(seed=4, options={"nominal": True, "target_error_deg": 0.0, "retarget": False})
+    cap = env.cfg.reward.speed_cap_m_s
+    t = math.radians(env.target_deg)
+    # Float the robot (no gravity, no contacts) and coast it along the target at three
+    # times the cap, then check the books.
+    import mujoco
+
+    env.model.opt.gravity[:] = 0
+    env.model.opt.disableflags |= mujoco.mjtDisableBit.mjDSBL_CONTACT
+    for _ in range(60):
+        env.data.qvel[:] = 0
+        env.data.qvel[0:2] = [3 * cap * math.cos(t), 3 * cap * math.sin(t)]
+        _, _, _, _, info = env.step(np.zeros(2))
+    assert info["terms"]["progress"] == pytest.approx(env.cfg.reward.progress, rel=1e-6)
+    assert info["terms"]["overspeed"] < -1.0
+
+
+def test_levelling_is_a_pure_tilt() -> None:
+    from growbot_train.env import _rot_onto_z
+
+    for v in ([5.59, 0.0, 8.06], [0.1, -3.0, 9.0], [0.0, 0.0, -9.8]):
+        R = _rot_onto_z(np.array(v))
+        np.testing.assert_allclose(R @ np.array(v), [0, 0, np.linalg.norm(v)], atol=1e-9)
+        np.testing.assert_allclose(R @ R.T, np.eye(3), atol=1e-12)
+    # A nose-up pitch is undone by pitching, so the nose (x) stays in the x-z plane.
+    R = _rot_onto_z(np.array([5.59, 0.0, 8.06]))
+    assert abs((R @ [1.0, 0, 0])[1]) < 1e-12

@@ -1,0 +1,38 @@
+[project]
+name = "growbot-train"
+version = "0.1.0"
+description = "Train a slow, heading-following walk for the two-leg GrowBot and export it for the JBrain2 app"
+requires-python = ">=3.11"
+# Pinned to versions tested together. torch comes from the CPU wheel index (install.sh
+# passes it), so the install doesn't pull gigabytes of CUDA libraries.
+dependencies = [
+    "mujoco==3.3.7",
+    "gymnasium==1.2.2",
+    "stable-baselines3==2.7.0",
+    "torch==2.15.0",
+    "numpy>=1.26,<3",
+    "tensorboard==2.21.0",
+    "imageio[ffmpeg]==2.38.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest==9.2.0", "ruff==0.17.5"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["growbot_train*"]
+
+[tool.setuptools.package-data]
+growbot_train = ["bodies/*.xml", "bodies/LICENSE-upstream", "replay_template.html"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

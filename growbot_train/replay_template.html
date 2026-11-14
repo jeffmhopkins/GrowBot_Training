@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>GrowBot Walk Replay</title>
+<style>
+  :root {
+    --bg: #eef1ec; --panel: rgba(255,255,255,0.92); --ink: #1d2320; --muted: #5d6862;
+    --line: #d5dbd6; --accent: #2f6fdb; --target: #d8433b; --ok: #2e8b57; --warn: #c27c0e;
+    --ground: #cfd9c8; --grid: #a9b8a2;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #141816; --panel: rgba(28,33,30,0.92); --ink: #e7ece8; --muted: #9aa69f;
+      --line: #313a35; --accent: #6f9cf0; --target: #f0645b; --ok: #5cc48a; --warn: #e3a33a;
+      --ground: #26302a; --grid: #3d4a41;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #141816; --panel: rgba(28,33,30,0.92); --ink: #e7ece8; --muted: #9aa69f;
+    --line: #313a35; --accent: #6f9cf0; --target: #f0645b; --ok: #5cc48a; --warn: #e3a33a;
+    --ground: #26302a; --grid: #3d4a41;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+    font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; overflow: hidden; }
+  #view { position: fixed; inset: 0; }
+  .hud { position: fixed; left: 16px; top: 16px; right: 16px; display: flex; gap: 8px;
+    flex-wrap: wrap; pointer-events: none; }
+  .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 6px 10px; min-width: 92px; }
+  .stat b { display: block; font-size: 18px; font-variant-numeric: tabular-nums; }
+  .stat span { color: var(--muted); font-size: 12px; }
+  .stat.over b { color: var(--warn); }
+  .bar { position: fixed; left: 16px; right: 16px; bottom: max(16px, env(safe-area-inset-bottom));
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px;
+    display: grid; gap: 8px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  select, button { font: inherit; color: var(--ink); background: transparent;
+    border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; min-height: 36px; }
+  select { flex: 1 1 200px; min-width: 0; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; min-width: 72px; }
+  button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+  input[type=range] { flex: 1; accent-color: var(--accent); min-width: 0; }
+  .time { font-variant-numeric: tabular-nums; color: var(--muted); min-width: 92px; text-align: right; }
+  .note { color: var(--muted); font-size: 12px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin: 0 4px 0 10px;
+    vertical-align: -1px; }
+  #empty { position: fixed; inset: 0; display: none; place-items: center; padding: 16px; text-align: center; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="view"></div>
+<div class="hud" aria-live="off">
+  <div class="stat"><b id="sErr">0°</b><span>heading error</span></div>
+  <div class="stat" id="tAlong"><b id="sAlong">0.0</b><span>cm/s toward target</span></div>
+  <div class="stat" id="tSpeed"><b id="sSpeed">0.0</b><span id="sCap">cm/s speed</span></div>
+</div>
+<div class="bar">
+  <div class="row">
+    <select id="episode" aria-label="Walk to replay"></select>
+    <button id="play" class="primary">Pause</button>
+    <button id="rate" title="Playback speed">1×</button>
+    <button id="follow" aria-pressed="true">Follow</button>
+  </div>
+  <div class="row">
+    <input id="scrub" type="range" min="0" max="0" value="0" aria-label="Time">
+    <span class="time" id="time">0.0 s</span>
+  </div>
+  <div class="note legend" id="legend"><i style="background:var(--target)"></i>target direction<i style="background:var(--accent)"></i>path · drag to orbit, pinch or scroll to zoom</div>
+</div>
+<div id="empty"><p>No replay data in this page. Make one with<br><code>python -m growbot_train.replay runs/&lt;run&gt;/policy_heading_walk.json</code></p></div>
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+const DATA = /*REPLAY_DATA*/null;
+const $ = (id) => document.getElementById(id);
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+if (!DATA || !DATA.episodes || !DATA.episodes.length) {
+  $("empty").style.display = "grid";
+  document.querySelector(".bar").style.display = "none";
+  document.querySelector(".hud").style.display = "none";
+  throw new Error("no replay data");
+}
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+$("view").appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(40, 1, 0.01, 50);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.maxPolarAngle = Math.PI * 0.49;
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x667766, 1.6));
+const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+sun.position.set(1.5, 3, 1);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -1, right: 1, top: 1, bottom: -1, near: 0.1, far: 8 });
+scene.add(sun, sun.target);
+
+// MuJoCo is z-up; three.js is y-up. Everything from the simulator lives in this group.
+const world = new THREE.Group();
+world.rotation.x = -Math.PI / 2;
+scene.add(world);
+
+const groundMat = new THREE.MeshStandardMaterial({ roughness: 1, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), groundMat);
+ground.receiveShadow = true;
+world.add(ground);
+let grid;
+
+const arrow = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(), 0.18, 0xff0000, 0.04, 0.025);
+world.add(arrow);
+const MAXF = Math.max(...DATA.episodes.map((e) => e.frames.length));
+const trailGeo = new THREE.BufferGeometry();
+trailGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(MAXF * 3), 3));
+const trailMat = new THREE.LineBasicMaterial();
+const trail = new THREE.Line(trailGeo, trailMat);
+world.add(trail);
+
+function applyTheme() {
+  scene.background = new THREE.Color(css("--bg"));
+  groundMat.color.set(css("--ground"));
+  if (grid) world.remove(grid);
+  grid = new THREE.GridHelper(4, 40, css("--grid"), css("--grid"));  // 10 cm squares
+  grid.rotation.x = Math.PI / 2;
+  grid.position.z = 0.001;
+  world.add(grid);
+  arrow.setColor(new THREE.Color(css("--target")));
+  trailMat.color.set(css("--accent"));
+}
+applyTheme();
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
+
+let meshes = [], ep = null, frame = 0, playing = true, rate = 1, follow = true, clock = 0;
+const RATES = [0.5, 1, 2, 4];
+
+function load(i) {
+  ep = DATA.episodes[i];
+  meshes.forEach((m) => world.remove(m));
+  meshes = ep.shapes.map((s) => {
+    const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(s.rgba[0], s.rgba[1], s.rgba[2]), roughness: 0.7 });
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(2 * s.size[0], 2 * s.size[1], 2 * s.size[2]), mat);
+    mesh.castShadow = !s.visual;
+    world.add(mesh);
+    return mesh;
+  });
+  const pos = trailGeo.attributes.position.array;
+  ep.frames.forEach((f, k) => { const p = f[0][0]; pos.set([p[0], p[1], 0.001], k * 3); });
+  trailGeo.attributes.position.needsUpdate = true;
+  $("scrub").max = ep.frames.length - 1;
+  frame = 0; clock = 0;
+  const p = ep.frames[0][0][0];
+  const base = new THREE.Vector3(p[0], p[2], -p[1]);
+  controls.target.copy(base);
+  const far = window.innerWidth < 600 ? 1.6 : 1;  // a narrow screen needs more room around it
+  camera.position.copy(base).add(new THREE.Vector3(0.35 * far, 0.3 * far, 0.45 * far));
+  show();
+}
+
+const v3 = new THREE.Vector3();
+function show() {
+  const f = ep.frames[frame];
+  f[0].forEach((g, k) => {
+    meshes[k].position.set(g[0], g[1], g[2]);
+    meshes[k].quaternion.set(g[4], g[5], g[6], g[3]);
+  });
+  const p = f[0][0];
+  const t = (f[1] * Math.PI) / 180;
+  arrow.position.set(p[0], p[1], p[2] + 0.07);
+  arrow.setDirection(v3.set(Math.cos(t), Math.sin(t), 0));
+  trailGeo.setDrawRange(0, frame + 1);
+  if (follow) {
+    const target = new THREE.Vector3(p[0], p[2], -p[1]);
+    camera.position.add(target.clone().sub(controls.target));
+    controls.target.copy(target);
+  }
+  sun.target.position.set(p[0], p[2], -p[1]);
+  sun.position.set(p[0] + 1.5, 3, -p[1] + 1);
+  $("sErr").textContent = `${Math.round(f[2])}°`;
+  $("sAlong").textContent = f[3].toFixed(1);
+  $("sSpeed").textContent = f[4].toFixed(1);
+  $("tSpeed").classList.toggle("over", f[4] > DATA.speed_cap_cm_s * 1.1);
+  $("scrub").value = frame;
+  const end = frame === ep.frames.length - 1 && ep.fell ? " · fell" : "";
+  $("time").textContent = `${(frame * DATA.dt).toFixed(1)} s${end}`;
+}
+
+DATA.episodes.forEach((e, i) => $("episode").add(new Option(e.title + (e.fell ? " (falls)" : ""), i)));
+$("sCap").textContent = `cm/s speed (cap ${DATA.speed_cap_cm_s})`;
+$("episode").onchange = (e) => load(+e.target.value);
+$("play").onclick = () => {
+  if (!playing && frame >= ep.frames.length - 1) { frame = 0; clock = 0; }
+  playing = !playing;
+  $("play").textContent = playing ? "Pause" : "Play";
+};
+$("rate").onclick = () => { rate = RATES[(RATES.indexOf(rate) + 1) % RATES.length]; $("rate").textContent = `${rate}×`; };
+$("follow").onclick = () => { follow = !follow; $("follow").setAttribute("aria-pressed", String(follow)); };
+$("scrub").oninput = (e) => { frame = +e.target.value; clock = frame * DATA.dt; playing = false; $("play").textContent = "Play"; show(); };
+
+function resize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener("resize", resize);
+resize();
+load(0);
+
+let last = performance.now();
+renderer.setAnimationLoop((now) => {
+  const dt = Math.max(0, Math.min(0.1, (now - last) / 1000));  // rAF time can trail performance.now()
+  last = now;
+  if (playing && ep) {
+    clock += dt * rate;
+    const next = Math.min(ep.frames.length - 1, Math.floor(clock / DATA.dt));
+    if (next !== frame) { frame = next; show(); }
+    if (frame >= ep.frames.length - 1) { playing = false; $("play").textContent = "Play"; }
+  }
+  controls.update();
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>
