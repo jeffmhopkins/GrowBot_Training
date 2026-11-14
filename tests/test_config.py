@@ -65,6 +65,7 @@ def test_camera_walk_differs_only_where_it_says() -> None:
     }
     assert changed == {
         ("reward", "stance"),
+        ("reward", "turn"),
         ("task", "facing"),
         ("task", "stand_lift_deg"),
         ("task", "lying_start_prob"),
@@ -96,8 +97,8 @@ def test_look_differs_from_the_camera_walk_only_where_it_says() -> None:
     assert changed == {
         ("reward", "heading"),
         ("reward", "wobble"),
+        ("reward", "turn"),
         ("task", "retarget_every_s"),
-        ("task", "retarget_max_deg"),
         ("task", "speed"),
         ("train", "total_steps"),
     }

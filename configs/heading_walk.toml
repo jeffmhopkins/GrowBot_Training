@@ -21,6 +21,7 @@ stance_tol_deg = 6.0    # how close to the taller stance counts (degrees)
 back_lean = 0.0         # penalty for leaning back past the stance + margin (off here)
 back_lean_margin_deg = 12.0  # how far past the stance before that penalty starts
 wobble = 0.0            # penalty for rocking (roll and pitch spin, squared; off here)
+turn = 0.0              # pay per degree the heading error shrinks (off here)
 
 [task]
 body = "rollout"            # "rollout" (upstream public build) or "olie" (enclosure build)

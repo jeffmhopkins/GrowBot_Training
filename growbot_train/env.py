@@ -364,6 +364,7 @@ class GrowBotHeadingEnv(gym.Env):
         a = np.tanh(np.clip(np.asarray(action, dtype=np.float64), -ACTION_LIMIT, ACTION_LIMIT))
         self._actuate(a * cfg.task.action_to_rad)
         p0 = d.qpos[0:2].copy()
+        yaw0 = self.yaw_deg()
         for _ in range(self.n_substeps):
             mujoco.mj_step(m, d)
         self.step_index += 1
@@ -419,6 +420,9 @@ class GrowBotHeadingEnv(gym.Env):
             "action_rate": -r.action_rate * float(np.sum((a - self.prev_action) ** 2)),
             "effort": -r.effort * float(np.sum(a**2)),
         }
+        if r.turn:
+            before = abs(wrap_deg(self.target_deg - yaw0))
+            terms["turn"] = r.turn * (before - abs(err_true))
         if r.wobble:
             # Free-joint angular velocity is in the body frame: x is roll, y is pitch.
             terms["wobble"] = -r.wobble * float(d.qvel[3] ** 2 + d.qvel[4] ** 2)

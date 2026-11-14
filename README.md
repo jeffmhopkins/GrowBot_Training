@@ -146,6 +146,7 @@ Every tick the reward is the sum of these terms. All the weights live in
 | effort | `effort = 0.01` | Big leg angles, a little. |
 | back_lean | `back_lean = 0.0` (camera walk: 2.0) | Leaning back more than `back_lean_margin_deg` (12 degrees) past the stance it should hold: weight times (degrees over, divided by 10) squared. |
 | wobble | `wobble = 0.0` (look: 0.05) | Rocking: weight times (roll rate squared plus pitch rate squared), rad/s. A steadier camera. |
+| turn | `turn = 0.0` (camera walk: 0.5, look: 1.0) | Each degree the heading error shrank this tick, against the current target (negative when it grew). It sums to weight times (starting error minus final error), so it can't be farmed, but it gives a clear tick-by-tick signal: turning on the spot moves the heading term too little for training to notice, and the first look run never learned to turn. |
 | stance | `stance = 0.0` (camera walk: 0.5) | Standing `stand_lift_deg` taller than its resting stance: full value on target, fading out a `stance_tol_deg` (6 degrees) or so either side. Off for the first walk. When it's on, `tilt` measures from the taller stance. |
 
 With a speed command (`task.speed = "command"`, the camera walk) or none at all
@@ -261,8 +262,9 @@ launcher ("GrowBot camera walk").
 
 The camera walk at speed 0 already stands still and turns to face the heading. If that
 turns out wobbly, `configs/look.toml` trains a specialist that never walks
-(`task.speed = "still"`, so it has no speed input): the target jumps every 2 to 6
-seconds by up to half a turn, facing it pays three times as much, and rocking costs
+(`task.speed = "still"`, so it has no speed input): the target moves every 5 to 12
+seconds (turning on the spot manages about 8 degrees a second), facing it pays three
+times as much, turning toward it pays double (`reward.turn`), and rocking costs
 (`reward.wobble`). It keeps the camera height input. It's the camera walk otherwise, and
 only the lines marked CHANGED differ from that file. From JBrain it's the "GrowBot look"
 job.

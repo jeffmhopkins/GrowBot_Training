@@ -315,6 +315,38 @@ def test_the_free_drift_is_only_for_an_exact_stop() -> None:
     assert terms[0.3] < -0.05 * cfg.reward.progress
 
 
+def test_turn_pays_for_closing_the_error_but_not_for_a_retarget() -> None:
+    cfg = Config()
+    cfg.reward.turn = 1.0
+    env = GrowBotHeadingEnv(cfg)
+    env.reset(seed=0, options={"nominal": True})
+    env.target_deg = wrap_deg(env.yaw_deg() + 90.0)
+    env.data.qvel[5] = 2.0  # spinning CCW, toward the target
+    _, _, _, _, info = env.step(np.zeros(2))
+    assert info["terms"]["turn"] > 0.5
+    env.data.qvel[5] = -2.0
+    _, _, _, _, info = env.step(np.zeros(2))
+    assert info["terms"]["turn"] < -0.5
+    # A retarget that fires inside the step, between the two yaw readings, pays nothing.
+    env.data.qvel[5] = 0.0
+    cfg.task.retarget_max_deg = 180.0
+    for _ in range(20):
+        old = env.target_deg
+        env._next_retarget = 0.0
+        _, _, _, _, info = env.step(np.zeros(2))
+        if abs(wrap_deg(env.target_deg - old)) > 30.0:
+            break
+    else:
+        pytest.fail("no big retarget drawn")
+    assert abs(info["terms"]["turn"]) < 0.5
+    # Spinning through the back of the target (error crossing +-180) pays nothing big.
+    env.target_deg = wrap_deg(env.yaw_deg() + 179.0)
+    env._next_retarget = 1e9
+    env.data.qvel[5] = -2.0
+    _, _, _, _, info = env.step(np.zeros(2))
+    assert abs(info["terms"]["turn"]) < 3.0
+
+
 def test_old_runs_with_a_retired_setting_still_load(tmp_path) -> None:
     from growbot_train.config import load
 
