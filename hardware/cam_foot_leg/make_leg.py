@@ -77,6 +77,7 @@ ROUND_DROP = 3.5  # how far the outer face falls at the very edge
 WAIST_DEPTH = 1.6
 FULL_BLEND = 8.0  # mm over which the sculpting fades into the full-thickness hub and sole
 GRID = 0.3  # heightfield step, mm
+BLUR = 0.9  # mm, the sculpt's smoothing (_blur)
 LABEL_DEPTH = 0.6
 LABEL_AT = (5.6, -8.0)  # the left leg's, before mirroring
 
@@ -152,10 +153,9 @@ def _smooth(x: np.ndarray) -> np.ndarray:
     return x * x * (3 - 2 * x)
 
 
-def thickness(prof: Polygon, x: np.ndarray, z: np.ndarray, dip: float) -> np.ndarray:
-    """How far the solid reaches from the inner face at each (x, z): THICK at the hub and
-    along the sole, rounded over toward the shaft's edges and its slot, and dished a
-    little mid-shaft, like the waist of a long bone."""
+def _carving(prof: Polygon, x: np.ndarray, z: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """How deep the outer face is carved before blending, and the weight (1 at the hub and
+    along the sole) that blends it back to full thickness."""
     pts = shapely.points(x, z)
     # Signed: negative outside the profile, so the curve carries on smoothly past the edge
     # instead of folding back into a ridge there.
@@ -168,8 +168,30 @@ def thickness(prof: Polygon, x: np.ndarray, z: np.ndarray, dip: float) -> np.nda
     phi = np.arctan2(x, -z)
     to_sole = (np.vectorize(sole_radius)(phi) - SOLE_BAND) - r
     sole = 1.0 - _smooth(to_sole / FULL_BLEND)
-    full = np.maximum(hub, sole)
-    return THICK - (roundover + waist) * (1.0 - full)
+    return roundover + waist, np.maximum(hub, sole)
+
+
+def thickness(prof: Polygon, x: np.ndarray, z: np.ndarray, dip: float) -> np.ndarray:
+    """How far the solid reaches from the inner face at each (x, z): THICK at the hub and
+    along the sole, rounded over toward the shaft's edges and its slot, and dished a
+    little mid-shaft, like the waist of a long bone. The printed face is this, lightly
+    blurred (_heightfield)."""
+    carve, full = _carving(prof, x, z)
+    return THICK - carve * (1.0 - full)
+
+
+def _blur(a: np.ndarray, sigma: float) -> np.ndarray:
+    """Gaussian blur on the grid, edges held. Distances to a polygon kink at its vertices
+    and round the slot's ends, which reads as ripple on a curved face; this irons it out."""
+    k = np.arange(-math.ceil(3 * sigma), math.ceil(3 * sigma) + 1)
+    w = np.exp(-0.5 * (k / sigma) ** 2)
+    w /= w.sum()
+    n = len(k) // 2
+    for axis in (0, 1):
+        pad = [(n, n) if i == axis else (0, 0) for i in range(2)]
+        p = np.pad(a, pad, mode="edge")
+        a = sum(wi * np.take(p, range(i, i + a.shape[axis]), axis=axis) for i, wi in enumerate(w))
+    return a
 
 
 def _heightfield(prof: Polygon, dip: float) -> mf.Manifold:
@@ -181,9 +203,11 @@ def _heightfield(prof: Polygon, dip: float) -> mf.Manifold:
     xs = np.arange(x0 - 1.0, x1 + 1.0 + GRID, GRID)
     zs = np.arange(z0 - 1.0, z1 + 1.0 + GRID, GRID)
     gx, gz = np.meshgrid(xs, zs, indexing="ij")
-    drop = THICK - thickness(prof, gx.ravel(), gz.ravel(), dip).reshape(gx.shape)
-    # Where nothing is carved, clear the face entirely so no surface lands on y = -THICK.
-    top = np.where(drop < 0.05, -THICK - 1.0, -THICK + drop)
+    carve, full = (v.reshape(gx.shape) for v in _carving(prof, gx.ravel(), gz.ravel()))
+    drop = _blur(carve, BLUR / GRID) * (1.0 - full)
+    # Lift the face clear of y = -THICK where nothing is carved, smoothly: a cut-off here
+    # left the grid's staircase as a seam round the hub and along the sole.
+    top = -THICK + drop - 0.5 * np.exp(-drop / 0.05)
     nx, nz = gx.shape
     verts = np.concatenate(
         [
