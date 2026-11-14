@@ -13,6 +13,9 @@ with the target dead ahead, to the side, and behind, and reports per case:
     turn_s   seconds until the error first dropped under 20 degrees
     falls    episodes that ended in a fall
 
+A policy with a speed input also gets a speed-tracking table: what it walks at, target
+dead ahead, for commands of 0, 1/3, 2/3 and all of the cap.
+
 ``--sweep`` repeats it with one body parameter pinned at a time to the edge of its
 training range, the robustness check upstream runs before shipping a policy.
 """
