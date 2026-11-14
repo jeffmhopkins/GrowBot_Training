@@ -709,6 +709,22 @@ class GrowBotHeadingEnv(gym.Env):
             return self._lens_deg(xm, tail)
         return tail if self._camera_first else nose
 
+    def lens_dir(self) -> np.ndarray:
+        """Where the phone's camera points, as a world unit vector: the torso's up axis."""
+        return self.data.xmat[self._torso].reshape(3, 3)[:, 2].copy()
+
+    def want_lens_dir(self) -> np.ndarray:
+        """Where the commands ask the camera to point: the facing end on the target, the
+        body pitched to the stance (the camera height input's, when the job has one). The
+        lens leans toward the tail as the nose lifts, so a nose-first body's lens looks
+        away from its target."""
+        u = self._stance_up
+        lift = math.atan2(u[0], u[2])
+        back = self.target_deg if self._camera_first else self.target_deg + 180.0
+        b = math.radians(back)
+        flat = math.sin(lift)
+        return np.array([flat * math.cos(b), flat * math.sin(b), math.cos(lift)])
+
     def _target_k(self) -> float:
         return min(1.0, self.dr_scale if self.target_scale is None else self.target_scale)
 

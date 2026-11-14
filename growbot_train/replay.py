@@ -5,7 +5,8 @@
 
 The page needs no simulator, graphics drivers or install: the walks are simulated here,
 and the page only plays back where each part of the robot was, tick by tick, with the
-target arrow, the path, and the heading error and speed. ``view.py`` is the live,
+command arrows (heading and camera height, speed), the camera's actual aim and velocity
+beside them, the path, and the heading error and speed. ``view.py`` is the live,
 steerable alternative when there is a screen attached to the machine.
 """
 
@@ -76,6 +77,9 @@ def record(
     ]
     q = np.zeros(4)
 
+    def vec(v: np.ndarray, k: float = 1.0) -> list[float]:
+        return [round(float(x) * k, 3) for x in v]
+
     def snapshot(info: dict[str, Any] | None) -> list[Any]:
         parts = []
         for g in ids:
@@ -87,6 +91,14 @@ def record(
             round(info["abs_err_deg"], 1) if info else round(env.scored_err_deg(), 1),
             round(info["v_along"] * 100, 2) if info else 0.0,
             round(info["speed"] * 100, 2) if info else 0.0,
+            # The inputs, and what the robot did with them: the speed command (signed;
+            # below 0 backs away), the camera height command, where the commands ask the
+            # camera to point and where it points, and the averaged velocity in cm/s.
+            round(env.speed_cmd, 3),
+            round(env.tilt_cmd, 3),
+            vec(env.want_lens_dir()),
+            vec(env.lens_dir()),
+            vec(env.vel_avg, 100),
         ]
 
     frames = [snapshot(None)]
@@ -126,6 +138,12 @@ def build(
         "body": env.cfg.task.body,
         "dt": CONTROL_DT,
         "speed_cap_cm_s": round(env.cfg.reward.speed_cap_m_s * 100, 2),
+        # Which inputs the policy takes, so the page draws only those.
+        "inputs": {
+            "speed": env.cfg.task.speed == "command",
+            "camera_height": bool(env.cfg.task.tilt_command),
+            "camera_first": env.cfg.task.facing == "camera",
+        },
         "episodes": episodes,
     }
 
