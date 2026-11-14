@@ -270,6 +270,12 @@ class GrowBotHeadingEnv(gym.Env):
     def _u(self, lo_hi: tuple[float, float]) -> float:
         return float(self.np_random.uniform(lo_hi[0], lo_hi[1]))
 
+    def _u_if(self, lo_hi: tuple[float, float]) -> float:
+        """A draw only where the range has width, so a run saved before a draw existed
+        (its range backfilled to one value) keeps its random stream: same seed, same
+        episodes."""
+        return float(lo_hi[0]) if lo_hi[0] == lo_hi[1] else self._u(lo_hi)
+
     def _apply_body(self, params: dict[str, Any]) -> None:
         m, nom = self.model, self._nominal
         for k, v in nom.items():
@@ -290,9 +296,11 @@ class GrowBotHeadingEnv(gym.Env):
             for g in every:
                 m.geom_size[g, 2] = half
                 m.geom_pos[g, 2] = -half
-                # The split mode's tail-side and nose-side halves narrow with the foot.
+                # The split mode's tail-side and nose-side halves narrow with the foot,
+                # about its middle, so the foot stays under its mass.
+                mid = nom["geom_pos"][geom, 0]
                 m.geom_size[g, 0] = nom["geom_size"][g, 0] * fw
-                m.geom_pos[g, 0] = nom["geom_pos"][g, 0] * fw
+                m.geom_pos[g, 0] = mid + (nom["geom_pos"][g, 0] - mid) * fw
                 gx, gy = m.geom_size[g, 0], nom["geom_size"][g, 1]
                 m.geom_rbound[g] = math.sqrt(gx * gx + gy * gy + half * half)
             m.body_mass[leg] = mass
@@ -329,8 +337,8 @@ class GrowBotHeadingEnv(gym.Env):
                 "com": np.array([self._u(r.com_x_m), self._u(r.com_y_m), self._u(r.com_z_m)]),
                 "leg_scale": [shared * self._u(r.leg_asymmetry) for _ in range(2)],
                 "gain": self._u(r.servo_gain_scale),
-                "torque_scale": self._u(r.servo_torque_scale),
-                "foot_width": self._u(r.foot_width_scale),
+                "torque_scale": self._u_if(r.servo_torque_scale),
+                "foot_width": self._u_if(r.foot_width_scale),
                 # One value for every geom: MuJoCo takes the larger of two touching
                 # geoms' friction, so per-geom draws would skew the floor grippy.
                 "friction": np.full(ng, self._u(r.friction)),
@@ -339,8 +347,12 @@ class GrowBotHeadingEnv(gym.Env):
                 slew=rng.uniform(*r.servo_slew_rad_s, 2),
                 lag=rng.uniform(*r.servo_lag_s, 2),
                 delay_s=self._u(r.relay_delay_s),
-                sensor_delay_s=self._u(r.sensor_delay_s),
-                trim=rng.uniform(-r.trim_err_rad, r.trim_err_rad, 2),
+                sensor_delay_s=self._u_if(r.sensor_delay_s),
+                trim=(
+                    rng.uniform(-r.trim_err_rad, r.trim_err_rad, 2)
+                    if r.trim_err_rad
+                    else np.zeros(2)
+                ),
                 imu_rot=_rot(rng.uniform(-r.imu_tilt_rad, r.imu_tilt_rad, 3)),
                 gyro_bias=rng.uniform(-r.gyro_bias_rad_s, r.gyro_bias_rad_s, 3),
                 heading_drift_deg_s=self._u(
@@ -422,7 +434,9 @@ class GrowBotHeadingEnv(gym.Env):
         leg_top = m.body_pos[self._legs[0], 2]
         self._place(d, 2 * max(self._leg_half) - leg_top + 0.003, q)
         d.qpos[7:9] = self.np_random.uniform(-0.05, 0.05, 2)
-        d.ctrl[:] = 0.0
+        # The legs hold where a mis-trimmed robot's do, so the stance it settles into, and
+        # levels on, is its own.
+        d.ctrl[:] = np.clip(self.ep.trim, -CTRL_LIMIT, CTRL_LIMIT)
         for _ in range(round(self._settle_s() / m.opt.timestep)):  # settle onto the feet
             mujoco.mj_step(m, d)
         d.time = 0.0
@@ -449,7 +463,7 @@ class GrowBotHeadingEnv(gym.Env):
         legs = np.zeros(2)
         if lying:
             legs[:] = self._u(self.cfg.task.lying_leg_rad)
-            d.ctrl[:] = legs
+            d.ctrl[:] = np.clip(legs + self.ep.trim, -CTRL_LIMIT, CTRL_LIMIT)
             for _ in range(round(0.6 / m.opt.timestep)):
                 mujoco.mj_step(m, d)
             d.time = 0.0

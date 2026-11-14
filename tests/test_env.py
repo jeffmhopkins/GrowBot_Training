@@ -479,3 +479,33 @@ def test_a_run_saved_before_the_new_draws_keeps_its_old_randomisation(tmp_path) 
     old = config_mod.load(tmp_path / "config.json").randomization
     assert old.servo_torque_scale == (1.0, 1.0) and old.trim_err_rad == 0.0
     assert old.sensor_delay_s == (0.0, 0.0) and old.foot_width_scale == (1.0, 1.0)
+
+
+def test_a_run_saved_before_the_new_draws_replays_the_same_episodes() -> None:
+    from growbot_train import config as config_mod
+
+    data = Config().to_dict()
+    for k in ("servo_torque_scale", "trim_err_rad", "sensor_delay_s", "foot_width_scale"):
+        del data["randomization"][k]
+    data["randomization"].update(
+        friction=[0.6, 1.4], relay_delay_s=[0.02, 0.09], floor_friction_scale=[0.7, 1.3]
+    )
+    env = GrowBotHeadingEnv(config_mod.from_dict(data, saved=True))
+    env.reset(seed=1000)
+    # What the code before these draws gave this seed (b5a17c6).
+    assert env.ep.delay_s == pytest.approx(0.08887969073245204, abs=1e-12)
+    assert env.ep.imu_rot[0, 1] == pytest.approx(0.08692864920849568, abs=1e-12)
+
+
+def test_a_mis_trimmed_robot_settles_and_levels_on_its_trimmed_legs() -> None:
+    env = GrowBotHeadingEnv(Config())
+    trim = np.array([0.08, -0.08])
+    env.reset(seed=0, options={"nominal": True})
+    straight = env.data.qpos[7:9].copy()
+    env.reset(seed=0, options={"nominal": True, "overrides": {"trim": trim}})
+    # The legs bear the body, so they don't reach the trim, but they lean its way.
+    assert np.all(np.sign(env.data.qpos[7:9] - straight) == np.sign(trim))
+    gyro0 = env._imu_raw()[1]
+    env.step(np.zeros(2))
+    # No kick on the first step: it was already standing on the trimmed legs.
+    assert np.abs(env._imu_raw()[1]).max() < max(0.05, 2 * np.abs(gyro0).max())
