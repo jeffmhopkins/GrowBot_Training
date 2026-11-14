@@ -53,12 +53,13 @@ The teachers don't line up yet, and the distillation has to bridge these gaps:
     unlearned it when asked for others;
   - the camera walk's cap is 1 cm/s.
   
-  So forward speeds between 0 and full have no teacher yet. The follower can treat
-  forward as stop-or-go until one does, and the master's cap per direction has to be
-  set.
+  So forward speeds between 0 and full have no teacher yet. The roadmap trains them
+  (phase 1); until then the follower treats forward as stop-or-go. The master's cap
+  per direction has to be set.
 - **Camera height:** -1 is 20 degrees under rest in look and 30 in the camera walk.
   Lift and fall stands about 18 degrees taller than rest whatever `cmd_pitch` says, so
-  `cmd_pitch` only steers the camera at speed 0 and when backing.
+  `cmd_pitch` only steers the camera at speed 0 and when backing, until the tall walk
+  learns a camera-height input (roadmap phase 1).
 - **Clock:** each teacher's gait clock ticks at its own rate (look 1 Hz, camera walk
   2 Hz, lift and fall 2.347 Hz). The student needs the clock per mode, or its own clock
   with the teachers' phases mapped onto it.

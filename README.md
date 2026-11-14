@@ -8,6 +8,8 @@ the app can work it out from the phone's gyro (plus the compass when it's steady
 a fixed direction, or from where a face or object sits in the camera frame to walk toward
 it.
 
+Where this is heading, phase by phase: [docs/ROADMAP.md](docs/ROADMAP.md).
+
 Everything here runs on a normal Linux machine with plain MuJoCo and Stable-Baselines3
 PPO on the CPU, one simulator per core. A finished run comes out as one JSON file in
 the format the JBrain2 app's policy runner loads.
@@ -524,6 +526,7 @@ doing only if the CPU runs prove too slow.
 | `growbot_train/view.py` | Live MuJoCo viewer with a steerable target, or an mp4 |
 | `growbot_train/policy.py` | Runs an exported JSON with the app runner's arithmetic |
 | `growbot_train/live.py` | The run's `live/` folder: progress, latest replay and policy |
+| `docs/ROADMAP.md` | The order of work, phase by phase, with what ends each phase |
 | `docs/follow_me.md` | The plan: one master policy following a person, with voice commands, and its final simulator test |
 | `jobs.toml` | The jobs JBrain's Launcher offers (see [Adding a job](#adding-a-job)) |
 | `install.sh`, `run.sh` | Set up; train, export, evaluate, replay and pack in one go |
