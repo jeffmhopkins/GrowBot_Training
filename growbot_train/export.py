@@ -26,7 +26,7 @@ import torch
 from stable_baselines3 import PPO
 
 from growbot_train import config as config_mod
-from growbot_train.env import CONTROL_DT, channels_for
+from growbot_train.env import CONTROL_DT, LENS_BLEND, channels_for
 from growbot_train.policy import runner_forward
 
 FORMAT = "growbot-policy"
@@ -108,6 +108,14 @@ def build_policy(model: PPO, norm: Any, cfg: config_mod.Config, name: str) -> di
                 # Which end walks first and counts as "ahead" for the error: "nose", or
                 # "camera" (the tail end, where the phone's rear camera looks).
                 "facing": cfg.task.facing,
+                # "body": from that end's direction. "lens": from where the phone's rear
+                # camera points (the torso's up axis, projected flat; it fades into the
+                # tail end as it nears straight up or tips sideways) — what a face's
+                # left-right position in the camera image gives directly.
+                "heading_from": cfg.task.heading_from,
+                # With "lens": the lens's share is clamp(c / lens_fade, 0, 1), c being how
+                # far its flat axis reaches out over the tail end; the app must fade alike.
+                "lens_fade": LENS_BLEND,
             },
         },
         "training": {
