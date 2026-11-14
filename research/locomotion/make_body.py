@@ -82,8 +82,9 @@ def _box(name: str, x0: float, x1: float, z0: float, z1: float, hy: float) -> st
 
 
 def _cut(name: str, sign: float, end: tuple[float, float, float], hy: float) -> str:
-    """A thin box lying on the cut face, reaching inward (into the tray), so its outer
-    face is the cut and nothing pokes out of the outline."""
+    """A box lying on the cut face, reaching inward (into the tray), so its outer face is
+    the cut and nothing pokes out of the outline. Deep enough to fill the wedge between
+    the cut, the core's end and the wall above, so the model has no hollow."""
     bottom, top, height = end
     z_bot = -HALF[2]
     a = np.array([sign * bottom, z_bot])
@@ -93,7 +94,7 @@ def _cut(name: str, sign: float, end: tuple[float, float, float], hy: float) -> 
     inward = np.array([-along[1], along[0]])
     if inward @ -((a + b) / 2) < 0:  # point it toward the middle of the body
         inward = -inward
-    thick = 0.002
+    thick = 0.0042
     c = (a + b) / 2 + inward * thick
     # The box's x axis runs along the cut: rotate about y by the cut's angle.
     ang = -math.atan2(along[1], along[0])
