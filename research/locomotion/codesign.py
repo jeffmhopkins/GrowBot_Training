@@ -11,6 +11,8 @@ Foot variables (each squashed into its range):
     dip      how much of the sole is dipped: +0.3 dips the nose-side 30% of the arc,
              -0.3 the tail-side 30%, 0 none, +-1 all of it
 
+--ranges vault widens them for a rocker foot that vaults the body (see RANGES).
+
 Writes results/codesign.json (same shape as search.py's, plus the foot it chose).
 """
 
@@ -35,15 +37,26 @@ def _sig(v: float) -> float:
     return 1 / (1 + math.exp(-v))
 
 
+# Each foot variable's printable range. "vault" (Jeff, 2026-11-14): big rocker soles
+# that only grow toward the tail and longer legs, so a hard push can lift the whole body
+# onto its feet and rock it over them tail first before setting it down again.
+RANGES = {
+    "normal": {"arc": (8.0, 25.0), "cam": (-0.04, 0.04), "extra": (-0.01, 0.015)},
+    "vault": {"arc": (15.0, 45.0), "cam": (-0.08, 0.0), "extra": (0.0, 0.03), "rest": -1.0},
+}
+R: dict = dict(RANGES["normal"])
+
+
 def foot(y: np.ndarray) -> dict:
-    arc = 8 + 17 * _sig(y[0])
+    (a0, a1), (c0, c1), (e0, e1) = R["arc"], R["cam"], R["extra"]
+    arc = a0 + (a1 - a0) * _sig(y[0])
     dip = math.tanh(y[3])
     # The split sits where the dipped share of the arc begins (nose side for dip > 0).
     split = arc - 2 * arc * dip if dip >= 0 else -arc + 2 * arc * -dip
     return {
         "arc_deg": arc,
-        "cam_m_per_rad": 0.04 * math.tanh(y[1]),
-        "leg_extra_m": -0.01 + 0.025 * _sig(y[2]),
+        "cam_m_per_rad": (c0 + c1) / 2 + (c1 - c0) / 2 * math.tanh(y[1]),
+        "leg_extra_m": e0 + (e1 - e0) * _sig(y[2]),
         "dip": dip,
         "split_deg": split,
     }
@@ -62,6 +75,7 @@ def scenario(y: np.ndarray) -> Scenario:
         "codesign", surf, "Cam foot and gait tuned together", foot="cam",
         foot_deg=f["arc_deg"], leg_extra_m=f["leg_extra_m"],
         cam_m_per_rad=f["cam_m_per_rad"], split_deg=f["split_deg"],
+        rest_leg_rad=R.get("rest", 0.0),
     )  # fmt: skip
 
 
@@ -72,11 +86,12 @@ def foot_raw(arc: float, cam: float, extra: float, dip: float) -> np.ndarray:
         p = min(max(p, 1e-3), 1 - 1e-3)
         return math.log(p / (1 - p))
 
+    (a0, a1), (c0, c1), (e0, e1) = R["arc"], R["cam"], R["extra"]
     return np.array(
         [
-            logit((arc - 8) / 17),
-            math.atanh(max(-0.999, min(0.999, cam / 0.04))),
-            logit((extra + 0.01) / 0.025),
+            logit((arc - a0) / (a1 - a0)),
+            math.atanh(max(-0.999, min(0.999, (cam - (c0 + c1) / 2) / ((c1 - c0) / 2)))),
+            logit((extra - e0) / (e1 - e0)),
             math.atanh(max(-0.99, min(0.99, dip))),
         ]
     )
@@ -136,7 +151,9 @@ def main() -> None:
     p.add_argument("--com-x", type=float, default=0.02)
     p.add_argument("--body", default=DEFAULT_BODY)
     p.add_argument("--tag", default="")
+    p.add_argument("--ranges", choices=sorted(RANGES), default="normal")
     args = p.parse_args()
+    R.update(RANGES[args.ranges])  # before the pools fork, so the workers see it too
     t0 = time.time()
     nominal = [Domain(floor="hard"), Domain(floor="carpet")]
     train = nominal + domains(args.train_domains, seed=1, com_x=args.com_x)
@@ -168,6 +185,7 @@ def main() -> None:
             "split_deg": scen.split_deg,
         },  # fmt: skip
         "foot": foot(best_x[NG:]),
+        "ranges": args.ranges,
         "body": args.body,
         "torque_nm": args.torque,
         "com_x_m": args.com_x,
@@ -190,7 +208,8 @@ def main() -> None:
         f"[codesign] nominal hard {nom[0]['v_fwd'] * 100:.2f} / carpet "
         f"{nom[1]['v_fwd'] * 100:.2f}; held-out hard {t['hard']['mean_cm_s']:.2f} "
         f"(p10 {t['hard']['p10_cm_s']:.2f}), carpet {t['carpet']['mean_cm_s']:.2f} "
-        f"(p10 {t['carpet']['p10_cm_s']:.2f}), falls {t['all']['falls']}/{t['all']['n']}; "
+        f"(p10 {t['carpet']['p10_cm_s']:.2f}), falls {t['all']['falls']}/{t['all']['n']}, "
+        f"body off the floor {t['all']['lifted']:.0%} of the time; "
         f"foot {out['foot']}",
         flush=True,
     )

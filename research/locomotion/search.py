@@ -164,7 +164,40 @@ FEET: list[Scenario] = [
              "Inner edge of each foot chamfered 5 deg and dipped, sole bare",
              foot="edge_in", foot_deg=5),
 ]  # fmt: skip
-SCENARIOS += STOCK + FEET
+# Jeff (2026-11-14): rocker feet that grow a long way toward the tail on longer legs. A
+# hard backward push should lift the whole body onto its feet and rock it over them tail
+# first, the long tail-side sole keeping it from going over, then set it down further on:
+# a hop. Which part to dip is open, so each is tried.
+VAULT: list[Scenario] = [
+    Scenario("v1", {**F, "toe_tail": "pla", "toe_nose": "rubber"},
+             "Rocker foot (+-30 deg, 50 mm/rad toward the tail), legs +15 mm, nose side dipped",
+             foot="cam", foot_deg=30, cam_m_per_rad=-0.05, leg_extra_m=0.015, rest_leg_rad=-1.0),
+    Scenario("v2", {**F, "toe_tail": "rubber", "toe_nose": "pla"},
+             "Rocker foot (+-30 deg, 50 mm/rad toward the tail), legs +15 mm, tail side dipped",
+             foot="cam", foot_deg=30, cam_m_per_rad=-0.05, leg_extra_m=0.015, rest_leg_rad=-1.0),
+    Scenario("v3", {**F, "toe_tail": "rubber", "toe_nose": "rubber"},
+             "Rocker foot (+-30 deg, 50 mm/rad toward the tail), legs +15 mm, all dipped",
+             foot="cam", foot_deg=30, cam_m_per_rad=-0.05, leg_extra_m=0.015, rest_leg_rad=-1.0),
+    Scenario("v4", {**F, "toe_tail": "pla", "toe_nose": "rubber"},
+             "Big rocker foot (+-40 deg, 70 mm/rad toward the tail), legs +25 mm, nose side dipped",
+             foot="cam", foot_deg=40, cam_m_per_rad=-0.07, leg_extra_m=0.025, rest_leg_rad=-1.0),
+]  # fmt: skip
+# A clip Jeff found (2026-11-14) of someone else's GrowBot hopping camera-first: stood
+# nearly upright on its tail, legs swung back as props, kicking alternately so it rocks
+# side to side. Set down with the legs at +0.6 rad this body levers itself up to ~58
+# degrees, its tallest stance; the gait must keep it above 50.
+WADDLE: list[Scenario] = [
+    Scenario("w1", {**F, "toe_tail": "pla", "toe_nose": "pla"},
+             "Tall waddle: stood up on its tail, stock bare feet", min_pitch_deg=50,
+             rest_leg_rad=0.6),
+    Scenario("w2", {**F, "toe_tail": "rubber", "toe_nose": "rubber"},
+             "Tall waddle: stood up on its tail, dipped feet", min_pitch_deg=50,
+             rest_leg_rad=0.6),
+    Scenario("w3", {**F, "toe_tail": "rubber", "toe_nose": "rubber"},
+             "Tall waddle, dipped feet, no height floor (just stood up to start)",
+             rest_leg_rad=0.6),
+]  # fmt: skip
+SCENARIOS += STOCK + FEET + VAULT + WADDLE
 BY_NAME = {s.name: s for s in SCENARIOS}
 
 # Filled in each worker by _init so every candidate reuses compiled models.
@@ -277,6 +310,7 @@ def _stats(rs: list[dict]) -> dict:
         "n": len(rs),
         "side_cm_s": float(np.mean([abs(r["v_side"]) for r in rs]) * 100),
         "yaw_deg_s": float(np.mean([abs(r["yaw_deg_s"]) for r in rs])),
+        "lifted": float(np.mean([r.get("lifted", 0.0) for r in rs])),
     }
 
 
@@ -359,13 +393,24 @@ def main() -> None:
     p.add_argument("--com-x", type=float, default=0.03, help="fore-aft CoM spread, m")
     p.add_argument("--stock", action="store_true", help="only the stock + dip scenarios")
     p.add_argument("--feet", action="store_true", help="only the reprinted-foot scenarios")
+    p.add_argument("--vault", action="store_true", help="only the rocker-foot vault scenarios")
+    p.add_argument("--waddle", action="store_true", help="only the tall waddle scenarios")
     p.add_argument("--quick", action="store_true")
     args = p.parse_args()
     if args.quick:
         args.train_domains, args.test_domains, args.random = 2, 8, 8
         args.restarts, args.pop, args.gens = 1, 8, 3
     OUT.mkdir(exist_ok=True)
-    group = STOCK if args.stock else FEET if args.feet else SCENARIOS
+    group = SCENARIOS
+    for flag, scens in (
+        (args.stock, STOCK),
+        (args.feet, FEET),
+        (args.vault, VAULT),
+        (args.waddle, WADDLE),
+    ):
+        if flag:
+            group = scens
+            break
     for scen in group:
         if args.only and scen.name not in args.only:
             continue
