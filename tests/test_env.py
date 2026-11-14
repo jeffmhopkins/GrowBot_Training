@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 
+import mujoco
 import numpy as np
 import pytest
 
@@ -509,3 +510,34 @@ def test_a_mis_trimmed_robot_settles_and_levels_on_its_trimmed_legs() -> None:
     env.step(np.zeros(2))
     # No kick on the first step: it was already standing on the trimmed legs.
     assert np.abs(env._imu_raw()[1]).max() < max(0.05, 2 * np.abs(gyro0).max())
+
+
+def test_the_lens_heading_follows_a_roll_the_body_heading_ignores() -> None:
+    cfg = Config()
+    cfg.task.facing = "camera"
+    body = GrowBotHeadingEnv(cfg)
+    cfg_lens = Config()
+    cfg_lens.task.facing = "camera"
+    cfg_lens.task.heading_from = "lens"
+    lens = GrowBotHeadingEnv(cfg_lens)
+    for env in (body, lens):
+        env.reset(seed=0, options={"nominal": True})
+    # At rest the lens looks out over the tail end.
+    assert abs(wrap_deg(lens.yaw_deg() - body.yaw_deg())) < 2.0
+    turned = {}
+    for name, env in (("body", body), ("lens", lens)):
+        before = env.yaw_deg()
+        q = env.data.qpos[3:7].copy()
+        roll = np.array([math.cos(0.15), math.sin(0.15), 0.0, 0.0])  # 17 degrees, body x
+        mujoco.mju_mulQuat(env.data.qpos[3:7], q, roll)
+        mujoco.mj_forward(env.model, env.data)
+        turned[name] = abs(wrap_deg(env.yaw_deg() - before))
+    assert turned["body"] < 1.0, turned
+    assert turned["lens"] > 10.0, turned
+
+
+def test_heading_from_must_be_body_or_lens() -> None:
+    cfg = Config()
+    cfg.task.heading_from = "nose"
+    with pytest.raises(ValueError):
+        GrowBotHeadingEnv(cfg)

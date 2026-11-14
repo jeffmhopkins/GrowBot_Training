@@ -163,6 +163,11 @@ class GrowBotHeadingEnv(gym.Env):
         if cfg.task.facing not in ("nose", "camera"):
             raise ValueError(f'task.facing must be "nose" or "camera", not {cfg.task.facing!r}')
         self._camera_first = cfg.task.facing == "camera"
+        if cfg.task.heading_from not in ("body", "lens"):
+            raise ValueError(
+                f'task.heading_from must be "body" or "lens", not {cfg.task.heading_from!r}'
+            )
+        self._lens = self._camera_first and cfg.task.heading_from == "lens"
         if cfg.task.speed not in SPEED_MODES:
             raise ValueError(f"task.speed must be one of {SPEED_MODES}, not {cfg.task.speed!r}")
         self.channels = channels_for(cfg)
@@ -671,7 +676,12 @@ class GrowBotHeadingEnv(gym.Env):
         """The heading of the end that walks first (task.facing), degrees CCW from +x."""
         xm = self.data.xmat[self._torso]
         nose = math.degrees(math.atan2(xm[3], xm[0]))
-        return wrap_deg(nose + 180.0) if self._camera_first else nose
+        tail = wrap_deg(nose + 180.0)
+        # The lens looks along the torso's up axis. Within about 10 degrees of straight up
+        # its compass direction is noise, so the tail end stands in for it there.
+        if self._lens and math.hypot(xm[2], xm[5]) > 0.17:
+            return math.degrees(math.atan2(xm[5], xm[2]))
+        return tail if self._camera_first else nose
 
     def _observe_heading(self, force: bool = False) -> None:
         if not force and self.step_index % self.ep.heading_refresh:
