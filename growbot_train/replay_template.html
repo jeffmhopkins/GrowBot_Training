@@ -200,6 +200,7 @@ function show() {
 
 DATA.episodes.forEach((e, i) => $("episode").add(new Option(e.title + (e.fell ? " (falls)" : ""), i)));
 $("sCap").textContent = `cm/s speed (cap ${DATA.speed_cap_cm_s})`;
+if (DATA.note) $("legend").prepend(`${DATA.note} · `);
 $("episode").onchange = (e) => load(+e.target.value);
 $("play").onclick = () => {
   if (!playing && frame >= ep.frames.length - 1) { frame = 0; clock = 0; }

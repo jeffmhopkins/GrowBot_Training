@@ -237,6 +237,20 @@ runs `./install.sh` and the tests, trains with `./run.sh`, and hands back the ru
 `.tar.gz` (policy, replay page, checkpoints, evaluation, TensorBoard logs) as the job's
 download. Its results page shows the export check and the evaluation summary.
 
+### Watching while it trains
+
+Every run keeps a `live/` folder up to date, and the Launcher shows it on the job's page
+(and a debug token can read it):
+
+| File | What | Updated |
+| --- | --- | --- |
+| `progress.json` | percent done, time left, speed toward the target, heading error, falls | after every batch of experience (a few seconds) |
+| `replay.html` | 3D replay of the latest checkpoint: three short walks | at every checkpoint (every 2 million steps) |
+| `policy_latest.json` | that checkpoint as an app policy | at every checkpoint |
+
+When the run finishes, `replay.html` becomes the full six-walk replay of the final
+policy, `policy_final.json` and `eval.txt` appear, and `progress.json` says it's done.
+
 ## Optional: JAX on the Radeon iGPU
 
 Upstream trains with MJX (MuJoCo on JAX) and Brax PPO on a GPU, which can run thousands
@@ -265,6 +279,7 @@ doing only if the CPU runs prove too slow.
 | `growbot_train/replay.py` | Writes the browser 3D replay page (`replay_template.html`) |
 | `growbot_train/view.py` | Live MuJoCo viewer with a steerable target, or an mp4 |
 | `growbot_train/policy.py` | Runs an exported JSON with the app runner's arithmetic |
+| `growbot_train/live.py` | The run's `live/` folder: progress, latest replay and policy |
 | `install.sh`, `run.sh` | Set up; train, export, evaluate, replay and pack in one go |
 | `scripts/keep_policy.sh` | Copy a result into `policies/` |
 | `scripts/try_jax_rocm.sh` | Optional: does JAX see the GPU? |

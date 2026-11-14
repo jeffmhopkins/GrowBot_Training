@@ -29,6 +29,7 @@ from stable_baselines3.common.vec_env import (
 
 from growbot_train import config as config_mod
 from growbot_train.env import GrowBotHeadingEnv
+from growbot_train.live import Live
 
 # The app's runner does not clip, so the normaliser must not either: a wide bound keeps
 # training and the phone computing the same numbers.
@@ -54,8 +55,9 @@ class Diagnostics(BaseCallback):
     """Logs what the walk is actually doing (speed along the target, heading error,
     falls, each reward term) so a reward change can be judged by more than one number."""
 
-    def __init__(self) -> None:
+    def __init__(self, live: Live | None = None) -> None:
         super().__init__()
+        self.live = live
         self.sums: dict[str, float] = defaultdict(float)
         self.n = 0
         self.falls = 0
@@ -81,16 +83,27 @@ class Diagnostics(BaseCallback):
         self.logger.record(
             "time/steps_per_second", self.num_timesteps / max(1e-6, time.time() - self.t0)
         )
+        if self.live is not None:
+            self.live.update(
+                self.num_timesteps,
+                {
+                    "v_along": self.sums["v_along"] / self.n,
+                    "speed": self.sums["speed"] / self.n,
+                    "abs_err_deg": self.sums["abs_err_deg"] / self.n,
+                    "falls_per_1k_steps": 1000 * self.falls / self.n,
+                },
+            )
         self.sums.clear()
         self.n = 0
         self.falls = 0
 
 
 class Checkpoint(BaseCallback):
-    def __init__(self, every: int, folder: Path) -> None:
+    def __init__(self, every: int, folder: Path, live: Live | None = None) -> None:
         super().__init__()
         self.every = every
         self.folder = folder
+        self.live = live
         self.next = every
 
     def _init_callback(self) -> None:
@@ -105,6 +118,8 @@ class Checkpoint(BaseCallback):
             vec = self.model.get_vec_normalize_env()
             if vec is not None:
                 vec.save(str(self.folder / f"vecnormalize_{self.num_timesteps}.pkl"))
+            if self.live is not None:
+                self.live.snapshot(self.model, self.num_timesteps)
         return True
 
 
@@ -180,8 +195,10 @@ def main(argv: list[str] | None = None) -> int:
         )
         reset = True
 
+    # The live folder (progress, latest replay and policy) is what a phone watches.
+    live = Live(out, cfg, t.total_steps, start_steps=0 if reset else model.num_timesteps)
     callbacks = CallbackList(
-        [Diagnostics(), Checkpoint(t.checkpoint_every_steps, out / "checkpoints")]
+        [Diagnostics(live), Checkpoint(t.checkpoint_every_steps, out / "checkpoints", live)]
     )
     model.learn(
         total_timesteps=t.total_steps,

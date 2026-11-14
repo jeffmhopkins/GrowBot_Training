@@ -17,5 +17,6 @@ PY=.venv/bin/python
   | tee "$RUN/eval.txt"
 # A 3D replay page that opens in any browser, phone included (needs no graphics drivers).
 "$PY" -m growbot_train.replay "$RUN"/policy_*.json --out "$RUN/replay.html"
+"$PY" -m growbot_train.live finish "$RUN"
 tar czf "runs/$NAME.tar.gz" -C runs "$NAME"
 echo "== packed runs/$NAME.tar.gz =="

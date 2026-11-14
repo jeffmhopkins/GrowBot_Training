@@ -99,15 +99,24 @@ def record(
     return {"shapes": shapes, "frames": frames, "fell": fell}
 
 
-def build(policy_path: Path, seconds: float, seed: int, body: str | None) -> dict[str, Any]:
+def build(
+    policy_path: Path,
+    seconds: float,
+    seed: int,
+    body: str | None,
+    scenarios: tuple[tuple[str, float, float, bool], ...] = SCENARIOS,
+    quiet: bool = False,
+) -> dict[str, Any]:
     policy = JsonPolicy(policy_path)
     env = env_for(policy, body)
     episodes = []
-    for i, (title, err, turn, nominal) in enumerate(SCENARIOS):
+    for i, (title, err, turn, nominal) in enumerate(scenarios):
         ep = record(env, policy, seed + i, err, seconds, turn, nominal)
         ep["title"] = title
         episodes.append(ep)
-        print(f"{title}: {len(ep['frames']) * CONTROL_DT:.1f} s{' (fell)' if ep['fell'] else ''}")
+        if not quiet:
+            fell = " (fell)" if ep["fell"] else ""
+            print(f"{title}: {len(ep['frames']) * CONTROL_DT:.1f} s{fell}")
     return {
         "policy": policy_path.name,
         "body": env.cfg.task.body,
