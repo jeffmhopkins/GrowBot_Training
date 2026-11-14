@@ -1,0 +1,45 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from growbot_train import config as config_mod
+
+SHIPPED = Path(__file__).parent.parent / "configs" / "heading_walk.toml"
+
+
+def test_shipped_config_matches_the_code_defaults() -> None:
+    # The TOML is documentation as much as config: it must say what the code does.
+    assert config_mod.load(SHIPPED).to_dict() == config_mod.Config().to_dict()
+
+
+def test_override_parses_toml_values() -> None:
+    cfg = config_mod.load(
+        SHIPPED,
+        [
+            "reward.speed_cap_m_s=0.05",
+            "task.retarget_every_s=[1, 2]",
+            "randomization.enabled=false",
+            "train.n_envs=3",
+        ],
+    )
+    assert cfg.reward.speed_cap_m_s == 0.05
+    assert cfg.task.retarget_every_s == (1.0, 2.0)
+    assert cfg.randomization.enabled is False
+    assert cfg.train.n_envs == 3
+
+
+@pytest.mark.parametrize("bad", ["reward.nope=1", "nosection.x=1", "reward=1"])
+def test_unknown_settings_fail_loudly(bad: str) -> None:
+    with pytest.raises((KeyError, ValueError)):
+        config_mod.load(None, [bad])
+
+
+def test_round_trip_through_saved_json(tmp_path: Path) -> None:
+    import json
+
+    cfg = config_mod.load(SHIPPED, ['task.body="olie"'])
+    cfg.save(tmp_path / "c.json")
+    again = config_mod.from_dict(json.loads((tmp_path / "c.json").read_text()))
+    assert again.to_dict() == cfg.to_dict()

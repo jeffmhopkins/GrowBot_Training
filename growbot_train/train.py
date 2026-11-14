@@ -1,0 +1,195 @@
+"""Train the heading-following walk with PPO on the CPU, one simulator per core.
+
+    python -m growbot_train.train --out runs/my_run
+    python -m growbot_train.train --out runs/quick --steps 200000 --set reward.speed_cap_m_s=0.04
+
+Writes into ``--out``: the config it used, periodic checkpoints, the final model and its
+observation normaliser, TensorBoard logs, and the exported app policy JSON.
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+import time
+from collections import defaultdict
+from pathlib import Path
+
+import numpy as np
+import torch
+from stable_baselines3 import PPO
+from stable_baselines3.common.callbacks import BaseCallback, CallbackList
+from stable_baselines3.common.vec_env import (
+    DummyVecEnv,
+    SubprocVecEnv,
+    VecMonitor,
+    VecNormalize,
+)
+
+from growbot_train import config as config_mod
+from growbot_train.env import GrowBotHeadingEnv
+
+# The app's runner does not clip, so the normaliser must not either: a wide bound keeps
+# training and the phone computing the same numbers.
+CLIP_OBS = 1000.0
+
+
+def make_env(cfg: config_mod.Config, rank: int, seed: int):
+    def _init() -> GrowBotHeadingEnv:
+        env = GrowBotHeadingEnv(cfg)
+        env.reset(seed=seed + rank)
+        return env
+
+    return _init
+
+
+def build_vec_env(cfg: config_mod.Config, n_envs: int, seed: int) -> VecMonitor:
+    fns = [make_env(cfg, i, seed) for i in range(n_envs)]
+    vec = SubprocVecEnv(fns, start_method="fork") if n_envs > 1 else DummyVecEnv(fns)
+    return VecMonitor(vec)
+
+
+class Diagnostics(BaseCallback):
+    """Logs what the walk is actually doing (speed along the target, heading error,
+    falls, each reward term) so a reward change can be judged by more than one number."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.sums: dict[str, float] = defaultdict(float)
+        self.n = 0
+        self.falls = 0
+        self.t0 = time.time()
+
+    def _on_step(self) -> bool:
+        for info in self.locals["infos"]:
+            self.n += 1
+            self.sums["v_along"] += info["v_along"]
+            self.sums["speed"] += info["speed"]
+            self.sums["abs_err_deg"] += info["abs_err_deg"]
+            self.falls += int(info["fell"])
+            for k, v in info["terms"].items():
+                self.sums["term_" + k] += v
+        return True
+
+    def _on_rollout_end(self) -> None:
+        if not self.n:
+            return
+        for k, v in self.sums.items():
+            self.logger.record(f"walk/{k}", v / self.n)
+        self.logger.record("walk/falls_per_1k_steps", 1000 * self.falls / self.n)
+        self.logger.record(
+            "time/steps_per_second", self.num_timesteps / max(1e-6, time.time() - self.t0)
+        )
+        self.sums.clear()
+        self.n = 0
+        self.falls = 0
+
+
+class Checkpoint(BaseCallback):
+    def __init__(self, every: int, folder: Path) -> None:
+        super().__init__()
+        self.every = every
+        self.folder = folder
+        self.next = every
+
+    def _on_step(self) -> bool:
+        if self.num_timesteps >= self.next:
+            self.next += self.every
+            self.folder.mkdir(parents=True, exist_ok=True)
+            self.model.save(self.folder / f"model_{self.num_timesteps}.zip")
+            vec = self.model.get_vec_normalize_env()
+            if vec is not None:
+                vec.save(str(self.folder / f"vecnormalize_{self.num_timesteps}.pkl"))
+        return True
+
+
+def default_n_envs() -> int:
+    return max(1, os.cpu_count() or 1)
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--config", default="configs/heading_walk.toml")
+    ap.add_argument("--out", required=True, help="run folder to write into")
+    ap.add_argument("--steps", type=int, help="override train.total_steps")
+    ap.add_argument("--envs", type=int, help="override train.n_envs")
+    ap.add_argument("--set", action="append", default=[], metavar="SECTION.KEY=VALUE")
+    ap.add_argument(
+        "--resume", help="a model_*.zip to continue from (its vecnormalize file must sit beside it)"
+    )
+    args = ap.parse_args(argv)
+
+    cfg = config_mod.load(args.config, args.set)
+    if args.steps:
+        cfg.train.total_steps = args.steps
+    if args.envs:
+        cfg.train.n_envs = args.envs
+    t = cfg.train
+    n_envs = t.n_envs or default_n_envs()
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    cfg.save(out / "config.json")
+    # The learner is small; a few threads are plenty and leave the cores to the sims.
+    torch.set_num_threads(max(1, min(8, (os.cpu_count() or 2) // 4)))
+    print(f"== training {cfg.name}: {t.total_steps:,} steps on {n_envs} simulators ==", flush=True)
+
+    vec = build_vec_env(cfg, n_envs, t.seed)
+    if args.resume:
+        resume = Path(args.resume)
+        norm_path = resume.with_name(resume.name.replace("model_", "vecnormalize_")).with_suffix(
+            ".pkl"
+        )
+        vec = VecNormalize.load(str(norm_path), vec)
+        vec.training = True
+        model = PPO.load(resume, env=vec, device="cpu")
+        reset = False
+    else:
+        vec = VecNormalize(vec, norm_obs=True, norm_reward=True, clip_obs=CLIP_OBS, gamma=t.gamma)
+        model = PPO(
+            "MlpPolicy",
+            vec,
+            n_steps=t.n_steps,
+            batch_size=min(t.batch_size, t.n_steps * n_envs),
+            n_epochs=t.n_epochs,
+            learning_rate=t.learning_rate,
+            gamma=t.gamma,
+            gae_lambda=t.gae_lambda,
+            clip_range=t.clip_range,
+            ent_coef=t.ent_coef,
+            policy_kwargs={
+                "net_arch": {"pi": list(t.policy_layers), "vf": list(t.value_layers)},
+                "activation_fn": torch.nn.Tanh,
+                "log_std_init": t.log_std_init,
+            },
+            tensorboard_log=str(out / "tb"),
+            seed=t.seed,
+            device="cpu",
+            verbose=1,
+        )
+        reset = True
+
+    callbacks = CallbackList(
+        [Diagnostics(), Checkpoint(t.checkpoint_every_steps, out / "checkpoints")]
+    )
+    model.learn(
+        total_timesteps=t.total_steps,
+        callback=callbacks,
+        reset_num_timesteps=reset,
+        tb_log_name="ppo",
+    )
+    model.save(out / "final_model.zip")
+    vec.save(str(out / "vecnormalize.pkl"))
+    vec.close()
+    print(f"== saved {out / 'final_model.zip'} ==", flush=True)
+
+    from growbot_train.export import export_run
+
+    policy_path = export_run(out)
+    print(f"== exported {policy_path} ==", flush=True)
+    return 0
+
+
+if __name__ == "__main__":
+    np.set_printoptions(precision=3, suppress=True)
+    sys.exit(main())

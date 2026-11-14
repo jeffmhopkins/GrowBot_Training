@@ -1,0 +1,28 @@
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: ./install.sh
+      - run: .venv/bin/ruff check .
+      - run: .venv/bin/ruff format --check .
+      # The app-runner parity test runs against a JBrain2 checkout; the repo is public, so
+      # CI pulls just the runner and checks the exported file in the app's own code.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: |
+          mkdir -p /tmp/site
+          curl -fsSL -o /tmp/site/growbot_runner.js https://raw.githubusercontent.com/jeffmhopkins/JBrain2/main/growbot/site/growbot_runner.js
+          curl -fsSL -o /tmp/site/growbot_policy.js https://raw.githubusercontent.com/jeffmhopkins/JBrain2/main/growbot/site/growbot_policy.js
+      - run: GROWBOT_SITE=/tmp/site .venv/bin/python -m pytest -q -rs
+      - name: smoke-train
+        run: .venv/bin/python -m growbot_train.train --out runs/ci --steps 4096 --envs 2 --set train.n_steps=1024 --set train.batch_size=512

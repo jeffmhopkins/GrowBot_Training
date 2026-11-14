@@ -1,0 +1,69 @@
+# GrowBot slow heading-following walk: the numbers a run is made of.
+# Anything left out falls back to the defaults in growbot_train/config.py (which match
+# what is written here). Override one value for a single run without editing this file:
+#   python -m growbot_train.train --out runs/x --set reward.speed_cap_m_s=0.04
+name = "heading_walk"
+
+[reward]
+# The reward is added up every control tick (25 per second). Bigger number = the robot
+# cares more about that thing. See README "The reward" for what each one does.
+progress = 2.0          # walking along the target direction, full value at the speed cap
+heading = 0.5           # pointing at the target: full value dead on, zero facing away
+speed_cap_m_s = 0.03    # "slow": 3 cm/s. Upstream's forward walk does about 3.6 cm/s
+speed_window_s = 1.0    # speed is averaged over this long before the cap is checked
+overspeed = 4.0         # penalty for going faster than the cap (grows with the square)
+tilt = 1.0              # penalty for leaning away from how it stood at the start
+fall = 10.0             # one-off penalty when it tips past fall_tilt_deg (episode ends)
+action_rate = 0.05      # penalty for jerky leg commands (change since last tick, squared)
+effort = 0.01           # small penalty for big leg angles
+
+[task]
+body = "rollout"            # "rollout" (upstream public build) or "olie" (enclosure build)
+episode_seconds = 20.0
+initial_error_deg = 180.0   # first target: up to this many degrees off the robot's nose
+retarget_every_s = [6.0, 14.0]  # the target moves every 6-14 s...
+retarget_max_deg = 120.0        # ...by up to this much
+gait_hz = 1.0               # the clock the policy sees; roughly one step cycle a second
+history_frames = 5          # how many past ticks of sensors the policy sees
+action_to_rad = 1.0         # full action = 1 radian (~57 degrees) of leg swing
+fall_tilt_deg = 55.0        # tipped this far from the starting stance = fallen (the app aborts at 55)
+
+[randomization]
+# Every episode gets a slightly different robot, so the policy works on the real one.
+enabled = true
+mass_scale = [0.80, 1.25]
+com_x_m = [-0.030, 0.030]
+com_y_m = [-0.015, 0.015]
+com_z_m = [-0.010, 0.015]
+leg_length_scale = [0.85, 1.15]
+leg_asymmetry = [0.96, 1.04]
+servo_gain_scale = [0.75, 1.25]
+friction = [0.6, 1.4]
+servo_slew_rad_s = [8.7, 10.5]
+servo_lag_s = [0.015, 0.035]
+relay_delay_s = [0.020, 0.090]
+relay_drop_prob = 0.08
+imu_tilt_rad = 0.15
+accel_noise_m_s2 = 0.3
+gyro_noise_rad_s = 0.1
+gyro_bias_rad_s = 0.02
+heading_noise_deg = 3.0
+heading_drift_deg_per_s = 0.5
+heading_refresh_ticks = [1, 6]
+
+[train]
+total_steps = 30000000
+n_envs = 0                  # 0 = one simulator per CPU thread
+n_steps = 256
+batch_size = 4096
+n_epochs = 5
+learning_rate = 3e-4
+gamma = 0.99
+gae_lambda = 0.95
+clip_range = 0.2
+ent_coef = 0.0
+log_std_init = -0.5
+policy_layers = [128, 128]
+value_layers = [256, 256]
+checkpoint_every_steps = 2000000
+seed = 0
