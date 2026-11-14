@@ -60,6 +60,23 @@ the phone in the PWA:
 Readings are smoothed (a short moving average) and stamped with their age; the policy
 already trains with heading readings that are noisy and up to 6 ticks stale.
 
+**More than one person.** The tracker follows one chosen person, not whoever is in frame:
+
+- **Choosing:** at "follow me" it locks onto the person who said it. That is the face
+  whose mouth is moving as the phrase is heard; failing that, the nearest, then the most
+  central. "Follow me" said again re-chooses.
+- **Keeping:** each frame, every detection is matched to the locked track by predicted
+  position (a constant-velocity filter on bearing and distance), size, and an appearance
+  signature (face embedding when the face shows; clothing colour across the torso when
+  only the body does). A detection far from the prediction is never taken just because
+  it is the only one.
+- **Crossings and short occlusions:** while someone walks between, the track coasts on
+  its prediction for up to about 2 s, and re-attaches only to a detection that matches
+  both position and appearance.
+- **Lost for longer:** stop, turn toward the last bearing, and re-acquire only on a strong
+  appearance match. Otherwise stay put and say "I lost you" rather than follow a
+  stranger.
+
 ### 3. Follower
 
 A small controller between the tracker and the policy:
@@ -95,9 +112,18 @@ access to the simulator's truth except through what the camera would see:
   random path: sometimes walking away, sometimes coming close, sometimes circling, and
   the face moving up and down (sitting, standing). Now and then they turn their back,
   so the tracker has to fall back to the body.
-- **The camera model:** project the face and shoulders through the phone camera's pose
-  and field of view, add pixel noise and dropouts, and hand the tracker the same
-  readings MediaPipe would.
+- **Other people:** one to three distractors walk their own paths, cross between the
+  robot and the person, stand near them, and sometimes stand nearer or more central than
+  them, so the tracker has to keep the right one.
+- **The camera model, never ground truth:** the tracker only gets what a phone would.
+  Every face and shoulder line is projected through the phone camera's actual pose and
+  field of view, so the robot's own rocking moves the image. On top of that:
+  - box jitter of a few pixels;
+  - a distance error of 10 to 20% that drifts slowly (the eye-spacing and
+    shoulder-width assumptions are off);
+  - detection dropouts, more when a face is small or turned;
+  - 100 to 200 ms of frame latency;
+  - the phone's heading reading noisy and drifting, as the policy already trains with.
 - **The commands:** a script of voice commands through the run: "follow me", "come
   closer", "go further back", "stay" then "follow me", and "come". The set distance
   therefore changes live, and the stays hold.
@@ -108,11 +134,18 @@ It reports, over time and in summary:
 - **Distance error:** actual distance minus the set distance.
 - **Aim error:** where the camera points, against the face, horizontal and vertical.
 - **Time to settle** after each command or turn-away, plus falls.
-- **A replay** in the browser 3D viewer with the person in it, so you can watch it
-  follow.
+- **Identity:** the share of time it is locked on the right person, and any switches to
+  a distractor.
+- **A replay** in the browser 3D viewer with everyone in it:
+  - the voice commands shown as they fire;
+  - the policy's three inputs drawn as arrows (heading, signed speed, camera pitch), in
+    the viewer's 3D input-arrow style;
+  - where the tracker believes the person is, drawn next to where they really are, so
+    noise and lag are visible.
 
 It passes when the robot keeps the person in frame through the whole script, settles
-to the set distance after each command, holds still on "stay", and doesn't fall. The
+to the set distance after each command, holds still on "stay", never switches to a
+distractor, and doesn't fall. The
 thresholds get set once there's a baseline. The same harness first runs on each single
 skill (with the follower limited to that skill's mode) for that baseline.
 
