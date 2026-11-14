@@ -329,7 +329,15 @@ the heading error the policy observes, and with targets all the way round even w
 curriculum keeps the bodies narrow. The clone alone, before any PPO, faces targets
 dead behind within 13 seconds on the nominal body (2 degrees off after), and averages
 26 degrees of error on fully random bodies with 3 falls in 24. Its legs swing up to a radian, so `task.action_to_rad` is 1.3, and the body
-randomisation ramps up over the first 15M steps, as for lift and fall. It keeps the camera height input. Unlike the camera walk it trains on
+randomisation ramps up over the first 15M steps, as for lift and fall. That run turned, but slid about 1 cm/s
+(mostly backward) while it did (the spin pivots near the tail), and its heading error
+stalled near 56 degrees. Two changes: wandering from where each turn began now costs
+(`reward.anchor`, past the first 2 cm, rising over the next 15 cm to a cap per tick), and facing pays only near the
+target (`reward.heading_width_deg = 40`: 60 degrees off earns a tenth, where the cosine
+paid three quarters). The policy isn't told how far it has wandered, as the phone can't
+measure that. The weights were checked against the cloned spin in the simulator:
+charging drift harder (a tighter speed band, or an uncapped anchor) made standing still
+score better than turning, which is how earlier runs froze. It keeps the camera height input. Unlike the camera walk it trains on
 the printed build with bare-print surfaces (see [Bodies](#bodies)), like the heading walk.
 It's the camera walk otherwise, and only the lines marked CHANGED differ from that file.
 From JBrain it's the "GrowBot look" job.

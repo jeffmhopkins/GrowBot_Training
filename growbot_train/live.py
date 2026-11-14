@@ -141,6 +141,10 @@ class Live:
                 {"label": "Heading error", "value": f"{m['abs_err_deg']:.0f}°"},
                 {"label": "Falls", "value": f"{m['falls_per_1k_steps']:.1f} per 1,000 steps"},
             ]
+            if self.cfg.reward.anchor and "drift_m" in m:
+                summary.append(
+                    {"label": "Wandered while stopped", "value": f"{m['drift_m'] * 100:.1f} cm"}
+                )
             if self.cfg.reward.stance and "lift_deg" in m:
                 want = m.get("want_lift_deg", self.cfg.task.stand_lift_deg)
                 summary.append(

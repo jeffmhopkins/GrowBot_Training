@@ -86,7 +86,10 @@ from the three skills, then fine-tuned with PPO:
 - each skill teaches only in its own mode;
 - the teachers are matched in radians and on the same heading definition, with each
   one's gait clock handled;
-- episodes switch modes partway through, so it learns the hand-overs.
+- episodes switch modes partway through, so it learns the hand-overs;
+- the fine-tune also rewards holding the set distance to a simulated person, in the
+  style of look's position anchor (`reward.anchor`): the reward sees the true distance,
+  the policy only the follower's commands.
 
 The gaps it has to bridge are listed in [follow_me.md](follow_me.md#1-one-master-policy).
 

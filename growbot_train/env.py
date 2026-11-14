@@ -502,6 +502,7 @@ class GrowBotHeadingEnv(gym.Env):
         self.queue = np.tile(legs, (DELAY_SLOTS, 1))
         self.prev_action = np.clip(legs / self.cfg.task.action_to_rad, -1.0, 1.0)
         self.vel_avg = np.zeros(2)
+        self.anchor = self.data.qpos[0:2].copy()
         self.heading_bias = 0.0
         if "target_error_deg" in options:
             first_err = float(options["target_error_deg"])
@@ -547,6 +548,9 @@ class GrowBotHeadingEnv(gym.Env):
         if self.retarget and t >= self._next_retarget:
             lim = cfg.task.retarget_max_deg * self._target_k()
             self.target_deg = wrap_deg(self.target_deg + self._u((-lim, lim)))
+            # Each new target is a new turn: wander is charged per turn, not piled up
+            # over the whole episode.
+            self.anchor = d.qpos[0:2].copy()
             self._next_retarget = t + self._u(cfg.task.retarget_every_s)
 
         if cfg.task.speed == "command" and t >= self._next_speed:
@@ -583,7 +587,12 @@ class GrowBotHeadingEnv(gym.Env):
         err0 = self.scored_err_deg(yaw0, body0)
         terms = {
             "progress": progress,
-            "heading": r.heading * (1 + math.cos(math.radians(err_score))) / 2,
+            "heading": r.heading
+            * (
+                math.exp(-((err_score / r.heading_width_deg) ** 2))
+                if r.heading_width_deg > 0
+                else (1 + math.cos(math.radians(err_score))) / 2
+            ),
             "overspeed": -r.overspeed * (max(0.0, speed - cap) / cap) ** 2,
             "tilt": -r.tilt * (1 - tall_cos),
             "action_rate": -r.action_rate * float(np.sum((a - self.prev_action) ** 2)),
@@ -591,6 +600,18 @@ class GrowBotHeadingEnv(gym.Env):
         }
         if r.turn:
             terms["turn"] = r.turn * (err0 - err_score)
+        drift_m = 0.0
+        if cfg.task.speed != "cap":
+            if self.speed_cmd != 0.0:
+                self.anchor = d.qpos[0:2].copy()
+            else:
+                drift_m = float(np.linalg.norm(d.qpos[0:2] - self.anchor))
+                if r.anchor:
+                    # Saturates 15 cm past the free radius, so it never outbids facing
+                    # the target (a policy that can't see the offset must not freeze),
+                    # yet still slopes through a whole turn's worth of slow drift.
+                    over = max(0.0, drift_m - r.anchor_free_m) / 0.15
+                    terms["anchor"] = -r.anchor * min(1.0, over)
         if r.wobble:
             # Free-joint angular velocity is in the body frame: x is roll, y is pitch.
             terms["wobble"] = -r.wobble * float(d.qvel[3] ** 2 + d.qvel[4] ** 2)
@@ -628,6 +649,7 @@ class GrowBotHeadingEnv(gym.Env):
             "abs_err_deg": err_score,
             "fell": fell,
             "pitch_deg": pitch,
+            "drift_m": drift_m,
             # From the same base the stance reward uses, so it reads against want_lift_deg.
             "lift_deg": pitch - max(self._rest_pitch, self._nominal_rest_pitch),
             "speed_miss": speed_miss,

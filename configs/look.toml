@@ -10,11 +10,14 @@ name = "look"
 # The reward is added up every control tick (25 per second). Bigger number = the robot
 # cares more about that thing. See README "The reward" for what each one does.
 progress = 2.0          # here only a cost: drifting more than stop_drift_free x the cap
-heading = 1.5           # CHANGED: facing the target is the whole job here
+heading = 3.0           # CHANGED: facing the target is the whole job here...
+heading_width_deg = 40.0  # CHANGED: ...and it pays only near it (exp(-(error/40)^2)): sitting 60 degrees off earns a tenth, not the cosine's three quarters
 speed_cap_m_s = 0.03    # CHANGED: 3 cm/s. Look never walks, so the cap only sets how much drift a turn may have
 speed_window_s = 1.0    # speed is averaged over this long before the cap is checked
 overspeed = 4.0         # CHANGED: penalty for going faster than the cap (grows with the square)
-stop_drift_free = 0.5   # CHANGED: drift up to this x the cap is free (1.5 cm/s)
+stop_drift_free = 0.5   # CHANGED: drift up to this x the cap is free (1.5 cm/s); slower drift is the anchor's job
+anchor = 0.4            # CHANGED: wandering from where this turn began costs, up to this per tick, full at 15 cm past anchor_free_m...
+anchor_free_m = 0.02    # ...the first 2 cm free
 tilt = 4.0              # CHANGED: penalty for leaning away from the stance; firm, so it turns instead of leaning
 fall = 10.0             # one-off penalty when it tips past fall_tilt_deg (episode ends)
 action_rate = 0.05      # penalty for jerky leg commands (change since last tick, squared)

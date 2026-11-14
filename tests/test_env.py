@@ -686,3 +686,71 @@ def test_the_curriculum_ramps_to_the_full_ranges() -> None:
     assert ramp_scale(cfg, 0) == pytest.approx(0.2)
     assert ramp_scale(cfg, 500) == pytest.approx(0.6)
     assert ramp_scale(cfg, 5000) == 1.0
+
+
+def test_wandering_while_stopped_costs_past_the_free_radius() -> None:
+    cfg = Config()
+    cfg.task.speed = "still"
+    cfg.reward.anchor = 0.5
+    env = GrowBotHeadingEnv(cfg)
+    env.reset(seed=0, options={"nominal": True})
+    _, _, _, _, info = env.step(np.zeros(2))
+    assert info["terms"]["anchor"] == 0.0  # still inside the free 2 cm
+    env.data.qpos[0] += 0.10
+    mujoco.mj_forward(env.model, env.data)
+    _, _, _, _, info = env.step(np.zeros(2))
+    assert info["drift_m"] == pytest.approx(0.10, abs=0.01)
+    assert info["terms"]["anchor"] == pytest.approx(-0.5 * (info["drift_m"] - 0.02) / 0.15)
+    # Past 15 cm beyond the free radius it saturates at the weight, so it never outbids
+    # facing the target.
+    env.data.qpos[0] += 0.20
+    mujoco.mj_forward(env.model, env.data)
+    _, _, _, _, info = env.step(np.zeros(2))
+    assert info["terms"]["anchor"] == pytest.approx(-0.5)
+    env.data.qpos[0] -= 0.25
+    mujoco.mj_forward(env.model, env.data)
+    _, _, _, _, info = env.step(np.zeros(2))
+    assert info["terms"]["anchor"] == pytest.approx(-0.5 * (info["drift_m"] - 0.02) / 0.15)
+
+
+def test_a_new_target_starts_a_new_anchor() -> None:
+    cfg = Config()
+    cfg.task.speed = "still"
+    cfg.reward.anchor = 0.5
+    env = GrowBotHeadingEnv(cfg)
+    env.reset(seed=0, options={"nominal": True})
+    env.data.qpos[0] += 0.10
+    mujoco.mj_forward(env.model, env.data)
+    env._next_retarget = 0.0  # the target moves this tick
+    _, _, _, _, info = env.step(np.zeros(2))
+    assert info["drift_m"] < 0.01
+
+
+def test_a_narrow_heading_reward_pays_only_near_the_target() -> None:
+    cfg = Config()
+    cfg.reward.heading = 1.0
+    cfg.reward.heading_width_deg = 40.0
+    env = GrowBotHeadingEnv(cfg)
+    env.reset(seed=0, options={"nominal": True, "retarget": False, "target_error_deg": 0.0})
+    _, _, _, _, info = env.step(np.zeros(2))
+    near = info["terms"]["heading"]
+    env.target_deg = wrap_deg(env.yaw_deg() + 60.0)
+    _, _, _, _, info = env.step(np.zeros(2))
+    assert near > 0.9
+    assert info["terms"]["heading"] < 0.15
+
+
+def test_the_anchor_follows_a_walk_and_holds_from_a_stop() -> None:
+    cfg = Config()
+    cfg.task.speed = "command"
+    cfg.reward.anchor = 0.5
+    env = GrowBotHeadingEnv(cfg)
+    env.reset(seed=0, options={"nominal": True})
+    env.speed_cmd = 1.0
+    env.data.qpos[0] += 0.10
+    mujoco.mj_forward(env.model, env.data)
+    _, _, _, _, info = env.step(np.zeros(2))
+    assert "anchor" not in info["terms"] and info["drift_m"] == 0.0  # walking: no anchor
+    env.speed_cmd = 0.0
+    _, _, _, _, info = env.step(np.zeros(2))
+    assert info["drift_m"] < 0.01  # the stop anchors where the walk left it
