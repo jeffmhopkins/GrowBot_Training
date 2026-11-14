@@ -524,6 +524,7 @@ doing only if the CPU runs prove too slow.
 | `growbot_train/view.py` | Live MuJoCo viewer with a steerable target, or an mp4 |
 | `growbot_train/policy.py` | Runs an exported JSON with the app runner's arithmetic |
 | `growbot_train/live.py` | The run's `live/` folder: progress, latest replay and policy |
+| `docs/follow_me.md` | The plan: one master policy following a person, with voice commands, and its final simulator test |
 | `jobs.toml` | The jobs JBrain's Launcher offers (see [Adding a job](#adding-a-job)) |
 | `install.sh`, `run.sh` | Set up; train, export, evaluate, replay and pack in one go |
 | `scripts/keep_policy.sh` | Copy a result into `policies/` |
