@@ -18,7 +18,7 @@ There are three walks, each a config file:
 | --- | --- | --- | --- |
 | [`heading_walk.toml`](configs/heading_walk.toml) | nose first | its resting stance (about 34 degrees nose-up) | standing |
 | [`camera_walk.toml`](configs/camera_walk.toml) | **tail first, toward what the phone's camera sees** | a few degrees taller, to lift the camera's view | standing (folded starts and shoves come back once it can scoot) |
-| [`tall_waddle.toml`](configs/tall_waddle.toml) | tail first, from upstream's live-app waddle; backs away nose first | tall, whatever the waddle holds (about 60 degrees, more on longer legs) | standing |
+| [`lift_fall.toml`](configs/lift_fall.toml) | tail first by lifting the body and letting it fall | tall, bouncing (about 55 to 64 degrees as built) | standing |
 
 See [The camera walk](#the-camera-walk) for why the second one exists and what it can and
 can't do with this body.
@@ -271,31 +271,41 @@ app's runner reads them from `cmd.fwd` and `cmd.pitch`.
 Run it with `./run.sh camera-try --config configs/camera_walk.toml`, or from JBrain's Jobs
 launcher ("GrowBot camera walk").
 
-## The tall waddle
+## Lift and fall
 
-Upstream's live app walks with a fixed rhythm plus a small learned correction
-(`app/policies/forward-0930/walk_fwd.json`): both legs held about 55 degrees forward,
-swinging 14 degrees either way at 1.8 Hz, which stands the body near the tallest these
-legs can hold it (about 63 degrees) and rocks it side to side. `configs/tall_waddle.toml`
-starts from that rhythm (`configs/gaits/tall_waddle.json`, cloned before PPO with
-`train.warm_gait`, the policy's clock set to the rhythm's rate) and retrains it on the
-printed build with the camera walk's inputs: the heading to face, and a signed speed
-(walk to the target camera first, stop and face it, or back away, nose first, the
-body's easy direction). Nothing rewards a height: randomised bodies waddle anywhere from
-60 to 80 degrees, so the stance bonus and the lean-back penalty are off, and only going
-over backwards (past 88) or forwards ends an episode. Upstream's 4-degree correction isn't carried over:
-it reads different inputs, and in this simulator the rhythm with or without it only
-shuffles in place, so the direction is PPO's to find. Only the lines marked CHANGED
-differ from the camera walk. From JBrain it's the "GrowBot tall waddle" job.
+A clip of someone else's GrowBot (2026-11-14) moves camera first by lifting its body high
+on its tail with both legs and letting it fall back a little further along. Upstream's
+live-app walk (`app/policies/forward-0930`: both legs about 55 degrees forward, swinging 14
+either way at 1.8 Hz) only bobs in place on this body, and PPO started from it froze, so
+that one was dropped. The bench (`research/locomotion/search.py`, scenario `w1`: stand
+tall, stock bare legs) found a gait that does what the clip does: the legs snap across
+most of their range about 2.3 times a second, hold the body up around 60 degrees on its
+feet alone two-thirds of the time, and each time it drops back onto its tail it lands a
+little further tail first: about 5 cm/s on the as-built robot on both floors. Open loop it only works on robots close
+to the as-built one; `configs/lift_fall.toml` clones it (`configs/gaits/lift_fall.json`)
+and lets PPO add the feedback that keeps it going on the rest, steered with the camera
+walk's heading and speed (walk up camera first, or stop and face it). It isn't asked to
+back away yet: the cloned gait has one speed, so a command it can't follow would pay it
+to freeze, as the camera walk's runs did.
+The speed cap is 5 cm/s, the stance bonus and lean-back penalty are off as the body
+bounces through every height, and only going over onto the screen (past 88 degrees) or
+forwards ends an episode. From JBrain it's the "GrowBot lift and fall" job.
 
 ## The look policy
 
 The camera walk at speed 0 already stands still and turns to face the heading. If that
 turns out wobbly, `configs/look.toml` trains a specialist that never walks
-(`task.speed = "still"`, so it has no speed input): the target moves every 5 to 12
-seconds (turning on the spot manages about 8 degrees a second), facing it pays three
-times as much, turning toward it pays double (`reward.turn`), and rocking costs
-(`reward.wobble`). It keeps the camera height input. Unlike the camera walk it trains on
+(`task.speed = "still"`, so it has no speed input): the target moves every 6 to 14
+seconds by up to half a turn, so it learns to spin round to what is behind it (turning
+on the spot manages about 8 degrees a second). Facing it pays three times as much,
+turning toward it pays double (`reward.turn`), and rocking costs (`reward.wobble`).
+Facing is scored on the camera (`task.heading_from = "lens"`): the heading is where
+the phone's lens points, projected flat, and the reward takes the worse of that and the
+body's own heading, so swinging the lens over with a roll earns nothing and only turning
+the whole body does. Leaning costs four times as much (`reward.tilt = 4`), and the
+lowest camera height is 20 degrees under rest rather than 30, so the lens never looks
+straight up and loses its heading. An earlier run leaned toward the target instead of
+turning, because leaning was cheap. It keeps the camera height input. Unlike the camera walk it trains on
 the printed build with bare-print surfaces (see [Bodies](#bodies)), like the heading walk.
 It's the camera walk otherwise, and only the lines marked CHANGED differ from that file.
 From JBrain it's the "GrowBot look" job.
@@ -475,7 +485,7 @@ doing only if the CPU runs prove too slow.
 | Path | What |
 | --- | --- |
 | `configs/heading_walk.toml` | Every setting, with comments |
-| `configs/camera_walk.toml`, `configs/look.toml`, `configs/tall_waddle.toml` | The camera walk, the look policy and the tall waddle, changes marked |
+| `configs/camera_walk.toml`, `configs/look.toml`, `configs/lift_fall.toml` | The camera walk, the look policy and the lift and fall, changes marked |
 | `configs/gaits/` | Gaits a run clones before PPO (`train.warm_gait`) |
 | `growbot_train/bodies/build.xml` | The printed build with a phone (generated by `research/locomotion/make_body.py`) |
 | `growbot_train/env.py` | The simulator task: inputs, randomisation, reward |

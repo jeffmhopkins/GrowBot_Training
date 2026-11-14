@@ -1,22 +1,24 @@
-# GrowBot tall waddle: upstream's live-app walk rhythm (forward-0930's seed), on the
-# printed build, retrained with the camera walk's inputs (heading, signed speed).
-# Starts from the camera walk; lines marked CHANGED differ from configs/camera_walk.toml.
-name = "tall_waddle"
+# GrowBot lift and fall: the stock-leg gait like the clip Jeff found (2026-11-14). The
+# legs lift the body high on its tail and let it fall back down a little further tail
+# first, about twice a second. The bench (research/locomotion/search.py, scenario w1)
+# found it on the printed build; this retrains it with the camera walk's inputs
+# (heading, speed). Lines marked CHANGED differ from configs/camera_walk.toml.
+name = "lift_fall"
 
 [reward]
 # The reward is added up every control tick (25 per second). Bigger number = the robot
 # cares more about that thing. See README "The reward" for what each one does.
 progress = 2.0          # walking along the target direction, full value at the speed cap
 heading = 0.5           # pointing at the target: full value dead on, zero facing away
-speed_cap_m_s = 0.01    # 1 cm/s. Tail first this body can only scoot (see README)
+speed_cap_m_s = 0.05    # CHANGED: 5 cm/s, what the lift and fall does on the as-built robot
 speed_window_s = 1.0    # speed is averaged over this long before the cap is checked
 overspeed = 1.0         # penalty for going faster than the cap (grows with the square); gentler, as turning on the spot drifts past this low cap
-stop_drift_free = 1.5   # during a stop, drift up to this x the cap is free (1.5 cm/s, the old allowance)
+stop_drift_free = 0.3   # CHANGED: during a stop, drift up to this x the cap is free (1.5 cm/s)
 tilt = 1.0              # penalty for leaning away from the taller stance
 fall = 10.0             # one-off penalty when it tips past fall_tilt_deg (episode ends)
-action_rate = 0.05      # penalty for jerky leg commands (change since last tick, squared)
+action_rate = 0.01      # CHANGED: the gait snaps its legs across most of their range; charge that less
 effort = 0.01           # small penalty for big leg angles
-stance = 0.0            # CHANGED: off: randomised bodies waddle anywhere from 60 to 80 degrees, so one target would pay it to drop out of the rhythm
+stance = 0.0            # CHANGED: off: the gait bounces (55-64 degrees as built, up to the 80s on other bodies), so one target height would pay it to stop
 stance_tol_deg = 6.0    # how close to the taller stance counts (degrees)
 back_lean = 0.0         # CHANGED: off, for the same reason; going over backwards is still a fall
 back_lean_margin_deg = 12.0  # how far past the stance before that penalty starts
@@ -32,20 +34,20 @@ episode_seconds = 30.0      # longer, so each episode holds several commands
 initial_error_deg = 180.0   # first target: up to this many degrees off the camera end
 retarget_every_s = [4.0, 10.0]  # the target moves every 4-10 s...
 retarget_max_deg = 120.0        # ...by up to this much
-gait_hz = 1.80969723562966  # CHANGED: the waddle's own rate (upstream's seed), so the cloned rhythm lines up with the clock
+gait_hz = 2.347           # CHANGED: the gait's own rate, so the cloned rhythm lines up with the clock
 history_frames = 5          # how many past ticks of sensors the policy sees
-action_to_rad = 1.4         # CHANGED: the waddle holds its legs at 41-69 degrees; leave room past that
+action_to_rad = 1.57        # CHANGED: the gait uses the servos' whole range
 fall_tilt_deg = 55.0        # tipped this far from the starting stance = fallen (the app aborts at 55)
 facing = "camera"           # tail first, toward what the camera sees
-stand_lift_deg = 18.0       # CHANGED: the waddle stands at about 61 degrees, 18 above rest (63 is the most these legs reach)
+stand_lift_deg = 18.0       # CHANGED: it stands at about 61 degrees, 18 above rest
 lying_start_prob = 0.0      # share of episodes that start folded flat (off until it can scoot)
 lying_leg_rad = [-0.95, -0.75]  # how far both legs tuck for a folded start (radians)
-back_fall_pitch_deg = 88.0  # CHANGED: randomised bodies waddle up to about 80 and the start kicks past 85; past 88 is going over backwards
+back_fall_pitch_deg = 88.0  # CHANGED: other bodies get thrown up past 80 at times; past 88 is going over onto the screen
 speed = "command"           # a speed input: +1 walk to the face, 0 stop and look, <0 back away
 speed_command_every_s = [3.0, 8.0]  # a new speed this often...
-speed_stop_prob = 0.3              # ...3 in 10 of them a stop (turn on the spot to face it)...
-speed_back_min = -1.0              # ...the rest anywhere from backing away at full speed to +1
-tilt_command = false        # CHANGED: no camera-height input; the waddle sets its own height
+speed_stop_prob = 0.15             # CHANGED: ...fewer of them a stop: the gait has one speed, and stopping it costs at first...
+speed_back_min = 0.0               # CHANGED: ...the rest from 0 to full speed camera first: no backing away yet, as the cloned gait can't, and asking for it would pay it to freeze
+tilt_command = false        # CHANGED: no camera-height input; the gait sets its own height
 tilt_lift_deg = [-30.0, 6.0]       # what -1 and +1 mean, degrees from the resting pitch
 tilt_command_every_s = [3.0, 8.0]  # a new height this often...
 tilt_tall_prob = 0.5               # ...half the time standing tall, otherwise anywhere in range
@@ -81,8 +83,8 @@ push_every_s = [0.0, 0.0]   # a sudden shove this often (off until it can scoot)
 push_pitch_rad_s = 0.0      # how hard a shove spins it (pitch, rad/s)
 
 [train]
-total_steps = 50000000      # CHANGED: starts from a moving rhythm, so a shorter run
-warm_gait = "configs/gaits/tall_waddle.json"  # CHANGED: clone upstream's waddle rhythm before PPO
+total_steps = 50000000      # CHANGED: starts from a moving gait, so a shorter run
+warm_gait = "configs/gaits/lift_fall.json"  # CHANGED: clone the bench's lift-and-fall gait before PPO
 n_envs = 0                  # 0 = one simulator per CPU thread
 n_steps = 256
 batch_size = 4096
