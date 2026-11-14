@@ -17,7 +17,7 @@ There are two walks, each a config file:
 | Config | Walks | Stance | Starts |
 | --- | --- | --- | --- |
 | [`heading_walk.toml`](configs/heading_walk.toml) | nose first | its resting stance (about 34 degrees nose-up) | standing |
-| [`camera_walk.toml`](configs/camera_walk.toml) | **tail first, toward what the phone's camera sees** | a few degrees taller, to lift the camera's view | 3 in 10 folded flat, so it learns to get up |
+| [`camera_walk.toml`](configs/camera_walk.toml) | **tail first, toward what the phone's camera sees** | a few degrees taller, to lift the camera's view | standing (folded starts and shoves come back once it can scoot) |
 
 See [The camera walk](#the-camera-walk) for why the second one exists and what it can and
 can't do with this body.
@@ -202,14 +202,23 @@ camera sees, the robot has to walk tail first. That's the second config,
 - `reward.stance = 0.5` with `task.stand_lift_deg = 6`: a bonus for holding the body 6
   degrees more nose-up than it rests, which tilts the camera's view down from the sky
   toward the horizon behind it, where faces are.
-- `task.lying_start_prob = 0.3`: 3 in 10 episodes start folded (legs tucked, body lower), so it
-  learns to push itself up and then go.
+- **It scoots, it doesn't walk.** The paddle legs only push well one way. Across 468
+  fixed open-loop gaits in the sim, nose first reaches 3 cm/s easily, but the best
+  ordinary tail-first gait managed 0.6 cm/s and most about 0.1. A gait search that
+  allowed any rhythm and rocking found a fast rock-and-shuffle, about two beats a
+  second, that scoots tail first at about 0.9 cm/s on the standard body. So the camera
+  walk's speed cap is 1 cm/s (`reward.speed_cap_m_s = 0.01`) and the policy's clock
+  runs at 2 Hz (`task.gait_hz = 2`). The first two camera walk runs, at 3 cm/s and 1 Hz,
+  never moved.
+- Folded starts and shoves (`task.lying_start_prob`, `randomization.push_every_s`) are
+  off until a run shows it can scoot; they made the first runs harder still.
 - **Not going over backwards.** Standing taller moves it toward the one fall this body
   can't undo, so three things push against it. `reward.back_lean = 2` charges for leaning
   back more than 12 degrees past the stance it should hold, growing fast. Past 75 degrees
   nose-up counts as a fall (`task.back_fall_pitch_deg`), ending the episode with the fall
-  penalty. And every 3 to 8 seconds a shove spins the body nose-up or nose-down
-  (`randomization.push_every_s`, `push_pitch_rad_s`), so it learns to catch itself.
+  penalty. Shoves that spin the body nose-up or nose-down
+  (`randomization.push_every_s`, `push_pitch_rad_s`) can teach it to catch itself; they
+  are off for now (above).
 
 **How tall can it stand?** Not much, with this body. In the sim, the nominal build rests
 at about 35 degrees nose-up. With both legs pushed all the way forward it reaches about 41
@@ -226,8 +235,8 @@ question).
 **Why not a separate stand-up policy?** This robot never really falls over: switched off
 it sits on its tail and feet, and folded it's a leg push away from standing. Getting
 up is part of walking here, so one policy learns both. Episodes that start folded are
-mixed in from the beginning rather than in a later phase, which is simpler and works for
-a skill this small.
+meant to be mixed in from the beginning, which is simpler for a skill this small; for
+now they're off while it learns to scoot.
 
 **Why not train it to get back up from its back?** In the sim it can't. Past about 95
 degrees nose-up (for the standard build; a tail-heavy randomised body tips a little
@@ -241,7 +250,7 @@ before it goes past vertical.
 faces, so it is steered by three numbers the app works out from the face it tracks:
 
 - **Heading** (`cmd_yaw`): where the face is, from the camera end.
-- **Speed** (`cmd_forward`, `task.speed = "command"`): +1 walks toward it at the cap (3
+- **Speed** (`cmd_forward`, `task.speed = "command"`): +1 scoots toward it at the cap (1
   cm/s), 0 stands still and keeps turning to face it, -1 backs away at the cap. From how
   big the face looks: small means go closer, right-sized means stop, too big means back
   off. Each episode the speed changes every 3 to 8 seconds; 3 in 10 are stops.

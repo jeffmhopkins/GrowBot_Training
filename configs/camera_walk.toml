@@ -16,7 +16,7 @@ name = "camera_walk"
 # cares more about that thing. See README "The reward" for what each one does.
 progress = 2.0          # walking along the target direction, full value at the speed cap
 heading = 0.5           # pointing at the target: full value dead on, zero facing away
-speed_cap_m_s = 0.03    # "slow": 3 cm/s. Upstream's forward walk does about 3.6 cm/s
+speed_cap_m_s = 0.01    # CHANGED: 1 cm/s. Tail first this body can only scoot (see README)
 speed_window_s = 1.0    # speed is averaged over this long before the cap is checked
 overspeed = 4.0         # penalty for going faster than the cap (grows with the square)
 tilt = 1.0              # penalty for leaning away from the taller stance
@@ -36,13 +36,13 @@ episode_seconds = 30.0      # CHANGED: longer, so each episode holds several com
 initial_error_deg = 180.0   # first target: up to this many degrees off the camera end
 retarget_every_s = [4.0, 10.0]  # CHANGED: the target moves every 4-10 s...
 retarget_max_deg = 120.0        # ...by up to this much
-gait_hz = 1.0               # the clock the policy sees; roughly one step cycle a second
+gait_hz = 2.0               # CHANGED: the clock the policy sees; the scoot rocks about twice a second
 history_frames = 5          # how many past ticks of sensors the policy sees
 action_to_rad = 1.0         # full action = 1 radian (~57 degrees) of leg swing
 fall_tilt_deg = 55.0        # tipped this far from the starting stance = fallen (the app aborts at 55)
 facing = "camera"           # CHANGED: tail first, toward what the camera sees
 stand_lift_deg = 6.0        # CHANGED: about all this body can lift (see README)
-lying_start_prob = 0.3      # CHANGED: 3 in 10 start folded flat and must get up first
+lying_start_prob = 0.0      # share of episodes that start folded flat (off until it can scoot)
 lying_leg_rad = [-0.95, -0.75]  # how far both legs tuck for a folded start (radians)
 back_fall_pitch_deg = 75.0  # CHANGED: past 75 degrees nose-up counts as falling over backwards
 speed = "command"           # CHANGED: a speed input: +1 walk to the face, 0 stop and look, <0 back away
@@ -76,8 +76,8 @@ gyro_bias_rad_s = 0.02
 heading_noise_deg = 3.0
 heading_drift_deg_per_s = 0.5
 heading_refresh_ticks = [1, 6]
-push_every_s = [3.0, 8.0]   # CHANGED: a shove every 3-8 s...
-push_pitch_rad_s = 12.0     # CHANGED: ...of up to this much pitch spin, either way
+push_every_s = [0.0, 0.0]   # a sudden shove this often (off until it can scoot)
+push_pitch_rad_s = 0.0      # how hard a shove spins it (pitch, rad/s)
 
 [train]
 total_steps = 80000000      # CHANGED: more inputs to learn, so a longer run
