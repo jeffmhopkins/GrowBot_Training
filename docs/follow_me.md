@@ -43,6 +43,13 @@ student with the shared inputs above. Each teacher is queried only in its own mo
 its own inputs rebuilt from the student's. The training episodes switch modes partway
 through, so the student also learns the hand-overs. PPO fine-tunes the student after.
 
+For that fine-tune, and any follow training after it, the reward also scores **holding a
+distance**, in the style of look's `reward.anchor` (Jeff, 2026-11-14). In the simulator
+the person's true position is known, so the reward charges for the distance error to
+them past a small free band, the way the anchor charges for wandering past 2 cm. The
+policy itself still only gets the follower's commands, never the true distance, since
+the phone can't measure it either.
+
 The teachers don't line up yet, and the distillation has to bridge these gaps:
 
 - **Inputs:**
