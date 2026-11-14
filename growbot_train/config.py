@@ -42,6 +42,13 @@ class RewardConfig:
     # warning that grows long before the point of no return. 0 turns it off.
     back_lean: float = 0.0
     back_lean_margin_deg: float = 12.0
+    # With task.speed "command" or "still", progress pays for matching the wanted
+    # velocity instead: weight * max(0, 1 - miss / (tol * cap)), where miss is how far the
+    # averaged velocity is from the wanted one (direction included), in m/s. Linear, not
+    # a bell curve, so standing still when told to walk still feels a pull to move.
+    speed_track_tol: float = 1.5
+    # Rocking costs weight * (roll rate^2 + pitch rate^2), rad/s: a steadier camera.
+    wobble: float = 0.0
 
 
 @dataclass
@@ -78,6 +85,25 @@ class TaskConfig:
     # with its legs in the air and can't get up. An episode ends as a fall once the
     # pitch passes this many degrees, well before that point. 0 = only fall_tilt_deg.
     back_fall_pitch_deg: float = 0.0
+    # How fast to go. "cap": always walk toward the target at the speed cap (the first
+    # policies). "command": a second input, cmd_forward in [-1, 1], says how fast: +1 the
+    # cap toward the target, 0 stand still (still turning to face it), below 0 back away.
+    # "still": never walk, only turn on the spot to face the target.
+    speed: str = "cap"
+    # With "command", each episode redraws the command this often (seconds): a stop with
+    # speed_stop_prob, otherwise anything from speed_back_min up to +1.
+    speed_command_every_s: tuple[float, float] = (3.0, 8.0)
+    speed_stop_prob: float = 0.3
+    speed_back_min: float = -1.0
+    # A third input, cmd_pitch in [-1, 1], says how high to hold the camera end: -1 is
+    # tilt_lift_deg[0] from the resting pitch (low, nearly flat: the camera looks almost
+    # straight up), +1 is tilt_lift_deg[1] (standing tall). The stance bonus then pays for
+    # matching it instead of stand_lift_deg. Redrawn like the speed command; standing tall
+    # with tilt_tall_prob.
+    tilt_command: bool = False
+    tilt_lift_deg: tuple[float, float] = (-30.0, 6.0)
+    tilt_command_every_s: tuple[float, float] = (3.0, 8.0)
+    tilt_tall_prob: float = 0.5
 
 
 @dataclass

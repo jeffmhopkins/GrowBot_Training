@@ -1,7 +1,9 @@
-# GrowBot camera walk: the second policy. The phone lies on top with its rear camera
+# GrowBot camera walk: the second policy, and the one meant for following faces. The phone lies on top with its rear camera
 # looking up and back over the tail, so this walk goes tail first ("backwards"), toward
 # what the camera sees, and stands a little taller to lift the camera's view. The heading
 # error is measured from the camera end: 0 means the face the camera sees is dead ahead.
+# A second input says how fast: walk up to the face, stop and keep facing it, or back
+# away, so the app can hold a comfortable distance (e.g. from how big the face looks).
 # Everything else is the first policy's (heading_walk.toml); only the lines marked
 # CHANGED differ.
 # Anything left out falls back to the defaults in growbot_train/config.py. Override one
@@ -25,12 +27,14 @@ stance = 0.5            # CHANGED: bonus for standing taller than at rest
 stance_tol_deg = 6.0    # how close to the taller stance counts (degrees)
 back_lean = 2.0         # CHANGED: penalty for leaning back past the stance + margin
 back_lean_margin_deg = 12.0  # how far past the stance before that penalty starts
+speed_track_tol = 1.5   # with a speed input: pay drops to zero this far (x cap) from the wanted speed
+wobble = 0.0            # penalty for rocking (roll and pitch spin, squared)
 
 [task]
 body = "rollout"            # "rollout" (upstream public build) or "olie" (enclosure build)
-episode_seconds = 20.0
+episode_seconds = 30.0      # CHANGED: longer, so each episode holds several commands
 initial_error_deg = 180.0   # first target: up to this many degrees off the camera end
-retarget_every_s = [6.0, 14.0]  # the target moves every 6-14 s...
+retarget_every_s = [4.0, 10.0]  # CHANGED: the target moves every 4-10 s...
 retarget_max_deg = 120.0        # ...by up to this much
 gait_hz = 1.0               # the clock the policy sees; roughly one step cycle a second
 history_frames = 5          # how many past ticks of sensors the policy sees
@@ -41,6 +45,14 @@ stand_lift_deg = 6.0        # CHANGED: about all this body can lift (see README)
 lying_start_prob = 0.3      # CHANGED: 3 in 10 start folded flat and must get up first
 lying_leg_rad = [-0.95, -0.75]  # how far both legs tuck for a folded start (radians)
 back_fall_pitch_deg = 75.0  # CHANGED: past 75 degrees nose-up counts as falling over backwards
+speed = "command"           # CHANGED: a speed input: +1 walk to the face, 0 stop and look, <0 back away
+speed_command_every_s = [3.0, 8.0]  # a new speed this often...
+speed_stop_prob = 0.3              # ...3 in 10 of them a stop (turn on the spot to face it)...
+speed_back_min = -1.0              # ...the rest anywhere from backing away at full speed to +1
+tilt_command = true         # CHANGED: a camera-height input: -1 low (camera looks almost straight up), +1 tall
+tilt_lift_deg = [-30.0, 6.0]       # what -1 and +1 mean, degrees from the resting pitch
+tilt_command_every_s = [3.0, 8.0]  # a new height this often...
+tilt_tall_prob = 0.5               # ...half the time standing tall, otherwise anywhere in range
 
 [randomization]
 # Every episode gets a slightly different robot, so the policy works on the real one.
@@ -68,7 +80,7 @@ push_every_s = [3.0, 8.0]   # CHANGED: a shove every 3-8 s...
 push_pitch_rad_s = 12.0     # CHANGED: ...of up to this much pitch spin, either way
 
 [train]
-total_steps = 30000000
+total_steps = 80000000      # CHANGED: more inputs to learn, so a longer run
 n_envs = 0                  # 0 = one simulator per CPU thread
 n_steps = 256
 batch_size = 4096

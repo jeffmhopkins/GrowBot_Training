@@ -20,6 +20,8 @@ stance = 0.0            # bonus for standing taller than at rest (off: this walk
 stance_tol_deg = 6.0    # how close to the taller stance counts (degrees)
 back_lean = 0.0         # penalty for leaning back past the stance + margin (off here)
 back_lean_margin_deg = 12.0  # how far past the stance before that penalty starts
+speed_track_tol = 1.5   # with a speed input: pay drops to zero this far (x cap) from the wanted speed
+wobble = 0.0            # penalty for rocking (roll and pitch spin, squared; off here)
 
 [task]
 body = "rollout"            # "rollout" (upstream public build) or "olie" (enclosure build)
@@ -36,6 +38,14 @@ stand_lift_deg = 0.0        # stand this many degrees more nose-up than at rest
 lying_start_prob = 0.0      # share of episodes that start folded flat
 lying_leg_rad = [-0.95, -0.75]  # how far both legs tuck for a folded start (radians)
 back_fall_pitch_deg = 0.0   # count leaning past this pitch as falling backwards (0 = off)
+speed = "cap"               # "cap" always walk at the cap; "command" a speed input; "still" turn only
+speed_command_every_s = [3.0, 8.0]  # with a speed input: a new speed this often...
+speed_stop_prob = 0.3              # ...3 in 10 of them a stop...
+speed_back_min = -1.0              # ...the rest anywhere from backing away at full speed to +1
+tilt_command = false        # a camera-height input: -1 low (camera looks almost straight up), +1 tall
+tilt_lift_deg = [-30.0, 6.0]       # what -1 and +1 mean, degrees from the resting pitch
+tilt_command_every_s = [3.0, 8.0]  # a new height this often...
+tilt_tall_prob = 0.5               # ...half the time standing tall, otherwise anywhere in range
 
 [randomization]
 # Every episode gets a slightly different robot, so the policy works on the real one.

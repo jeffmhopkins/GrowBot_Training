@@ -72,7 +72,34 @@ def test_camera_walk_differs_only_where_it_says() -> None:
         ("task", "back_fall_pitch_deg"),
         ("randomization", "push_every_s"),
         ("randomization", "push_pitch_rad_s"),
+        ("task", "speed"),
+        ("task", "tilt_command"),
+        ("task", "episode_seconds"),
+        ("task", "retarget_every_s"),
+        ("train", "total_steps"),
     }
     assert cam["name"] == "camera_walk"
     marked = SHIPPED.with_name("camera_walk.toml").read_text().count("# CHANGED:")
     assert marked == len(changed)
+
+
+def test_look_differs_from_the_camera_walk_only_where_it_says() -> None:
+    look = config_mod.load(SHIPPED.with_name("look.toml")).to_dict()
+    cam = config_mod.load(SHIPPED.with_name("camera_walk.toml")).to_dict()
+    changed = {
+        (section, key)
+        for section, values in look.items()
+        if isinstance(values, dict)
+        for key, value in values.items()
+        if cam[section][key] != value
+    }
+    assert changed == {
+        ("reward", "heading"),
+        ("reward", "wobble"),
+        ("task", "retarget_every_s"),
+        ("task", "retarget_max_deg"),
+        ("task", "speed"),
+        ("train", "total_steps"),
+    }
+    assert look["name"] == "look"
+    assert SHIPPED.with_name("look.toml").read_text().count("# CHANGED:") == len(changed)

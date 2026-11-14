@@ -118,3 +118,17 @@ def test_live_files_match_what_the_launcher_serves(tiny_run: Path) -> None:
     finish(tiny_run)
     names = [p.name for p in (tiny_run / "live").iterdir() if not p.name.startswith(".")]
     assert names and all(allowed.match(n) for n in names), names
+
+
+def test_commanded_runs_show_speed_miss_and_the_commanded_height(tmp_path: Path) -> None:
+    cfg = Config()
+    cfg.task.speed = "command"
+    cfg.task.tilt_command = True
+    cfg.reward.stance = 0.5
+    live = Live(tmp_path, cfg, total_steps=1000)
+    m = {"v_along": 0.0, "speed": 0.01, "abs_err_deg": 10.0, "falls_per_1k_steps": 0.0}
+    live.update(10, {**m, "speed_miss": 0.004, "lift_deg": -2.0, "want_lift_deg": -3.0})
+    labels = {s["label"]: s["value"] for s in _progress(tmp_path)["summary"]}
+    assert "Toward target" not in labels
+    assert labels["Off commanded speed"].startswith("0.4 cm/s")
+    assert labels["Standing taller"] == "-2.0° (aim -3°)"

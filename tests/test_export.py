@@ -21,6 +21,7 @@ RUNNER_KNOWN = {
     "gyro_z",
     "cmd_forward",
     "cmd_yaw",
+    "cmd_pitch",
     "euler_roll",
     "euler_pitch",
     "euler_yaw",
@@ -83,3 +84,16 @@ def test_replay_page_embeds_the_walks(tiny_run: Path, tmp_path: Path) -> None:
     assert len(first["frames"]) == 26
     assert all(len(pose) == 7 for pose in first["frames"][0][0])
     assert len(first["frames"][0][0]) == len(first["shapes"])
+
+
+def test_speed_command_policy_declares_cmd_forward(tiny_speed_run: Path) -> None:
+    p = json.loads((tiny_speed_run / "policy_heading_walk.json").read_text())
+    chans = p["obs_spec"]["segments"][0]["channels"]
+    assert chans[chans.index("cmd_yaw") + 1] == "cmd_forward"
+    assert p["obs_size"] == len(chans) * p["obs_spec"]["segments"][0]["frames"]
+    assert p["obs_spec"]["cmd_forward"]["meaning"] == "speed_command"
+    assert p["training"]["speed"] == "command"
+    assert chans[chans.index("cmd_forward") + 1] == "cmd_pitch"
+    assert p["obs_spec"]["cmd_pitch"]["meaning"] == "camera_height"
+    pol = JsonPolicy(tiny_speed_run / "policy_heading_walk.json")
+    assert run_episode(env_for(pol), pol, seed=0, options={})["fell"] in (0.0, 1.0)

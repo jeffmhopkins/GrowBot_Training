@@ -121,16 +121,28 @@ class Live:
         ]
         m = self.latest
         if m:
+            if self.cfg.task.speed == "cap" or "speed_miss" not in m:
+                summary.append(
+                    {
+                        "label": "Toward target",
+                        "value": f"{m['v_along'] * 100:.1f} cm/s (cap {cap:.1f})",
+                    }
+                )
+            else:
+                # Stops and back-aways are mixed in, so the useful number is how far off
+                # the commanded speed it walks.
+                summary.append(
+                    {
+                        "label": "Off commanded speed",
+                        "value": f"{m['speed_miss'] * 100:.1f} cm/s (cap {cap:.1f})",
+                    }
+                )
             summary += [
-                {
-                    "label": "Toward target",
-                    "value": f"{m['v_along'] * 100:.1f} cm/s (cap {cap:.1f})",
-                },
                 {"label": "Heading error", "value": f"{m['abs_err_deg']:.0f}°"},
                 {"label": "Falls", "value": f"{m['falls_per_1k_steps']:.1f} per 1,000 steps"},
             ]
             if self.cfg.reward.stance and "lift_deg" in m:
-                want = self.cfg.task.stand_lift_deg
+                want = m.get("want_lift_deg", self.cfg.task.stand_lift_deg)
                 summary.append(
                     {
                         "label": "Standing taller",
