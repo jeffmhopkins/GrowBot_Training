@@ -18,7 +18,7 @@ There are three walks, each a config file:
 | --- | --- | --- | --- |
 | [`heading_walk.toml`](configs/heading_walk.toml) | nose first | its resting stance (about 34 degrees nose-up) | standing |
 | [`camera_walk.toml`](configs/camera_walk.toml) | **tail first, toward what the phone's camera sees** | a few degrees taller, to lift the camera's view | standing (folded starts and shoves come back once it can scoot) |
-| [`tall_waddle.toml`](configs/tall_waddle.toml) | tail first, from upstream's live-app waddle; backs away nose first | tall (about 61 degrees) to walk, low to back away | standing |
+| [`tall_waddle.toml`](configs/tall_waddle.toml) | tail first, from upstream's live-app waddle; backs away nose first | tall, whatever the waddle holds (about 60 degrees, more on longer legs) | standing |
 
 See [The camera walk](#the-camera-walk) for why the second one exists and what it can and
 can't do with this body.
@@ -281,8 +281,9 @@ starts from that rhythm (`configs/gaits/tall_waddle.json`, cloned before PPO wit
 `train.warm_gait`, the policy's clock set to the rhythm's rate) and retrains it on the
 printed build with the camera walk's inputs: the heading to face, and a signed speed
 (walk to the target camera first, stop and face it, or back away, nose first, the
-body's easy direction). The speed changes every few seconds, so it also learns to drop
-from the tall stance and get back up. Upstream's 4-degree correction isn't carried over:
+body's easy direction). Nothing rewards a height: randomised bodies waddle anywhere from
+60 to 80 degrees, so the stance bonus and the lean-back penalty are off, and only going
+over backwards (past 88) or forwards ends an episode. Upstream's 4-degree correction isn't carried over:
 it reads different inputs, and in this simulator the rhythm with or without it only
 shuffles in place, so the direction is PPO's to find. Only the lines marked CHANGED
 differ from the camera walk. From JBrain it's the "GrowBot tall waddle" job.
