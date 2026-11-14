@@ -108,6 +108,11 @@ def build_policy(model: PPO, norm: Any, cfg: config_mod.Config, name: str) -> di
                 # Which end walks first and counts as "ahead" for the error: "nose", or
                 # "camera" (the tail end, where the phone's rear camera looks).
                 "facing": cfg.task.facing,
+                # "body": from that end's direction. "lens": from where the phone's rear
+                # camera points (the torso's up axis, projected flat; it blends into the
+                # tail end within about 20 degrees of straight up) — what a face's
+                # left-right position in the camera image gives directly.
+                "heading_from": cfg.task.heading_from,
             },
         },
         "training": {

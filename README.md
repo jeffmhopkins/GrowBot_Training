@@ -296,10 +296,13 @@ turns out wobbly, `configs/look.toml` trains a specialist that never walks
 seconds by up to half a turn, so it learns to spin round to what is behind it (turning
 on the spot manages about 8 degrees a second). Facing it pays three times as much,
 turning toward it pays double (`reward.turn`), and rocking costs (`reward.wobble`).
-Facing is scored where the camera actually points (`task.heading_from = "lens"`: the
-phone's optical axis, projected flat), not the body's tail end, and leaning costs four
-times as much (`reward.tilt = 4`). An earlier run leaned toward the target instead of
-turning: a lean swings the lens but never the tail end, and leaning was cheap. It keeps the camera height input. Unlike the camera walk it trains on
+Facing is scored on the camera (`task.heading_from = "lens"`): the heading is where
+the phone's lens points, projected flat, and the reward takes the worse of that and the
+body's own heading, so swinging the lens over with a roll earns nothing and only turning
+the whole body does. Leaning costs four times as much (`reward.tilt = 4`), and the
+lowest camera height is 20 degrees under rest rather than 30, so the lens never looks
+straight up and loses its heading. An earlier run leaned toward the target instead of
+turning, because leaning was cheap. It keeps the camera height input. Unlike the camera walk it trains on
 the printed build with bare-print surfaces (see [Bodies](#bodies)), like the heading walk.
 It's the camera walk otherwise, and only the lines marked CHANGED differ from that file.
 From JBrain it's the "GrowBot look" job.

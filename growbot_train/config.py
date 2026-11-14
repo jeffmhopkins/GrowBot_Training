@@ -86,8 +86,9 @@ class TaskConfig:
     # With facing "camera", where the heading is read from. "body" is the tail end's
     # direction, which leaning and rolling don't move. "lens" is where the phone's rear
     # camera actually points (its optical axis, the body's up axis, projected flat): the
-    # body's tail end at rest, but rolling sideways swings it. Scored on the lens, a
-    # policy can't count a lean that leaves the face out of frame as facing it.
+    # body's tail end at rest, but rolling sideways swings it. With "lens", facing is
+    # scored on the worse of the lens and body errors, so a roll that swings the lens
+    # toward the target while the body stays put earns nothing: only turning does.
     heading_from: str = "body"
     # How much higher than its resting stance to hold the body (nose-up pitch, degrees).
     # Only rewarded when reward.stance > 0; the tilt penalty then measures from this

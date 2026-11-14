@@ -41,7 +41,7 @@ history_frames = 5          # how many past ticks of sensors the policy sees
 action_to_rad = 1.0         # full action = 1 radian (~57 degrees) of leg swing
 fall_tilt_deg = 55.0        # tipped this far from the starting stance = fallen (the app aborts at 55)
 facing = "camera"           # as camera walk: tail first, toward what the camera sees
-heading_from = "lens"       # CHANGED: score where the camera actually points, so leaning toward the target is not facing it
+heading_from = "lens"       # CHANGED: facing is scored on the worse of where the camera points and where the body points, so a lean earns nothing
 stand_lift_deg = 6.0        # as camera walk: about all this body can lift (see README)
 lying_start_prob = 0.0      # as camera walk: off for now
 lying_leg_rad = [-0.95, -0.75]  # how far both legs tuck for a folded start (radians)
@@ -51,7 +51,7 @@ speed_command_every_s = [3.0, 8.0]  # a new speed this often...
 speed_stop_prob = 0.3              # ...3 in 10 of them a stop (turn on the spot to face it)...
 speed_back_min = -1.0              # ...the rest anywhere from backing away at full speed to +1
 tilt_command = true         # as camera walk: a camera-height input: -1 low (camera looks almost straight up), +1 tall
-tilt_lift_deg = [-30.0, 6.0]       # what -1 and +1 mean, degrees from the resting pitch
+tilt_lift_deg = [-20.0, 6.0]       # CHANGED: -1 and +1 in degrees from the resting pitch; not as low, so the lens never looks straight up and loses its heading
 tilt_command_every_s = [3.0, 8.0]  # a new height this often...
 tilt_tall_prob = 0.5               # ...half the time standing tall, otherwise anywhere in range
 

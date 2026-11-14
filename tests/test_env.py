@@ -541,3 +541,71 @@ def test_heading_from_must_be_body_or_lens() -> None:
     cfg.task.heading_from = "nose"
     with pytest.raises(ValueError):
         GrowBotHeadingEnv(cfg)
+
+
+def _lens_env() -> GrowBotHeadingEnv:
+    cfg = Config()
+    cfg.task.facing = "camera"
+    cfg.task.heading_from = "lens"
+    env = GrowBotHeadingEnv(cfg)
+    env.reset(seed=0, options={"nominal": True})
+    return env
+
+
+def _xm(lx: float, ly: float) -> np.ndarray:
+    # Only the third column (the torso's up axis, the lens) is read.
+    xm = np.zeros(9)
+    xm[2], xm[5] = lx, ly
+    return xm
+
+
+def test_the_lens_heading_blends_into_the_tail_near_straight_up() -> None:
+    from growbot_train.env import LENS_BLEND
+
+    tail = 0.0
+    # A lens 30 degrees off the tail: far from vertical it reads the lens alone...
+    far = GrowBotHeadingEnv._lens_deg(_xm(0.8 * math.cos(0.52), 0.8 * math.sin(0.52)), tail)
+    assert abs(far - math.degrees(0.52)) < 1e-6
+    # ...and across the blend edge it changes smoothly, with no snap.
+    eps = 1e-4
+    at = [
+        GrowBotHeadingEnv._lens_deg(_xm(r * math.cos(0.52), r * math.sin(0.52)), tail)
+        for r in (LENS_BLEND + eps, LENS_BLEND - eps)
+    ]
+    assert abs(at[0] - at[1]) < 0.1
+    # Pointing almost straight up, the compass direction is the tail's.
+    up = GrowBotHeadingEnv._lens_deg(_xm(1e-4 * math.cos(1.5), 1e-4 * math.sin(1.5)), tail)
+    assert abs(up - tail) < 0.1
+
+
+def test_a_lens_tipped_past_vertical_reads_the_tail() -> None:
+    # Pointing back over the nose, the lens would read half a turn off; the tail stands in.
+    assert GrowBotHeadingEnv._lens_deg(_xm(-0.6, 0.1), 0.0) == 0.0
+
+
+def test_a_roll_toward_the_target_earns_no_heading_reward() -> None:
+    env = _lens_env()
+    body = env.body_yaw_deg()
+    # Target 20 degrees off; then roll so the lens swings toward it, the body staying put.
+    env.target_deg = wrap_deg(body + 20.0)
+    still = env.scored_err_deg()
+    q = env.data.qpos[3:7].copy()
+    for sign in (1.0, -1.0):
+        env.data.qpos[3:7] = q
+        roll = np.array([math.cos(0.15), sign * math.sin(0.15), 0.0, 0.0])
+        mujoco.mju_mulQuat(env.data.qpos[3:7], q, roll)
+        mujoco.mj_forward(env.model, env.data)
+        assert abs(wrap_deg(env.body_yaw_deg() - body)) < 1.0
+        # Whichever way the lens swings, the scored error never drops below the body's.
+        assert env.scored_err_deg() >= still - 1.0
+
+
+def test_the_shipped_look_config_scores_the_lens() -> None:
+    from pathlib import Path
+
+    from growbot_train import config as config_mod
+
+    cfg = config_mod.load(Path(__file__).parent.parent / "configs" / "look.toml")
+    assert cfg.task.heading_from == "lens"
+    env = GrowBotHeadingEnv(cfg)
+    assert env._lens

@@ -32,6 +32,9 @@ from growbot_train.config import Config
 from growbot_train.surfaces import FLOORS, SURFACES, split_contacts, surface_geoms
 
 BODIES_DIR = Path(__file__).parent / "bodies"
+# Below this flat length of the lens axis (about 20 degrees from straight up) the lens
+# heading blends into the tail end.
+LENS_BLEND = 0.35
 CONTROL_DT = 0.04  # 25 Hz, the rate the app's runner ticks at
 CHANNELS: tuple[str, ...] = (
     "accel_x",
@@ -506,7 +509,9 @@ class GrowBotHeadingEnv(gym.Env):
         a = np.tanh(np.clip(np.asarray(action, dtype=np.float64), -ACTION_LIMIT, ACTION_LIMIT))
         self._actuate(a * cfg.task.action_to_rad)
         p0 = d.qpos[0:2].copy()
-        yaw0 = self.yaw_deg()
+        # Headings before the step; the error is taken against the target after any
+        # retarget below, so a retarget itself pays no turn reward.
+        yaw0, body0 = self.yaw_deg(), self.body_yaw_deg()
         for _ in range(self.n_substeps):
             mujoco.mj_step(m, d)
         self.step_index += 1
@@ -554,17 +559,18 @@ class GrowBotHeadingEnv(gym.Env):
                 miss = max(0.0, miss - r.stop_drift_free * cap)
             gain = (float(np.linalg.norm(want)) - miss) / cap
             progress = r.progress * max(-1.0, gain)
+        err_score = self.scored_err_deg()
+        err0 = self.scored_err_deg(yaw0, body0)
         terms = {
             "progress": progress,
-            "heading": r.heading * (1 + math.cos(math.radians(err_true))) / 2,
+            "heading": r.heading * (1 + math.cos(math.radians(err_score))) / 2,
             "overspeed": -r.overspeed * (max(0.0, speed - cap) / cap) ** 2,
             "tilt": -r.tilt * (1 - tall_cos),
             "action_rate": -r.action_rate * float(np.sum((a - self.prev_action) ** 2)),
             "effort": -r.effort * float(np.sum(a**2)),
         }
         if r.turn:
-            before = abs(wrap_deg(self.target_deg - yaw0))
-            terms["turn"] = r.turn * (before - abs(err_true))
+            terms["turn"] = r.turn * (err0 - err_score)
         if r.wobble:
             # Free-joint angular velocity is in the body frame: x is roll, y is pitch.
             terms["wobble"] = -r.wobble * float(d.qvel[3] ** 2 + d.qvel[4] ** 2)
@@ -673,15 +679,47 @@ class GrowBotHeadingEnv(gym.Env):
         return self.data.xmat[self._torso][6:9].copy()
 
     def yaw_deg(self) -> float:
-        """The heading of the end that walks first (task.facing), degrees CCW from +x."""
+        """The heading scored and fed to the policy, degrees CCW from +x: the end that
+        walks first (task.facing), or with heading_from "lens" where the camera points."""
         xm = self.data.xmat[self._torso]
         nose = math.degrees(math.atan2(xm[3], xm[0]))
         tail = wrap_deg(nose + 180.0)
-        # The lens looks along the torso's up axis. Within about 10 degrees of straight up
-        # its compass direction is noise, so the tail end stands in for it there.
-        if self._lens and math.hypot(xm[2], xm[5]) > 0.17:
-            return math.degrees(math.atan2(xm[5], xm[2]))
+        if self._lens:
+            return self._lens_deg(xm, tail)
         return tail if self._camera_first else nose
+
+    def scored_err_deg(self, yaw: float | None = None, body: float | None = None) -> float:
+        """The heading error the reward pays on, degrees, 0..180, now or for the given
+        headings. With heading_from "lens" it is the worse of the lens and body errors: a
+        roll swings the lens but never the body, so leaning toward the target earns
+        nothing; the body has to turn and the camera has to end up on it."""
+        yaw = self.yaw_deg() if yaw is None else yaw
+        err = abs(wrap_deg(self.target_deg - yaw))
+        if self._lens:
+            body = self.body_yaw_deg() if body is None else body
+            err = max(err, abs(wrap_deg(self.target_deg - body)))
+        return err
+
+    def body_yaw_deg(self) -> float:
+        """The tail (camera_first) or nose heading, which no roll or pitch moves."""
+        xm = self.data.xmat[self._torso]
+        nose = math.degrees(math.atan2(xm[3], xm[0]))
+        return wrap_deg(nose + 180.0) if self._camera_first else nose
+
+    @staticmethod
+    def _lens_deg(xm: np.ndarray, tail: float) -> float:
+        # The lens looks along the torso's up axis, projected flat. Near straight up its
+        # compass direction is noise, so it blends smoothly into the tail end below
+        # LENS_BLEND (a hard switch let a pitch change snap the heading by tens of
+        # degrees); nose-down past vertical it would point at the nose, so the tail
+        # stands in there too.
+        tr = math.radians(tail)
+        tx, ty = math.cos(tr), math.sin(tr)
+        lx, ly = xm[2], xm[5]
+        if lx * tx + ly * ty <= 0:
+            return tail
+        w = max(0.0, LENS_BLEND - math.hypot(lx, ly)) / LENS_BLEND
+        return math.degrees(math.atan2(ly + w * ty, lx + w * tx))
 
     def _observe_heading(self, force: bool = False) -> None:
         if not force and self.step_index % self.ep.heading_refresh:

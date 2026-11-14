@@ -105,6 +105,7 @@ def test_look_differs_from_the_camera_walk_only_where_it_says() -> None:
         ("reward", "turn"),
         ("reward", "tilt"),
         ("task", "heading_from"),
+        ("task", "tilt_lift_deg"),
         ("task", "retarget_max_deg"),
         ("reward", "speed_cap_m_s"),
         ("reward", "overspeed"),
