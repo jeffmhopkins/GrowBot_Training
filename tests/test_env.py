@@ -130,3 +130,45 @@ def test_levelling_is_a_pure_tilt() -> None:
     # A nose-up pitch is undone by pitching, so the nose (x) stays in the x-z plane.
     R = _rot_onto_z(np.array([5.59, 0.0, 8.06]))
     assert abs((R @ [1.0, 0, 0])[1]) < 1e-12
+
+
+def test_camera_facing_measures_heading_from_the_tail() -> None:
+    nose, cam = _env(), _env(facing="camera")
+    for env in (nose, cam):
+        env.reset(seed=3, options={"nominal": True})
+    # Same seed, same pose: the camera end points exactly the other way.
+    assert wrap_deg(cam.yaw_deg() - nose.yaw_deg() - 180.0) == pytest.approx(0.0, abs=1e-6)
+    obs, _ = cam.reset(seed=3, options={"nominal": True, "target_error_deg": 0.0})
+    assert ch(obs, "cmd_yaw") == pytest.approx(0.0, abs=1e-6)
+    with pytest.raises(ValueError):
+        _env(facing="sideways")
+
+
+def test_folded_start_lies_flatter_and_holds_its_legs() -> None:
+    env = _env(lying_start_prob=1.0)
+    env.reset(seed=0, options={"nominal": True})
+    rest = env._rest_pitch
+    _, _, _, _, info = env.step(np.arctanh(env.prev_action * 0.999))
+    assert info["lift_deg"] < -10.0  # folded: well below its standing pitch
+    assert env.prev_action.max() < -0.7  # the policy starts from where the legs are
+    # Levelling still happened on neutral legs, so "level" is the standing stance.
+    env2 = _env()
+    env2.reset(seed=0, options={"nominal": True})
+    assert rest == pytest.approx(env2._rest_pitch, abs=1e-6)
+
+
+def test_stance_bonus_pays_for_standing_taller() -> None:
+    cfg = Config()
+    cfg.task.stand_lift_deg = 6.0
+    cfg.reward.stance = 0.5
+    env = GrowBotHeadingEnv(cfg)
+    env.reset(seed=0, options={"nominal": True})
+    _, _, _, _, rest = env.step(np.zeros(2))
+    env.reset(seed=0, options={"nominal": True})
+    for _ in range(40):
+        _, _, _, _, tall = env.step(np.full(2, np.arctanh(0.9)))
+    assert tall["lift_deg"] > 4.0
+    assert tall["terms"]["stance"] > rest["terms"]["stance"]
+    plain = _env()
+    plain.reset(seed=0)
+    assert "stance" not in plain.step(np.zeros(2))[4]["terms"]  # off by default

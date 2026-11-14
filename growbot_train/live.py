@@ -128,6 +128,14 @@ class Live:
                 {"label": "Heading error", "value": f"{m['abs_err_deg']:.0f}°"},
                 {"label": "Falls", "value": f"{m['falls_per_1k_steps']:.1f} per 1,000 steps"},
             ]
+            if self.cfg.reward.stance and "lift_deg" in m:
+                want = self.cfg.task.stand_lift_deg
+                summary.append(
+                    {
+                        "label": "Standing taller",
+                        "value": f"{m['lift_deg']:+.1f}° (aim {want:+.0f}°)",
+                    }
+                )
         if self.replay_steps is not None:
             summary.append({"label": "Latest replay", "value": f"at {self.replay_steps:,} steps"})
         doc = {

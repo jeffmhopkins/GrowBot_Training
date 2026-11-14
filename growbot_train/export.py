@@ -55,6 +55,7 @@ def build_policy(model: PPO, norm: Any, cfg: config_mod.Config, name: str) -> di
     std = np.sqrt(np.asarray(norm.obs_rms.var, dtype=np.float64) + norm.epsilon)
     n = mean.shape[0]
     frames = cfg.task.history_frames
+    front = "nose" if cfg.task.facing == "nose" else "camera end (its tail)"
     if n != frames * len(CHANNELS):
         raise ValueError(f"normaliser has {n} inputs, config expects {frames * len(CHANNELS)}")
     return {
@@ -100,9 +101,12 @@ def build_policy(model: PPO, norm: Any, cfg: config_mod.Config, name: str) -> di
                 "scale": "degrees / 180",
                 "range": [-1, 1],
                 "sign": (
-                    "positive when the target is counter-clockwise of the robot's nose "
-                    "seen from above, i.e. turn left"
+                    "positive when the target is counter-clockwise of the robot's "
+                    f"{front} seen from above, i.e. turn left"
                 ),
+                # Which end walks first and counts as "ahead" for the error: "nose", or
+                # "camera" (the tail end, where the phone's rear camera looks).
+                "facing": cfg.task.facing,
             },
         },
         "training": {

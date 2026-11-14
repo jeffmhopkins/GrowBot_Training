@@ -16,6 +16,8 @@ tilt = 1.0              # penalty for leaning away from how it stood at the star
 fall = 10.0             # one-off penalty when it tips past fall_tilt_deg (episode ends)
 action_rate = 0.05      # penalty for jerky leg commands (change since last tick, squared)
 effort = 0.01           # small penalty for big leg angles
+stance = 0.0            # bonus for standing taller than at rest (off: this walk keeps its stance)
+stance_tol_deg = 6.0    # how close to the taller stance counts (degrees)
 
 [task]
 body = "rollout"            # "rollout" (upstream public build) or "olie" (enclosure build)
@@ -27,6 +29,10 @@ gait_hz = 1.0               # the clock the policy sees; roughly one step cycle 
 history_frames = 5          # how many past ticks of sensors the policy sees
 action_to_rad = 1.0         # full action = 1 radian (~57 degrees) of leg swing
 fall_tilt_deg = 55.0        # tipped this far from the starting stance = fallen (the app aborts at 55)
+facing = "nose"             # which end walks first: "nose", or "camera" (the tail end)
+stand_lift_deg = 0.0        # stand this many degrees more nose-up than at rest
+lying_start_prob = 0.0      # share of episodes that start folded flat
+lying_leg_rad = [-1.2, -0.8]  # how far the legs tuck for a folded start
 
 [randomization]
 # Every episode gets a slightly different robot, so the policy works on the real one.
