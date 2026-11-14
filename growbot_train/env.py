@@ -407,6 +407,8 @@ class GrowBotHeadingEnv(gym.Env):
         else:
             want = self.speed_cmd * cap * np.array([math.cos(tr), math.sin(tr)])
             miss = speed_miss = float(np.linalg.norm(self.vel_avg - want))
+            if self.speed_cmd == 0.0:
+                miss = max(0.0, miss - r.stop_drift_free * cap)
             gain = (float(np.linalg.norm(want)) - miss) / cap
             progress = r.progress * max(-1.0, gain)
         terms = {

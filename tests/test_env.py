@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import math
 
 import numpy as np
@@ -279,6 +280,32 @@ def test_standing_still_never_pays(speed: str) -> None:
         for _ in range(25):
             _, _, _, _, info = env.step(np.zeros(2))
         assert abs(info["terms"]["progress"]) < 0.2 * cfg.reward.progress
+
+
+def test_a_stop_lets_it_drift_a_little_for_free() -> None:
+    cfg = Config()
+    cfg.task.speed = "still"
+    env = GrowBotHeadingEnv(cfg)
+    env.reset(seed=0, options={"nominal": True})
+    cap = cfg.reward.speed_cap_m_s
+    terms = []
+    for drift in (0.3 * cap, 2.0 * cap):
+        env.vel_avg = np.array([drift, 0.0])
+        env.data.qvel[0:2] = env.vel_avg
+        _, _, _, _, info = env.step(np.zeros(2))
+        terms.append(info["terms"]["progress"])
+    assert terms[0] == 0.0
+    assert terms[1] < -0.5 * cfg.reward.progress
+
+
+def test_old_runs_with_a_retired_setting_still_load(tmp_path) -> None:
+    from growbot_train.config import load
+
+    old = Config().to_dict()
+    old["reward"]["speed_track_tol"] = 1.5
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps(old))
+    assert load(path).reward.progress == Config().reward.progress
 
 
 def test_walking_as_commanded_pays_in_full() -> None:
