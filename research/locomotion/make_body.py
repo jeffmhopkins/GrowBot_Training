@@ -6,30 +6,48 @@ printed body is a 163 x 75 mm tray closed by a backplate, about 30 mm deep, with
 MG90S servos in a cradle at mid-length, so the hip sits about 18 mm above the underside
 and each leg reaches 74 mm from axle to tip. Measured from the STLs:
 
-    body tray   163.4 x 75.4 x 25.0 mm, 38.3 cm^3, centroid 8.9 mm below its rim plane
+    body tray   163.4 x 75.4 x 25.0 mm (141 along its bottom), 38.3 cm^3, centroid 8.9 mm
+                below its rim plane
     backplate   168 x 80 mm lid, 44.5 cm^3, servo axle 2.6 mm above the tray rim
     leg         21 x 13 mm bar, axle to tip 74 mm, 21.1 cm^3
 
 Masses are estimates (PLA 1.24 g/cm^3, thin-walled parts printed nearly solid, the chunky
-legs about half full), and the phone is a Pixel 10 (152.8 x 72 x 8.6 mm, 204 g) centred
-on the backplate, camera at the nose end, batteries at the tail end as upstream's BUILD.md
-says. The bench randomises mass and centre of mass around these anyway.
+legs about half full), and the phone is a Pixel 10 in an OtterBox Defender Pro XT case
+(254 g) centred on the backplate, camera at the nose end, batteries at the tail end as
+upstream's BUILD.md says. The tray's ends are cut back at the bottom, one end more than
+the other (ENDS). The bench randomises mass and centre of mass around these anyway.
 
     python research/locomotion/make_body.py   # rewrites growbot_train/bodies/build.xml
 """
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 import numpy as np
 
-HALF = np.array([0.0817, 0.0385, 0.0149])  # the closed body, a box (m, half extents)
+HALF = np.array([0.0817, 0.0385, 0.0149])  # the closed body's bounding box (m, half extents)
+TRAY_TOP = HALF[2] - 0.0048  # tray rim, under the backplate
+PLATE_HALF = (0.084, 0.040)  # the backplate overhangs the tray a little all round
+# The tray's ends are cut back at the bottom (Jeff's print, 2026-11-14). Measured from the
+# STL's outline along its length: (end at the bottom, end where the cut meets the wall,
+# height of that meeting above the bottom), metres. One end is cut longer and shallower
+# (about 30 degrees from upright) than the other (about 45). TAIL_END says which is the
+# tail, where the batteries sit; flip it if the build is the other way round.
+ENDS = {
+    "shallow": (0.0715, 0.0805, 0.0156),
+    "steep": (0.0686, 0.0801, 0.0115),
+}
+TAIL_END = "shallow"
+NOSE_END = "steep" if TAIL_END == "shallow" else "shallow"
 AXLE_Z = -HALF[2] + 0.0185  # servo axle height in the body frame (origin at box centre)
 LEG_REACH = 0.074
 LEG_Y = 0.0485  # leg centre: backplate wall at 40 mm, servo spline and horn, half the leg
 LEG_MASS = 0.015
-PHONE = {"size": (0.1528, 0.072, 0.0086), "mass": 0.204}
+# A Pixel 10 (204 g) in an OtterBox Defender Pro XT (50 g; 163.8 x 84.1 x 14.2 mm over
+# the camera bar, from Google's store listing), screen out, centred on the backplate.
+PHONE = {"size": (0.1638, 0.0841, 0.0142), "mass": 0.254}
 
 # (name, mass kg, centre xyz m, full size xyz m) in the body frame: x toward the nose
 # (the end the legs push toward easily), z out of the backplate (where the phone sits).
@@ -53,6 +71,55 @@ def torso_inertial() -> tuple[float, np.ndarray, np.ndarray]:
         r = np.array(c) - com
         inertia += box + mi * (r @ r * np.eye(3) - np.outer(r, r))
     return m, com, inertia
+
+
+def _box(name: str, x0: float, x1: float, z0: float, z1: float, hy: float) -> str:
+    return (
+        f'      <geom name="{name}" type="box" size="{(x1 - x0) / 2:.5f} {hy:.5f} '
+        f'{(z1 - z0) / 2:.5f}" pos="{(x0 + x1) / 2:.5f} 0 {(z0 + z1) / 2:.5f}" '
+        'rgba="0.15 0.15 0.15 1"/>'
+    )
+
+
+def _cut(name: str, sign: float, end: tuple[float, float, float], hy: float) -> str:
+    """A thin box lying on the cut face, reaching inward (into the tray), so its outer
+    face is the cut and nothing pokes out of the outline."""
+    bottom, top, height = end
+    z_bot = -HALF[2]
+    a = np.array([sign * bottom, z_bot])
+    b = np.array([sign * top, z_bot + height])
+    length = float(np.linalg.norm(b - a))
+    along = (b - a) / length
+    inward = np.array([-along[1], along[0]])
+    if inward @ -((a + b) / 2) < 0:  # point it toward the middle of the body
+        inward = -inward
+    thick = 0.002
+    c = (a + b) / 2 + inward * thick
+    # The box's x axis runs along the cut: rotate about y by the cut's angle.
+    ang = -math.atan2(along[1], along[0])
+    return (
+        f'      <geom name="{name}" type="box" size="{length / 2:.5f} {hy:.5f} {thick:.5f}" '
+        f'pos="{c[0]:.5f} 0 {c[1]:.5f}" euler="0 {math.degrees(ang):.4f} 0" '
+        'rgba="0.15 0.15 0.15 1"/>'
+    )
+
+
+def shell() -> str:
+    """The tray and backplate as boxes, ends cut back at the bottom."""
+    hy = 0.0377
+    tb, tt, th = ENDS[TAIL_END]
+    nb, nt, nh = ENDS[NOSE_END]
+    z_bot = -HALF[2]
+    return "\n".join(
+        [
+            _box("torso_core", -tb, nb, z_bot, TRAY_TOP, hy),
+            _box("torso_tail_wall", -tt, -tb, z_bot + th, TRAY_TOP, hy),
+            _box("torso_nose_wall", nb, nt, z_bot + nh, TRAY_TOP, hy),
+            _cut("torso_tail_cut", -1.0, ENDS[TAIL_END], hy),
+            _cut("torso_nose_cut", 1.0, ENDS[NOSE_END], hy),
+            _box("torso_plate", -PLATE_HALF[0], PLATE_HALF[0], TRAY_TOP, HALF[2], PLATE_HALF[1]),
+        ]
+    )
 
 
 def xml() -> str:
@@ -83,7 +150,7 @@ def xml() -> str:
     <body name="base_body" pos="0 0 0.3">
       <joint name="root_joint" type="free"/>
       <inertial pos="{com[0]:.6f} {com[1]:.6f} {com[2]:.6f}" mass="{m:.6f}" fullinertia="{full}"/>
-      <geom name="torso_geom" type="box" size="{HALF[0]} {HALF[1]} {HALF[2]}" rgba="0.15 0.15 0.15 1"/>
+{shell()}
       <site name="imu" pos="0 0 {HALF[2] + ph[2] / 2}" size="0.005"/>
       <geom name="phone" type="box" size="{ph[0] / 2} {ph[1] / 2} {ph[2] / 2}" pos="0 0 {HALF[2] + ph[2] / 2}" contype="0" conaffinity="0" mass="0" rgba="0.3 0.3 0.35 1"/>
 {legs}

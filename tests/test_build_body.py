@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import math
 
+import mujoco
 import numpy as np
 import pytest
 from stable_baselines3 import PPO
@@ -42,13 +43,29 @@ def test_build_body_sits_on_its_tail_and_materials_land_on_their_surfaces() -> N
 
 
 def test_random_robots_all_start_resting_on_their_tails() -> None:
+    # Two ways to rest: on the tail's bottom edge and the feet (about 40 degrees), or
+    # flat on the tail's cut face (about 60, the cut is 30 degrees off upright).
     env = GrowBotHeadingEnv(_build_cfg(("pla",) * 4))
     for seed in range(60):
         env.reset(seed=seed)
-        assert 20 < env._rest_pitch < 60, (seed, env._body_params["leg_scale"])
+        assert 25 < env._rest_pitch < 65, (seed, env._body_params["leg_scale"])
     for scale in (0.85, 1.15):
         env.reset(seed=0, options={"overrides": {"leg_scale": [scale, scale]}})
-        assert 20 < env._rest_pitch < 60, scale
+        assert 25 < env._rest_pitch < 65, scale
+
+
+def test_the_tail_is_the_cut_back_end_and_the_legs_draw_once() -> None:
+    env = GrowBotHeadingEnv(_build_cfg(("pla",) * 4))
+    env.reset(seed=0, options={"nominal": True})
+    m, d = env.model, env.data
+    tail = set(env._surface_geoms["tail"])
+    assert {m.geom(g).name for g in tail} >= {"tail_0", "tail_1"}
+    floor = m.geom("floor").id
+    hits = {c.geom1 if c.geom2 == floor else c.geom2 for c in d.contact[: d.ncon]}
+    assert hits & tail and not hits & set(env._surface_geoms["belly"])
+    # Each leg's mass box is hidden: its two contact halves draw it.
+    for leg in env._leg_all:
+        assert sum(m.geom_rgba[g, 3] > 0 for g in leg) == 2
 
 
 def test_floors_and_surface_friction_are_drawn_per_episode() -> None:
@@ -70,12 +87,15 @@ def test_floors_and_surface_friction_are_drawn_per_episode() -> None:
 
 
 @pytest.mark.parametrize("scale", [1.04, 1.1, 1.15])
-def test_longer_legs_stand_on_the_floor_with_both_toes(scale) -> None:
+def test_longer_legs_stand_on_the_floor_not_in_it(scale) -> None:
     env = GrowBotHeadingEnv(_build_cfg(("pla",) * 4))
     env.reset(seed=0, options={"overrides": {"leg_scale": [scale, scale]}})
     m, d = env.model, env.data
     for g in env._leg_all[0]:
         assert m.geom_size[g, 2] == pytest.approx(env._leg_half[0])
+    d.ctrl[:] = 0.5  # swing the feet down onto the floor
+    for _ in range(200):
+        mujoco.mj_step(m, d)
     floor = m.geom("floor").id
     touching = set()
     for c in d.contact[: d.ncon]:
@@ -187,3 +207,12 @@ def test_cloning_refuses_a_clock_that_does_not_match(tmp_path) -> None:
     model = PPO("MlpPolicy", vec, n_steps=64, batch_size=64, device="cpu")
     with pytest.raises(ValueError, match="gait_hz"):
         clone_gait(model, vec, cfg, Keyframes.load(_gait_json(tmp_path, 2.0)), 64, 1)
+
+
+def test_the_replay_draws_each_leg_once() -> None:
+    from growbot_train.replay import _geoms
+
+    env = GrowBotHeadingEnv(_build_cfg(("pla",) * 4))
+    drawn = set(_geoms(env))
+    for leg in env._leg_all:
+        assert len(drawn & set(leg)) == 2
