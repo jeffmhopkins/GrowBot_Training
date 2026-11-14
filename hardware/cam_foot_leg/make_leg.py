@@ -32,8 +32,8 @@ from pathlib import Path
 import manifold3d as mf
 import numpy as np
 from shapely import affinity
-from shapely.geometry import LineString, Point, Polygon
-from shapely.ops import unary_union
+from shapely.geometry import LineString, MultiPoint, Point, Polygon
+from shapely.ops import unary_union, voronoi_diagram
 
 HERE = Path(__file__).resolve().parent
 
@@ -56,12 +56,15 @@ HUB_R = 10.5  # the stock leg's rounded top, centred on the axle
 HUB_BOX = ((-5.0, 5.0), (-THICK - 0.5, 0.5), (-20.0, 6.0))
 
 CHAMFER = 0.8  # on every edge of both faces, as 0.2 mm layer steps
-SOLE_BAND = 6.0  # solid rim behind the sole
-FLANK_WALL = 4.0
-HUB_KEEP = 25.0  # solid round the hub: the slot reaches 19.1 mm below the axle
-SPOKE_W = 4.0
-ARCH_R = 44.0
-WINDOW_ROUND = 2.5
+SOLE_BAND = 5.0  # solid rim behind the sole
+FLANK_WALL = 3.0
+HUB_KEEP = 25.0  # where the ribs start thinning: the slot reaches 19.1 mm below the axle
+HUB_WALL = 4.5  # round the horn slot, a little more than the stock leg's 3.5 at its tip
+CELL_COUNT = 12
+CELL_SEED = 9
+RIB_MIN, RIB_MAX = 2.2, 3.4
+CELL_ROUND = 2.6
+CELL_MIN_AREA = 12.0
 LABEL_DEPTH = 0.6
 
 
@@ -107,38 +110,60 @@ def outline(dip: float) -> Polygon:
     return poly.buffer(-0.6, join_style="round").buffer(0.6, join_style="round")
 
 
+def _boss() -> Polygon:
+    """The solid round the hub: the horn slot's outline grown by its wall, merged into the
+    hub circle as one teardrop, so the cells flow round it instead of meeting a ring."""
+    slot = Polygon([(-4.4, 4.4), (4.4, 4.4), (4.4, -19.1), (-4.4, -19.1)])
+    return slot.buffer(HUB_WALL).union(Point(0, 0).buffer(HUB_R + 2.0, 128)).convex_hull
+
+
+def _seeds(region: Polygon) -> list[Point]:
+    """Cell centres spread evenly over the open area by Lloyd relaxation from a fixed random
+    start, so the cells come out even in size but irregular in shape, like grown bone."""
+    rng = np.random.default_rng(CELL_SEED)
+    x0, z0, x1, z1 = region.bounds
+    pts: list[Point] = []
+    while len(pts) < CELL_COUNT:
+        p = Point(rng.uniform(x0, x1), rng.uniform(z0, z1))
+        if region.contains(p):
+            pts.append(p)
+    for _ in range(40):
+        cells = voronoi_diagram(MultiPoint(pts), envelope=region.envelope.buffer(30))
+        pts = [c.intersection(region).centroid for c in cells.geoms]
+    return pts
+
+
+def _rib(c: Point) -> float:
+    """Rib width at a cell: thickest by the hub, where the bending load is greatest, and
+    by the sole, which takes the floor's hits; thinnest across the middle."""
+    r = math.hypot(c.x, c.y)
+    t = (r - HUB_KEEP) / (SOLE_MID - SOLE_BAND - HUB_KEEP)
+    return RIB_MIN + (RIB_MAX - RIB_MIN) * (2.0 * t - 1.0) ** 2
+
+
 def windows(profile: Polygon) -> Polygon:
-    """Through-cuts between radial spokes: load at the sole runs straight to the axle along
-    the spokes and flanks, the rim and hub stay solid."""
-    inner = profile.buffer(-FLANK_WALL, join_style="mitre")
+    """Organic through-cuts: Voronoi cells of the open area, each shrunk by half its rib
+    and rounded hard, so the ribs between them taper and fillet into each other like
+    trabecular bone. The rim, flanks and hub boss stay solid."""
+    inner = profile.buffer(-FLANK_WALL, join_style="round")
     sole_keep = Polygon(
         [(0.0, 0.0)]
         + [_polar(sole_radius(p) - SOLE_BAND, p) for p in np.linspace(-ARC - 0.2, ARC + 0.2, 80)]
     )
-    region = inner.intersection(sole_keep).difference(Point(0, 0).buffer(HUB_KEEP, 128))
-
-    # One spoke down the middle of the open area, from hub to sole, and a ring crossing it
-    # concentric with the axle, so each flank is braced halfway along.
-    def mid(r: float) -> tuple[float, float]:
-        ring = region.intersection(Point(0, 0).buffer(r, 256).exterior)
-        pts = np.asarray(ring.convex_hull.exterior.coords)
-        angles = [math.atan2(x, -z) for x, z in pts]
-        a = (min(angles) + max(angles)) / 2
-        return _polar(r, a)
-
-    p0, p1 = np.array(mid(HUB_KEEP + 2.0)), np.array(mid(SOLE_MID - SOLE_BAND - 3.0))
-    d = (p1 - p0) / np.linalg.norm(p1 - p0)
-    spoke = LineString([tuple(p0 - 20 * d), tuple(p1 + 20 * d)]).buffer(
-        SPOKE_W / 2, cap_style="flat"
-    )
-    ring = (
-        Point(0, 0)
-        .buffer(ARCH_R + SPOKE_W / 2, 256)
-        .difference(Point(0, 0).buffer(ARCH_R - SPOKE_W / 2, 256))
-    )
-    spokes = spoke.union(ring)
-    cut = region.difference(spokes)
-    return cut.buffer(-WINDOW_ROUND, join_style="round").buffer(WINDOW_ROUND, join_style="round")
+    region = inner.intersection(sole_keep).difference(_boss())
+    cells = voronoi_diagram(MultiPoint(_seeds(region)), envelope=profile.envelope.buffer(20))
+    cuts = []
+    for cell in cells.geoms:
+        piece = cell.buffer(-_rib(cell.centroid) / 2, join_style="mitre").intersection(region)
+        for g in getattr(piece, "geoms", [piece]):
+            if g.is_empty or g.area < CELL_MIN_AREA:
+                continue
+            rounded = g.buffer(-CELL_ROUND, join_style="round").buffer(
+                CELL_ROUND, join_style="round"
+            )
+            if rounded.area >= CELL_MIN_AREA:
+                cuts.append(rounded)
+    return unary_union(cuts)
 
 
 def _letter(side: str) -> Polygon:

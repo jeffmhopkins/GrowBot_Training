@@ -61,8 +61,11 @@ def test_both_legs_are_closed_solids_and_mirror_images(legs) -> None:
     left, right = legs["left"], legs["right"]
     for leg in (left, right):
         assert leg.status() == mf.Error.NoError
-        assert leg.genus() == 5  # four windows and the screw hole
+        assert leg.genus() >= 9  # the screw hole and at least eight cells
     assert left.volume() == pytest.approx(right.volume(), rel=1e-3)
+    # Same shape mirrored: only the engraved letter differs.
+    mirrored = left.mirror([1.0, 0.0, 0.0])
+    assert (mirrored - right).volume() + (right - mirrored).volume() < 40.0
     lb, rb = left.bounding_box(), right.bounding_box()
     assert lb[0] == pytest.approx(-rb[3], abs=1e-4) and lb[3] == pytest.approx(-rb[0], abs=1e-4)
     # The left leg's longer tail edge is at -x, toward the tail.

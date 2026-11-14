@@ -24,9 +24,12 @@ by hash) into `.upstream/`.
 - **Mount:** the horn slot, the spline bore and the screw hole aren't redrawn. They're
   cut from upstream's leg, so the MG90S horn fits and screws in exactly as it does on the
   stock leg.
-- **Lighter than stock:** four windows between a centre spoke and a ring brace. The fan is
-  about 1.4 times the stock leg's side area but uses 19.5 cm³ of plastic, against the stock
-  leg's 21.1. Every edge on both faces has a 0.8 mm chamfer.
+- **Organic cutouts:** twelve bone-like cells, a Voronoi pattern relaxed to even
+  sizes, with every corner rounded so the ribs taper and fillet into each other. The ribs
+  are 3.4 mm beside the hub and the sole, which take the most load, and 2.2 mm across the
+  middle. The rim, flanks and a teardrop boss round the horn slot stay solid. The fan has
+  about 1.4 times the stock leg's side area but the same 21.1 cm³ of plastic. Every edge
+  on both faces has a 0.8 mm chamfer. `CELL_SEED` and `CELL_COUNT` give other patterns.
 
 ## Printing and fitting
 
