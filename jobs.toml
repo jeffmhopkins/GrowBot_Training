@@ -1,0 +1,50 @@
+# The training jobs JBrain's Launcher (the Jobs tile) offers. The box reads this file from
+# main when it starts, when you tap refresh on the Jobs screen, and before every Start, so
+# a new job is a config file plus an entry here: no JBrain update.
+#
+# Each [[job]] only picks a config. The box always runs the same steps for it: clone this
+# repo at the commit it read, ./install.sh, the tests, ./run.sh jlaunch --config <config>,
+# and hand back runs/jlaunch.tar.gz. It can't run anything else, by design.
+#
+#   name       growbot_ then a-z, 0-9 and _ (up to 56 more). The Body tab only imports
+#              policies from jobs named so. It names the download
+#              (<name>_artifacts.tar.gz) and groups its runs, so keep it once it has runs.
+#   title      what the Jobs list shows
+#   config     configs/<file>.toml in this repo
+#   est_hours  optional, shown in the list ("2-4 h")
+#   notes      optional, shown when the job is opened
+#   disk_gb    optional, 1-100 (default 3)
+#
+# Removing an entry takes the job off the list; its finished runs and their results stay.
+# tests/test_jobs_manifest.py checks this file the way the box does.
+
+[[job]]
+name = "growbot_heading_walk"
+title = "GrowBot heading walk (train a walking policy)"
+config = "configs/heading_walk.toml"
+est_hours = "1-3 h"
+notes = """Trains the slow heading-following walk (configs/heading_walk.toml) on every \
+core. The download is the run folder: the policy JSON the app loads, replay.html (open it \
+in a browser to watch the walks in 3D), the evaluation, checkpoints and TensorBoard logs. \
+While it trains, the Live card shows progress and a 3D replay of the latest checkpoint."""
+
+[[job]]
+name = "growbot_camera_walk"
+title = "GrowBot camera walk (tail first, toward the camera's view)"
+config = "configs/camera_walk.toml"
+est_hours = "3-6 h"
+notes = """Trains the face-following walk (configs/camera_walk.toml): it walks tail \
+first, toward what the phone's camera sees. Three inputs steer it: the heading to the \
+face, a speed (walk up, stop and keep facing it, or back away) and a camera height \
+(stand tall, or lower to look up). Downloads and the Live card work as for the heading \
+walk."""
+
+[[job]]
+name = "growbot_look"
+title = "GrowBot look (stay put, turn to face a direction)"
+config = "configs/look.toml"
+est_hours = "2-4 h"
+notes = """Trains the stand-in-place look (configs/look.toml): it never walks, only turns \
+on the spot to face a heading and holds a camera height, trained for a steady view. The \
+camera walk at speed 0 does the same job; run this one if that wobbles. Downloads and the \
+Live card work as for the heading walk."""

@@ -385,13 +385,25 @@ ready to commit.
 
 ## Running it from JBrain
 
-JBrain's Launcher (the Jobs tile, once called Math) has **GrowBot heading walk**, **GrowBot camera walk**
-and **GrowBot look** jobs. Each clones this repo on the box, runs `./install.sh` and the tests,
-trains with `./run.sh` (the others with `--config configs/camera_walk.toml` or
-`configs/look.toml`), and
-hands back the run's
-`.tar.gz` (policy, replay page, checkpoints, evaluation, TensorBoard logs) as the job's
-download. Its results page shows the export check and the evaluation summary.
+JBrain's Launcher (the Jobs tile, once called Math) lists the jobs in
+[`jobs.toml`](jobs.toml): today **GrowBot heading walk**, **GrowBot camera walk** and
+**GrowBot look**. Each clones this repo on the box, runs `./install.sh` and the tests,
+trains with `./run.sh jlaunch --config <its config>`, and hands back the run's `.tar.gz`
+(policy, replay page, checkpoints, evaluation, TensorBoard logs) as the job's download.
+Its results page shows the export check and the evaluation summary.
+
+### Adding a job
+
+A new job needs no JBrain update. Add a config under `configs/`, add a `[[job]]` entry
+for it to `jobs.toml` (the file's header lists the fields), and merge to `main`. Then tap
+the refresh button on the Jobs screen (or a debug token calls
+`POST /api/debug/jlaunch/specs/refresh`) and the job appears, ready to start. The box also
+re-reads the file when it starts and just before each Start, so a config fix merged a
+minute ago is what trains. Each run clones the exact commit it read and records it.
+
+An entry can only pick a config: the box runs the same steps for every job, so this file
+can't make it run anything else. `tests/test_jobs_manifest.py` checks the file the way
+the box does. Removing an entry takes the job off the list; its runs and results stay.
 
 ### Watching while it trains
 
@@ -443,6 +455,7 @@ doing only if the CPU runs prove too slow.
 | `growbot_train/view.py` | Live MuJoCo viewer with a steerable target, or an mp4 |
 | `growbot_train/policy.py` | Runs an exported JSON with the app runner's arithmetic |
 | `growbot_train/live.py` | The run's `live/` folder: progress, latest replay and policy |
+| `jobs.toml` | The jobs JBrain's Launcher offers (see [Adding a job](#adding-a-job)) |
 | `install.sh`, `run.sh` | Set up; train, export, evaluate, replay and pack in one go |
 | `scripts/keep_policy.sh` | Copy a result into `policies/` |
 | `scripts/try_jax_rocm.sh` | Optional: does JAX see the GPU? |
