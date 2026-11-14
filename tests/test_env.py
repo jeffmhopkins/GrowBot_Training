@@ -586,18 +586,41 @@ def test_a_lens_tipped_past_vertical_reads_the_tail() -> None:
 def test_a_roll_toward_the_target_earns_no_heading_reward() -> None:
     env = _lens_env()
     body = env.body_yaw_deg()
-    # Target 20 degrees off; then roll so the lens swings toward it, the body staying put.
+    # Target 20 degrees off; roll both ways, the body staying put.
     env.target_deg = wrap_deg(body + 20.0)
     still = env.scored_err_deg()
     q = env.data.qpos[3:7].copy()
+    lens_errs = []
     for sign in (1.0, -1.0):
         env.data.qpos[3:7] = q
         roll = np.array([math.cos(0.15), sign * math.sin(0.15), 0.0, 0.0])
         mujoco.mju_mulQuat(env.data.qpos[3:7], q, roll)
         mujoco.mj_forward(env.model, env.data)
         assert abs(wrap_deg(env.body_yaw_deg() - body)) < 1.0
+        lens_errs.append(abs(wrap_deg(env.target_deg - env.yaw_deg())))
         # Whichever way the lens swings, the scored error never drops below the body's.
         assert env.scored_err_deg() >= still - 1.0
+    # One of the rolls really did swing the lens onto the target, so the max mattered.
+    assert min(lens_errs) < still - 10.0, (lens_errs, still)
+
+
+def test_the_lens_heading_never_snaps_as_it_swings_round() -> None:
+    # Sweep the lens from over the tail, through sideways, to over the nose, at a flat
+    # length well past the fade: the heading must move in small steps all the way.
+    prev = None
+    for i in range(721):
+        a = math.radians(i * 0.25)
+        h = GrowBotHeadingEnv._lens_deg(_xm(0.6 * math.cos(a), 0.6 * math.sin(a)), 0.0)
+        if prev is not None:
+            assert abs(wrap_deg(h - prev)) < 2.0, (i * 0.25, prev, h)
+        prev = h
+
+
+def test_lens_heading_needs_camera_facing() -> None:
+    cfg = Config()
+    cfg.task.heading_from = "lens"
+    with pytest.raises(ValueError):
+        GrowBotHeadingEnv(cfg)
 
 
 def test_the_shipped_look_config_scores_the_lens() -> None:

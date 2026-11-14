@@ -32,8 +32,9 @@ from growbot_train.config import Config
 from growbot_train.surfaces import FLOORS, SURFACES, split_contacts, surface_geoms
 
 BODIES_DIR = Path(__file__).parent / "bodies"
-# Below this flat length of the lens axis (about 20 degrees from straight up) the lens
-# heading blends into the tail end.
+# How far (flat) the lens axis must reach out over the tail end before the heading is
+# the lens's alone; below it the heading fades into the tail end's. The lowest look
+# stance reaches about 0.38.
 LENS_BLEND = 0.35
 CONTROL_DT = 0.04  # 25 Hz, the rate the app's runner ticks at
 CHANNELS: tuple[str, ...] = (
@@ -170,7 +171,9 @@ class GrowBotHeadingEnv(gym.Env):
             raise ValueError(
                 f'task.heading_from must be "body" or "lens", not {cfg.task.heading_from!r}'
             )
-        self._lens = self._camera_first and cfg.task.heading_from == "lens"
+        if cfg.task.heading_from == "lens" and not self._camera_first:
+            raise ValueError('task.heading_from "lens" needs task.facing "camera"')
+        self._lens = cfg.task.heading_from == "lens"
         if cfg.task.speed not in SPEED_MODES:
             raise ValueError(f"task.speed must be one of {SPEED_MODES}, not {cfg.task.speed!r}")
         self.channels = channels_for(cfg)
@@ -540,7 +543,6 @@ class GrowBotHeadingEnv(gym.Env):
         vel = (d.qpos[0:2] - p0) / CONTROL_DT
         k = min(1.0, CONTROL_DT / max(cfg.reward.speed_window_s, CONTROL_DT))
         self.vel_avg = (1 - k) * self.vel_avg + k * vel
-        err_true = wrap_deg(self.target_deg - self.yaw_deg())
         up = self._up_in_body()
         stance_cos = float(np.dot(up, self._up0))
         tall_cos = float(np.dot(up, self._stance_up))
@@ -605,7 +607,7 @@ class GrowBotHeadingEnv(gym.Env):
             "terms": terms,
             "v_along": v_along,
             "speed": speed,
-            "abs_err_deg": abs(err_true),
+            "abs_err_deg": err_score,
             "fell": fell,
             "pitch_deg": pitch,
             # From the same base the stance reward uses, so it reads against want_lift_deg.
@@ -708,18 +710,19 @@ class GrowBotHeadingEnv(gym.Env):
 
     @staticmethod
     def _lens_deg(xm: np.ndarray, tail: float) -> float:
-        # The lens looks along the torso's up axis, projected flat. Near straight up its
-        # compass direction is noise, so it blends smoothly into the tail end below
-        # LENS_BLEND (a hard switch let a pitch change snap the heading by tens of
-        # degrees); nose-down past vertical it would point at the nose, so the tail
-        # stands in there too.
+        # The lens looks along the torso's up axis, projected flat. Its share of the
+        # heading fades with how far it reaches out over the tail end (c): near straight
+        # up its compass direction is noise, and tipped sideways or past vertical it would
+        # swing toward the nose. Fading on c rather than switching keeps the heading
+        # continuous through all of those, so neither the policy's input nor the turn
+        # reward ever snaps.
         tr = math.radians(tail)
-        tx, ty = math.cos(tr), math.sin(tr)
         lx, ly = xm[2], xm[5]
-        if lx * tx + ly * ty <= 0:
+        c = lx * math.cos(tr) + ly * math.sin(tr)
+        s = min(1.0, max(0.0, c / LENS_BLEND))
+        if s == 0.0:
             return tail
-        w = max(0.0, LENS_BLEND - math.hypot(lx, ly)) / LENS_BLEND
-        return math.degrees(math.atan2(ly + w * ty, lx + w * tx))
+        return wrap_deg(tail + s * wrap_deg(math.degrees(math.atan2(ly, lx)) - tail))
 
     def _observe_heading(self, force: bool = False) -> None:
         if not force and self.step_index % self.ep.heading_refresh:
