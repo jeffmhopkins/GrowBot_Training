@@ -31,7 +31,7 @@ Each skill trains on its own on the printed build.
 | --- | --- | --- | --- |
 | Look: spin in place to a heading, tilt the camera | `configs/look.toml` | look thread | training (steered-spin warm start, #22) |
 | Tall walk: camera first, lift and fall, forward | `configs/lift_fall.toml` | locomotion thread | curriculum fix merged (#21), next run queued |
-| Backing waddle: low, backing away | camera walk (retrained on the build) or heading walk (already on the build, but nose first) | locomotion thread | waiting on which waddle Jeff means |
+| Backing waddle: low, nose first, away from the camera (Jeff, 2026-11-14) | `configs/heading_walk.toml` | locomotion thread | trained on the build (run 00624683); needs a variable speed |
 
 The tall walk also needs two things it lacks today, as follow-up runs:
 
@@ -54,8 +54,8 @@ tall, so it can't yet score a commanded speed, backing, or a camera height.
 - **Every skill:** passes `evaluate.py --sweep` with no edge case falling more than
   1 in 10.
 
-**Box order:** look → tall walk → backing waddle → tall walk with variable speed and
-tilt.
+**Box order:** look → tall walk → backing waddle with variable speed → tall walk with
+variable speed and tilt.
 
 ## Phase 2: the follow test, single-skill baseline
 
