@@ -141,6 +141,7 @@ Every tick the reward is the sum of these terms. All the weights live in
 | fall | `fall = 10.0` | A one-off penalty when it tips more than `fall_tilt_deg` (55 degrees) from its stance. The episode ends there, so it also loses all the reward it would have earned. |
 | action_rate | `action_rate = 0.05` | Jerky leg commands: the change since last tick, squared. |
 | effort | `effort = 0.01` | Big leg angles, a little. |
+| back_lean | `back_lean = 0.0` (camera walk: 2.0) | Leaning back more than `back_lean_margin_deg` (12 degrees) past the stance it should hold: weight times (degrees over, divided by 10) squared. |
 | stance | `stance = 0.0` (camera walk: 0.5) | Standing `stand_lift_deg` taller than its resting stance: full value on target, fading out a `stance_tol_deg` (6 degrees) or so either side. Off for the first walk. When it's on, `tilt` measures from the taller stance. |
 
 Speeds are averaged over `speed_window_s` (1 second) before the cap is checked, because a
@@ -174,10 +175,10 @@ is to stand still, and it will learn exactly that.
 
 ## The camera walk
 
-The phone lies on top of the body with its rear camera facing up. The body rests nose-up,
+The phone lies on top of the body with its rear camera facing up, at the high (nose) end. The body rests nose-up,
 so that camera actually looks up and back over the **tail**. To walk toward a face the
 camera sees, the robot has to walk tail first. That's the second config,
-`configs/camera_walk.toml`, and it changes four things:
+`configs/camera_walk.toml`, and it changes these things (the lines marked CHANGED):
 
 - `task.facing = "camera"`: the heading error is measured from the tail end. 0 means the
   thing the camera is looking at is dead ahead. The app puts the face's left-right angle
@@ -187,6 +188,12 @@ camera sees, the robot has to walk tail first. That's the second config,
   toward the horizon behind it, where faces are.
 - `task.lying_start_prob = 0.3`: 3 in 10 episodes start folded (legs tucked, body lower), so it
   learns to push itself up and then go.
+- **Not going over backwards.** Standing taller moves it toward the one fall this body
+  can't undo, so three things push against it. `reward.back_lean = 2` charges for leaning
+  back more than 12 degrees past the stance it should hold, growing fast. Past 75 degrees
+  nose-up counts as a fall (`task.back_fall_pitch_deg`), ending the episode with the fall
+  penalty. And every 3 to 8 seconds a shove spins the body nose-up or nose-down
+  (`randomization.push_every_s`, `push_pitch_rad_s`), so it learns to catch itself.
 
 **How tall can it stand?** Not much, with this body. In the sim, the nominal build rests
 at about 35 degrees nose-up. With both legs pushed all the way forward it reaches about 41
@@ -204,8 +211,15 @@ question).
 it sits on its tail and feet, and folded it's a leg push away from standing. Getting
 up is part of walking here, so one policy learns both. Episodes that start folded are
 mixed in from the beginning rather than in a later phase, which is simpler and works for
-a skill this small. A separate policy would make sense if it ever has to right itself
-from lying on its back. That's out of scope.
+a skill this small.
+
+**Why not train it to get back up from its back?** In the sim it can't. Past about 95
+degrees nose-up (for the standard build; a tail-heavy randomised body tips a little
+later) it rolls over onto the phone, and then both legs point at the sky: the
+servos only swing them 90 degrees each way, so they never reach the floor. No policy can
+fix that, so training aims to never get there. If it happens on the real robot, a
+hardware stop would be the answer: a short strut or bumper behind the tail that props it
+before it goes past vertical.
 
 Run it with `./run.sh camera-try --config configs/camera_walk.toml`, or from JBrain's Math
 launcher ("GrowBot camera walk").
