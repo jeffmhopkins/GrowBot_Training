@@ -298,6 +298,23 @@ def test_a_stop_lets_it_drift_a_little_for_free() -> None:
     assert terms[1] < -0.5 * cfg.reward.progress
 
 
+def test_the_free_drift_is_only_for_an_exact_stop() -> None:
+    cfg = Config()
+    cfg.task.speed = "command"
+    env = GrowBotHeadingEnv(cfg)
+    cap = cfg.reward.speed_cap_m_s
+    terms = {}
+    for cmd in (0.0, 0.3):
+        env.reset(seed=0, options={"nominal": True, "speed_cmd": cmd})
+        tr = math.radians(env.target_deg + 90)  # sideways: no part of it is wanted
+        env.vel_avg = 0.3 * cap * np.array([math.cos(tr), math.sin(tr)])
+        env.data.qvel[0:2] = env.vel_avg
+        _, _, _, _, info = env.step(np.zeros(2))
+        terms[cmd] = info["terms"]["progress"]
+    assert terms[0.0] == 0.0
+    assert terms[0.3] < -0.05 * cfg.reward.progress
+
+
 def test_old_runs_with_a_retired_setting_still_load(tmp_path) -> None:
     from growbot_train.config import load
 
