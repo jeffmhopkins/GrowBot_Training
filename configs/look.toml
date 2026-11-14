@@ -16,7 +16,6 @@ speed_cap_m_s = 0.03    # CHANGED: 3 cm/s. Look never walks, so the cap only set
 speed_window_s = 1.0    # speed is averaged over this long before the cap is checked
 overspeed = 4.0         # CHANGED: penalty for going faster than the cap (grows with the square)
 stop_drift_free = 0.5   # CHANGED: drift up to this x the cap is free (1.5 cm/s); slower drift is the anchor's job
-stop_drift_free_final = 0.25  # CHANGED: ...narrowing to 0.75 cm/s over the ramp: the run before crept backward at 1.7 cm/s, mostly free
 anchor = 0.4            # CHANGED: wandering from where this turn began costs, up to this per tick, full at 15 cm past anchor_free_m...
 anchor_free_m = 0.02    # ...the first 2 cm free
 tilt = 4.0              # CHANGED: penalty for leaning away from the stance; firm, so it turns instead of leaning
@@ -42,7 +41,7 @@ retarget_every_s = [6.0, 14.0]  # CHANGED: the target moves every 6-14 s, time t
 retarget_max_deg = 180.0        # CHANGED: ...by up to half a turn, so it learns to face what is behind it
 gait_hz = 1.0               # CHANGED: the clock the policy sees; about one turning step a second
 history_frames = 5          # how many past ticks of sensors the policy sees
-action_to_rad = 1.3         # CHANGED: full action = 1.3 radians (~75 degrees), room for the cloned spin's swing
+action_to_rad = 1.45        # CHANGED: full action = 1.45 radians (~83 degrees, the servo stops at 90): room either side of the still spin's 1.25 rad swing (less once the camera-height offset is added)
 fall_tilt_deg = 55.0        # tipped this far from the starting stance = fallen (the app aborts at 55)
 facing = "camera"           # as camera walk: tail first, toward what the camera sees
 heading_from = "lens"       # CHANGED: facing is scored on the worse of where the camera points and where the body points, so a lean earns nothing
@@ -109,9 +108,9 @@ checkpoint_every_steps = 2000000
 # How often the live folder's 3D replay and policy_latest.json are refreshed from the
 # current network (a pause of a second or two each time; a few minutes apart on the box).
 live_replay_every_steps = 500000
-warm_gait = "configs/gaits/look_spin.json"  # CHANGED: clone a spin on the spot before PPO...
+warm_gait = "configs/gaits/look_spin_still.json"  # CHANGED: clone a spin on the spot before PPO...
 warm_gait_steer = true      # CHANGED: ...steered: spin toward the target, stand still on it
 warm_gait_samples = 400000  # CHANGED: twice the samples...
 warm_gait_epochs = 120      # CHANGED: ...and three times the passes: the steered clone switches direction, harder to fit than a walk
-warm_gait_tilt_offset = [-0.55, 0.15]  # CHANGED: the clone lowers or raises both legs with the camera height input (camera about 65 up at -1, 47 at +1)
+warm_gait_tilt_offset = [-0.4, 0.27]  # CHANGED: the clone lowers or raises both legs with the camera height input (camera about 68 up at -1; at +1 about 47 when steered, 54 spinning nonstop: the spin can't stand much taller, PPO has to find the rest)
 seed = 0
