@@ -103,6 +103,31 @@ def score(
     return out
 
 
+# The speed commands a speed-input policy is checked at, as shares of the cap: does it
+# walk at the speed it's asked for, and stop when asked?
+SPEED_STEPS = (0.0, 0.33, 0.67, 1.0)
+
+
+def speed_tracking(
+    env: GrowBotHeadingEnv, policy: JsonPolicy, episodes: int
+) -> dict[str, dict[str, float]]:
+    cap = env.cfg.reward.speed_cap_m_s
+    out = {}
+    for cmd in SPEED_STEPS:
+        runs = [
+            run_episode(env, policy, 2000 + i, {"target_error_deg": 0.0, "speed_cmd": cmd})
+            for i in range(episodes)
+        ]
+        out[f"{cmd:.2f}"] = {
+            "want": cmd * cap,
+            "toward": float(np.mean([r["toward"] for r in runs])),
+            "speed": float(np.mean([r["speed"] for r in runs])),
+            "falls": float(sum(r["fell"] for r in runs)),
+            "episodes": float(episodes),
+        }
+    return out
+
+
 def sweep_cases(cfg: config_mod.Config) -> dict[str, dict[str, Any]]:
     r = cfg.randomization
     floors = {f: {"floor": f} for f in cfg.task.floors} if cfg.task.surfaces else {}
@@ -160,6 +185,16 @@ def main(argv: list[str] | None = None) -> int:
     print(_table("randomised bodies", report["randomized"], cap), flush=True)
     report["nominal"] = score(env, policy, 1, nominal=True)
     print(_table("nominal body, no noise", report["nominal"], cap), flush=True)
+    if env.cfg.task.speed == "command":
+        report["speed_tracking"] = rows = speed_tracking(env, policy, args.episodes)
+        print(f"-- speed tracking, randomised bodies (cap {cap:.3f} m/s)", flush=True)
+        print(f"{'cmd':>6} {'want':>8} {'toward':>8} {'speed':>7} {'falls':>6}", flush=True)
+        for name, m in rows.items():
+            print(
+                f"{name:>6} {m['want']:8.4f} {m['toward']:8.4f} {m['speed']:7.4f} "
+                f"{int(m['falls']):>3}/{int(m['episodes'])}",
+                flush=True,
+            )
     if args.sweep:
         report["sweep"] = {}
         for name, ov in sweep_cases(env.cfg).items():

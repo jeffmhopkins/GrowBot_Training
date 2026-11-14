@@ -156,3 +156,20 @@ def test_lift_fall_differs_from_the_camera_walk_only_where_it_says() -> None:
     gait = Keyframes.load(SHIPPED.parents[1] / gait_cfg.train.warm_gait)
     assert gait.hz == gait_cfg.task.gait_hz
     assert abs(gait.keys).max() < 0.99 * gait_cfg.task.action_to_rad
+
+
+def test_nose_walk_is_the_heading_walk_with_a_speed_input() -> None:
+    path = SHIPPED.with_name("nose_walk.toml")
+    nose = config_mod.load(path)
+    base = config_mod.load(SHIPPED).to_dict()
+    changed = {
+        (section, key)
+        for section, values in nose.to_dict().items()
+        if isinstance(values, dict)
+        for key, value in values.items()
+        if base[section][key] != value
+    } | ({("", "name")} if nose.name != base["name"] else set())
+    assert path.read_text().count("# CHANGED:") == len(changed)
+    # The master policy backs away from the camera with this one: nose first only.
+    assert nose.task.speed == "command" and nose.task.facing == "nose"
+    assert nose.task.speed_back_min >= 0.0

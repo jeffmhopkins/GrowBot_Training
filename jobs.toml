@@ -29,6 +29,16 @@ in a browser to watch the walks in 3D), the evaluation, checkpoints and TensorBo
 While it trains, the Live card shows progress and a 3D replay of the latest checkpoint."""
 
 [[job]]
+name = "growbot_nose_walk"
+title = "GrowBot nose walk (nose first at a commanded speed)"
+config = "configs/nose_walk.toml"
+est_hours = "1-3 h"
+notes = """The heading walk with a speed input (configs/nose_walk.toml): the low nose-first \
+waddle, walking away from the camera at any speed from a stop up to 3 cm/s. It is the \
+backing-away skill for the master policy. The evaluation adds a speed-tracking table. \
+Downloads and the Live card work as for the heading walk."""
+
+[[job]]
 name = "growbot_camera_walk"
 title = "GrowBot camera walk (tail first, toward the camera's view)"
 config = "configs/camera_walk.toml"

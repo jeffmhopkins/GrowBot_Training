@@ -116,3 +116,15 @@ def test_speed_command_policy_declares_cmd_forward(tiny_speed_run: Path) -> None
     assert p["obs_spec"]["cmd_pitch"]["meaning"] == "camera_height"
     pol = JsonPolicy(tiny_speed_run / "policy_heading_walk.json")
     assert run_episode(env_for(pol), pol, seed=0, options={})["fell"] in (0.0, 1.0)
+
+
+def test_a_speed_policy_is_checked_at_each_commanded_speed(tiny_speed_run: Path) -> None:
+    from growbot_train.evaluate import SPEED_STEPS, speed_tracking
+
+    pol = JsonPolicy(tiny_speed_run / "policy_heading_walk.json")
+    env = env_for(pol)
+    env.cfg.task.episode_seconds = 1.0
+    rows = speed_tracking(env, pol, 1)
+    cap = env.cfg.reward.speed_cap_m_s
+    assert [m["want"] for m in rows.values()] == [s * cap for s in SPEED_STEPS]
+    assert all(m["episodes"] == 1 for m in rows.values())
