@@ -12,12 +12,11 @@ from growbot_train.export import export_run
 from growbot_train.train import CLIP_OBS
 
 
-@pytest.fixture(scope="session")
-def tiny_run(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """A real (if hopeless) trained run, small enough for CI: exercises the same save
-    layout train.py writes, so the exporter and evaluator are tested end to end."""
+def _tiny(tmp_path_factory: pytest.TempPathFactory, speed: str) -> Path:
     run = tmp_path_factory.mktemp("run")
     cfg = Config()
+    cfg.task.speed = speed
+    cfg.task.tilt_command = speed == "command"
     cfg.task.episode_seconds = 2.0
     cfg.train.policy_layers = (16, 16)
     cfg.train.value_layers = (16, 16)
@@ -38,3 +37,16 @@ def tiny_run(tmp_path_factory: pytest.TempPathFactory) -> Path:
     vec.save(str(run / "vecnormalize.pkl"))
     export_run(run)
     return run
+
+
+@pytest.fixture(scope="session")
+def tiny_run(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """A real (if hopeless) trained run, small enough for CI: exercises the same save
+    layout train.py writes, so the exporter and evaluator are tested end to end."""
+    return _tiny(tmp_path_factory, "cap")
+
+
+@pytest.fixture(scope="session")
+def tiny_speed_run(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """The same, for a policy that also takes speed and camera-height commands."""
+    return _tiny(tmp_path_factory, "command")

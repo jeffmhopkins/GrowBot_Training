@@ -12,7 +12,6 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from growbot_train.env import CHANNELS
 from growbot_train.evaluate import env_for
 from growbot_train.policy import JsonPolicy
 
@@ -22,14 +21,17 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def test_app_runner_matches(tiny_run: Path, tmp_path: Path) -> None:
-    policy_path = tiny_run / "policy_heading_walk.json"
+@pytest.mark.parametrize("run", ["tiny_run", "tiny_speed_run"])
+def test_app_runner_matches(run: str, request: pytest.FixtureRequest, tmp_path: Path) -> None:
+    policy_path = request.getfixturevalue(run) / "policy_heading_walk.json"
     pol = JsonPolicy(policy_path)
     env = env_for(pol)
-    obs, _ = env.reset(seed=5, options={"target_error_deg": 60.0})
+    obs, _ = env.reset(
+        seed=5, options={"target_error_deg": 60.0, "speed_cmd": 0.6, "tilt_cmd": -0.4}
+    )
     frames, actions = [], []
     for _ in range(40):
-        frame = obs[: len(CHANNELS)]
+        frame = obs[: len(env.channels)]
         frames.append(frame.astype(float).tolist())
         a = pol.act(obs)
         actions.append(a.tolist())
@@ -37,7 +39,7 @@ def test_app_runner_matches(tiny_run: Path, tmp_path: Path) -> None:
         if term:
             break
     case = tmp_path / "case.json"
-    case.write_text(json.dumps({"frames": frames}))
+    case.write_text(json.dumps({"frames": frames, "channels": list(env.channels)}))
     script = Path(__file__).parent / "js" / "runner_parity.mjs"
     out = subprocess.run(
         ["node", str(script), str(Path(SITE) / "growbot_runner.js"), str(policy_path), str(case)],

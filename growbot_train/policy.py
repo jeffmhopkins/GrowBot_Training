@@ -9,7 +9,8 @@ from typing import Any
 
 import numpy as np
 
-from growbot_train.env import CHANNELS
+from growbot_train import config as config_mod
+from growbot_train.env import CHANNELS, channels_for
 
 
 def runner_forward(policy: dict[str, Any], obs: np.ndarray) -> np.ndarray:
@@ -35,7 +36,9 @@ class JsonPolicy:
         self.path = Path(path)
         self.data = json.loads(self.path.read_text())
         seg = self.data["obs_spec"]["segments"]
-        if len(seg) != 1 or tuple(seg[0]["channels"]) != CHANNELS:
+        cfg = config_mod.from_dict(self.config) if self.config else config_mod.Config()
+        expected = channels_for(cfg) if self.config else CHANNELS
+        if len(seg) != 1 or tuple(seg[0]["channels"]) != expected:
             raise ValueError(f"{self.path} was not trained for this environment's inputs")
         self.frames = int(seg[0]["frames"])
         self.gait_hz = float(self.data["obs_spec"]["cycles"]["gait_sin"]["frequency"])

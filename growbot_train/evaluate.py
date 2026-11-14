@@ -47,7 +47,10 @@ def env_for(policy: JsonPolicy, body: str | None = None) -> GrowBotHeadingEnv:
 def run_episode(
     env: GrowBotHeadingEnv, policy: JsonPolicy, seed: int, options: dict[str, Any]
 ) -> dict[str, float]:
-    obs, _ = env.reset(seed=seed, options={"retarget": False, **options})
+    # Full speed ahead, standing tall, for a policy that takes those commands, so its
+    # numbers compare with the others'.
+    start = {"retarget": False, "speed_cmd": 1.0, "tilt_cmd": 1.0, **options}
+    obs, _ = env.reset(seed=seed, options=start)
     cap = env.cfg.reward.speed_cap_m_s
     along, speed, errs, over = [], [], [], 0
     turn_s = float("nan")

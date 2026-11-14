@@ -114,13 +114,16 @@ Every 40 ms (25 times a second) the policy gets the last 5 ticks of:
 | `gyro_x/y/z` | turn rate, rad/s, same frame |
 | `prev_action_0/1` | the leg commands it sent last tick |
 | `cmd_yaw` | the heading error divided by 180, so -1 to 1. **Positive means the target is to the left** (counter-clockwise seen from above) |
+| `cmd_forward` | camera walk only: the speed command, -1 to 1 (see "The camera walk") |
+| `cmd_pitch` | camera walk only: the camera-height command, -1 to 1 (see "The camera walk") |
 | `cycle:gait_sin/cos` | a steady 1 Hz clock that starts at zero when the walk starts, to help it keep a rhythm |
 
 It answers with two numbers between -1 and 1, the right leg and the left leg, which
 become servo angles of up to 1 radian (about 57 degrees) either side of straight down.
 
 These are all things the phone on the robot can measure. There are no camera images and
-no orientation angles: the heading error is the only steering input.
+no orientation angles. For the first walk the heading error is the only steering
+input; the camera walk adds a speed and a camera height.
 
 ## The reward
 
@@ -142,7 +145,15 @@ Every tick the reward is the sum of these terms. All the weights live in
 | action_rate | `action_rate = 0.05` | Jerky leg commands: the change since last tick, squared. |
 | effort | `effort = 0.01` | Big leg angles, a little. |
 | back_lean | `back_lean = 0.0` (camera walk: 2.0) | Leaning back more than `back_lean_margin_deg` (12 degrees) past the stance it should hold: weight times (degrees over, divided by 10) squared. |
+| wobble | `wobble = 0.0` (look: 0.05) | Rocking: weight times (roll rate squared plus pitch rate squared), rad/s. A steadier camera. |
 | stance | `stance = 0.0` (camera walk: 0.5) | Standing `stand_lift_deg` taller than its resting stance: full value on target, fading out a `stance_tol_deg` (6 degrees) or so either side. Off for the first walk. When it's on, `tilt` measures from the taller stance. |
+
+With a speed command (`task.speed = "command"`, the camera walk) or none at all
+(`"still"`, the look policy), `progress` pays instead for matching the wanted velocity,
+direction included: full value on it, falling in a straight line to nothing
+`speed_track_tol` (1.5 times the cap) away. So a stop command pays for standing still,
+and -1 pays for backing away at the cap. A straight line rather than a bell curve, so
+standing still when told to walk is clearly worse but still close enough to feel the pull.
 
 Speeds are averaged over `speed_window_s` (1 second) before the cap is checked, because a
 paddling gait lurches within each step.
@@ -221,8 +232,36 @@ fix that, so training aims to never get there. If it happens on the real robot, 
 hardware stop would be the answer: a short strut or bumper behind the tail that props it
 before it goes past vertical.
 
+**Three inputs, one policy.** The camera walk is meant to be the one policy for following
+faces, so it is steered by three numbers the app works out from the face it tracks:
+
+- **Heading** (`cmd_yaw`): where the face is, from the camera end.
+- **Speed** (`cmd_forward`, `task.speed = "command"`): +1 walks toward it at the cap (3
+  cm/s), 0 stands still and keeps turning to face it, -1 backs away at the cap. From how
+  big the face looks: small means go closer, right-sized means stop, too big means back
+  off. Each episode the speed changes every 3 to 8 seconds; 3 in 10 are stops.
+- **Camera height** (`cmd_pitch`, `task.tilt_command`): +1 stands 6 degrees taller than
+  rest (the camera about 49 degrees above the horizon), -1 lowers 30 degrees, nearly flat
+  (the camera looking almost straight up), linear in between. It only goes that way: the
+  body can't lean far enough to aim the camera level. Half the time it's "stand tall".
+
+Because there's more to learn, episodes run 30 seconds, the target moves more often
+(every 4 to 10 seconds), and the run is 80 million steps. The exported file's
+`obs_spec.cmd_forward` and `obs_spec.cmd_pitch` blocks describe the two new inputs; the
+app's runner reads them from `cmd.fwd` and `cmd.pitch`.
+
 Run it with `./run.sh camera-try --config configs/camera_walk.toml`, or from JBrain's Math
 launcher ("GrowBot camera walk").
+
+## The look policy
+
+The camera walk at speed 0 already stands still and turns to face the heading. If that
+turns out wobbly, `configs/look.toml` trains a specialist that never walks
+(`task.speed = "still"`, so it has no speed input): the target jumps every 2 to 6
+seconds by up to half a turn, facing it pays three times as much, and rocking costs
+(`reward.wobble`). It keeps the camera height input. It's the camera walk otherwise, and
+only the lines marked CHANGED differ from that file. From JBrain it's the "GrowBot look"
+job.
 
 ## Training on a different robot every time (randomisation)
 
@@ -252,6 +291,8 @@ the phone's IMU site and sensors when it loads them.
 `segments` dialect that `growbot/site/growbot_runner.js`'s `Walker` loads (like
 `policy_drrma.json`). It needs no change to the runner: the heading error rides the
 runner's existing `cmd_yaw` input, and the file's `obs_spec.cmd_yaw` block says so.
+(The camera walk's camera height needs a runner that knows `cmd_pitch`, which JBrain2's
+`main` does.)
 The exporter checks every file it writes against the trained network (the result is in
 `export_verify.log`), and `tests/test_runner_parity.py` runs it through the app's own
 runner (CI does this against JBrain2's `main`):
@@ -295,9 +336,10 @@ ready to commit.
 
 ## Running it from JBrain
 
-JBrain's Launcher (the Math tile) has a **GrowBot heading walk** job and a **GrowBot
-camera walk** job. Each clones this repo on the box, runs `./install.sh` and the tests,
-trains with `./run.sh` (the camera walk with `--config configs/camera_walk.toml`), and
+JBrain's Launcher (the Math tile) has **GrowBot heading walk**, **GrowBot camera walk**
+and **GrowBot look** jobs. Each clones this repo on the box, runs `./install.sh` and the tests,
+trains with `./run.sh` (the others with `--config configs/camera_walk.toml` or
+`configs/look.toml`), and
 hands back the run's
 `.tar.gz` (policy, replay page, checkpoints, evaluation, TensorBoard logs) as the job's
 download. Its results page shows the export check and the evaluation summary.
@@ -339,6 +381,7 @@ doing only if the CPU runs prove too slow.
 | Path | What |
 | --- | --- |
 | `configs/heading_walk.toml` | Every setting, with comments |
+| `configs/camera_walk.toml`, `configs/look.toml` | The camera walk and the look policy, changes marked |
 | `growbot_train/env.py` | The simulator task: inputs, randomisation, reward |
 | `growbot_train/train.py` | PPO training, checkpoints, export at the end |
 | `growbot_train/export.py` | Trained network to the app's JSON, with a match check |

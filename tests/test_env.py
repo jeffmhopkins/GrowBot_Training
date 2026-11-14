@@ -236,3 +236,90 @@ def test_back_lean_is_measured_from_the_ordinary_stance_not_a_flat_settle() -> N
     _, _, fell, _, info = env.step(np.zeros(2))
     tipped = info["pitch_deg"]
     assert tipped > 75.0 and not fell
+
+
+def test_speed_command_rides_cmd_forward_and_redraws() -> None:
+    from growbot_train.env import channels_for
+
+    cfg = Config()
+    cfg.task.speed = "command"
+    cfg.task.speed_command_every_s = (0.2, 0.2)
+    chans = channels_for(cfg)
+    assert chans == (*CHANNELS[:9], "cmd_forward", *CHANNELS[9:])
+    env = GrowBotHeadingEnv(cfg)
+    obs, _ = env.reset(seed=3)
+    assert obs.shape == (len(chans) * cfg.task.history_frames,)
+    seen = set()
+    for _ in range(400):
+        obs, *_ = env.step(np.zeros(2))
+        assert obs[chans.index("cmd_forward")] == pytest.approx(env.speed_cmd)
+        seen.add(round(env.speed_cmd, 3))
+    assert 0.0 in seen and min(seen) >= cfg.task.speed_back_min and max(seen) <= 1.0
+    assert any(v < 0 for v in seen) and any(v > 0.5 for v in seen)
+    env.reset(seed=3, options={"speed_cmd": 0.4})
+    for _ in range(50):
+        env.step(np.zeros(2))
+    assert env.speed_cmd == 0.4
+
+
+@pytest.mark.parametrize("speed", ["command", "still"])
+def test_standing_still_pays_only_when_told_to_stop(speed: str) -> None:
+    cfg = Config()
+    cfg.task.speed = speed
+    env = GrowBotHeadingEnv(cfg)
+    env.reset(seed=0, options={"nominal": True, "speed_cmd": 0.0})
+    assert "cmd_forward" not in env.channels or speed == "command"
+    for _ in range(25):
+        _, _, _, _, info = env.step(np.zeros(2))
+    assert info["speed_cmd"] == 0.0
+    assert info["terms"]["progress"] > 0.9 * cfg.reward.progress
+    if speed == "command":
+        env.reset(seed=0, options={"nominal": True, "speed_cmd": 1.0})
+        for _ in range(25):
+            _, _, _, _, info = env.step(np.zeros(2))
+        assert info["terms"]["progress"] < 0.5 * cfg.reward.progress
+
+
+def test_wobble_costs_rocking_and_bad_speed_mode_fails() -> None:
+    cfg = Config()
+    cfg.reward.wobble = 0.1
+    env = GrowBotHeadingEnv(cfg)
+    env.reset(seed=0, options={"nominal": True})
+    _, _, _, _, info = env.step(np.zeros(2))
+    still = info["terms"]["wobble"]
+    env.data.qvel[3:5] = [4.0, -4.0]  # a hard rock, mid-air so contact can't stop it
+    env.data.qpos[2] += 0.05
+    _, _, _, _, info = env.step(np.zeros(2))
+    assert info["terms"]["wobble"] < still - 0.5
+    cfg.task.speed = "fast"
+    with pytest.raises(ValueError):
+        GrowBotHeadingEnv(cfg)
+
+
+def test_camera_height_command_moves_the_stance_it_pays_for() -> None:
+    from growbot_train.env import channels_for
+
+    cfg = Config()
+    cfg.task.speed = "command"
+    cfg.task.tilt_command = True
+    cfg.reward.stance = 0.5
+    chans = channels_for(cfg)
+    assert chans[8:11] == ("cmd_yaw", "cmd_forward", "cmd_pitch")
+    env = GrowBotHeadingEnv(cfg)
+    obs, _ = env.reset(seed=0, options={"nominal": True, "tilt_cmd": 1.0})
+    assert obs[chans.index("cmd_pitch")] == 1.0
+    _, _, _, _, tall = env.step(np.zeros(2))
+    assert tall["want_lift_deg"] == cfg.task.tilt_lift_deg[1]
+    env.reset(seed=0, options={"nominal": True, "tilt_cmd": -1.0})
+    _, _, _, _, low = env.step(np.zeros(2))
+    assert low["want_lift_deg"] == cfg.task.tilt_lift_deg[0]
+    # Resting on neutral legs is near the tall stance and far above the low one.
+    assert tall["terms"]["stance"] > 0.1 > low["terms"]["stance"]
+    cfg.task.tilt_command_every_s = (0.2, 0.2)
+    env = GrowBotHeadingEnv(cfg)
+    env.reset(seed=4)
+    seen = set()
+    for _ in range(300):
+        env.step(np.zeros(2))
+        seen.add(round(env.tilt_cmd, 3))
+    assert 1.0 in seen and min(seen) >= -1.0 and len(seen) > 5

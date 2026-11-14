@@ -8,6 +8,8 @@ frame, newest first (the JBrain2 app's ``growbot_runner.js`` builds the same vec
     gyro_x, gyro_y, gyro_z         rad/s, body frame
     prev_action_0, prev_action_1   the action sent last tick (right leg, left leg)
     cmd_yaw                        heading error / 180, in [-1, 1]
+    cmd_forward                    speed command in [-1, 1] (task.speed = "command" only)
+    cmd_pitch                      camera height command in [-1, 1] (task.tilt_command)
     cycle:gait_sin, cycle:gait_cos a fixed-rate clock, counted in ticks from the start
 
 Heading error is ``target - current`` in degrees, wrapped to [-180, 180]: positive means
@@ -43,6 +45,22 @@ CHANNELS: tuple[str, ...] = (
     "cycle:gait_sin",
     "cycle:gait_cos",
 )
+SPEED_MODES = ("cap", "command", "still")
+
+
+def channels_for(cfg: Config) -> tuple[str, ...]:
+    """The input layout for this config: the speed command rides the app runner's
+    cmd_forward channel and the camera height its cmd_pitch, right after cmd_yaw, only
+    when the policy takes them."""
+    extra = []
+    if cfg.task.speed == "command":
+        extra.append("cmd_forward")
+    if cfg.task.tilt_command:
+        extra.append("cmd_pitch")
+    i = CHANNELS.index("cmd_yaw") + 1
+    return (*CHANNELS[:i], *extra, *CHANNELS[i:])
+
+
 ACTION_LIMIT = 4.0  # pre-squash bound; tanh(4) = 0.9993, so the legs can reach full swing
 CTRL_LIMIT = 1.57
 DELAY_SLOTS = 6
@@ -125,6 +143,9 @@ class GrowBotHeadingEnv(gym.Env):
         if cfg.task.facing not in ("nose", "camera"):
             raise ValueError(f'task.facing must be "nose" or "camera", not {cfg.task.facing!r}')
         self._camera_first = cfg.task.facing == "camera"
+        if cfg.task.speed not in SPEED_MODES:
+            raise ValueError(f"task.speed must be one of {SPEED_MODES}, not {cfg.task.speed!r}")
+        self.channels = channels_for(cfg)
         self._torso = m.body("base_body").id
         self._legs = [m.body("right_leg").id, m.body("left_leg").id]
         self._leg_geoms = [m.geom("lower_leg_1").id, m.geom("lower_leg_2").id]
@@ -146,7 +167,7 @@ class GrowBotHeadingEnv(gym.Env):
         }
         self._nominal_rest_pitch = self._settled_pitch()
         self.frames = cfg.task.history_frames
-        n_obs = len(CHANNELS) * self.frames
+        n_obs = len(self.channels) * self.frames
         self.observation_space = gym.spaces.Box(-np.inf, np.inf, (n_obs,), np.float32)
         self.action_space = gym.spaces.Box(-ACTION_LIMIT, ACTION_LIMIT, (2,), np.float32)
         self._renderer: mujoco.Renderer | None = None
@@ -292,11 +313,10 @@ class GrowBotHeadingEnv(gym.Env):
         self._level = np.eye(3)
         self._level = _rot_onto_z(self._imu_raw()[0])
         self._rest_pitch = _pitch_deg(self._up0)
-        if self.cfg.task.stand_lift_deg:
-            lift = math.radians(self._rest_pitch + self.cfg.task.stand_lift_deg)
-            self._stance_up = np.array([math.sin(lift), 0.0, math.cos(lift)])
-        else:
-            self._stance_up = self._up0
+        self._fixed_tilt = options.get("tilt_cmd")
+        self.tilt_cmd = self._draw_tilt()
+        self._next_tilt = self._u(self.cfg.task.tilt_command_every_s)
+        self._set_stance()
         # A folded start: legs tucked, body lying nearly flat. The levelling above was
         # already done on neutral legs, as the app does, so this only changes the pose.
         prob = self.cfg.task.lying_start_prob
@@ -327,7 +347,11 @@ class GrowBotHeadingEnv(gym.Env):
         self._next_push = self._u(pushes) if pushes[1] > 0 else 0.0
         self._err_obs = 0.0
         self._observe_heading(force=True)
-        self.hist = np.zeros((self.frames, len(CHANNELS)))
+        # "speed_cmd" pins the speed command for the whole episode (evaluation).
+        self._fixed_speed = options.get("speed_cmd")
+        self.speed_cmd = self._draw_speed()
+        self._next_speed = self._u(self.cfg.task.speed_command_every_s)
+        self.hist = np.zeros((self.frames, len(self.channels)))
         self._push_frame()
         return self._obs(), {}
 
@@ -352,6 +376,15 @@ class GrowBotHeadingEnv(gym.Env):
             self.target_deg = wrap_deg(self.target_deg + self._u((-lim, lim)))
             self._next_retarget = t + self._u(cfg.task.retarget_every_s)
 
+        if t >= self._next_speed:
+            self.speed_cmd = self._draw_speed()
+            self._next_speed = t + self._u(cfg.task.speed_command_every_s)
+
+        if cfg.task.tilt_command and t >= self._next_tilt:
+            self.tilt_cmd = self._draw_tilt()
+            self._next_tilt = t + self._u(cfg.task.tilt_command_every_s)
+            self._set_stance()
+
         vel = (d.qpos[0:2] - p0) / CONTROL_DT
         k = min(1.0, CONTROL_DT / max(cfg.reward.speed_window_s, CONTROL_DT))
         self.vel_avg = (1 - k) * self.vel_avg + k * vel
@@ -364,14 +397,23 @@ class GrowBotHeadingEnv(gym.Env):
         tr = math.radians(self.target_deg)
         v_along = float(self.vel_avg[0] * math.cos(tr) + self.vel_avg[1] * math.sin(tr))
         speed = float(np.linalg.norm(self.vel_avg))
+        if cfg.task.speed == "cap":
+            progress = r.progress * min(v_along, cap) / cap
+        else:
+            want = self.speed_cmd * cap * np.array([math.cos(tr), math.sin(tr)])
+            miss = float(np.linalg.norm(self.vel_avg - want))
+            progress = r.progress * max(0.0, 1.0 - miss / (r.speed_track_tol * cap))
         terms = {
-            "progress": r.progress * min(v_along, cap) / cap,
+            "progress": progress,
             "heading": r.heading * (1 + math.cos(math.radians(err_true))) / 2,
             "overspeed": -r.overspeed * (max(0.0, speed - cap) / cap) ** 2,
             "tilt": -r.tilt * (1 - tall_cos),
             "action_rate": -r.action_rate * float(np.sum((a - self.prev_action) ** 2)),
             "effort": -r.effort * float(np.sum(a**2)),
         }
+        if r.wobble:
+            # Free-joint angular velocity is in the body frame: x is roll, y is pitch.
+            terms["wobble"] = -r.wobble * float(d.qvel[3] ** 2 + d.qvel[4] ** 2)
         if r.stance:
             miss = math.degrees(math.acos(max(-1.0, min(1.0, tall_cos))))
             terms["stance"] = r.stance * math.exp(-((miss / r.stance_tol_deg) ** 2))
@@ -380,7 +422,10 @@ class GrowBotHeadingEnv(gym.Env):
             # From whichever rest is higher, so a body that happened to settle flat is not
             # charged for sitting in the ordinary stance.
             rest = max(self._rest_pitch, self._nominal_rest_pitch)
-            limit = rest + cfg.task.stand_lift_deg + r.back_lean_margin_deg
+            top = cfg.task.stand_lift_deg
+            if cfg.task.tilt_command:
+                top = max(top, cfg.task.tilt_lift_deg[1])
+            limit = rest + top + r.back_lean_margin_deg
             terms["back_lean"] = -r.back_lean * (max(0.0, pitch - limit) / 10.0) ** 2
         fell = stance_cos < math.cos(math.radians(cfg.task.fall_tilt_deg))
         # A tail-heavy body may rest steeper than the line itself; it falls only once it
@@ -404,10 +449,51 @@ class GrowBotHeadingEnv(gym.Env):
             "fell": fell,
             "pitch_deg": pitch,
             "lift_deg": pitch - self._rest_pitch,
+            "speed_cmd": self.speed_cmd,
+            "tilt_cmd": self.tilt_cmd,
+            "want_lift_deg": self._want_lift,
         }
         return self._obs(), reward, fell, truncated, info
 
     # ------------------------------------------------------------------- internals
+    def _draw_tilt(self) -> float:
+        if not self.cfg.task.tilt_command:
+            return 1.0
+        if self._fixed_tilt is not None:
+            return float(self._fixed_tilt)
+        if self.np_random.random() < self.cfg.task.tilt_tall_prob:
+            return 1.0
+        return self._u((-1.0, 1.0))
+
+    def _set_stance(self) -> None:
+        """The stance to hold: the commanded camera height, else task.stand_lift_deg."""
+        task = self.cfg.task
+        if task.tilt_command:
+            lo, hi = task.tilt_lift_deg
+            self._want_lift = lo + (self.tilt_cmd + 1.0) / 2.0 * (hi - lo)
+        else:
+            self._want_lift = task.stand_lift_deg
+        if self._want_lift or task.tilt_command:
+            # From the higher rest, as for back_lean: a body that settled flat in reset still
+            # stands in the ordinary stance. Never nose-down: that is not a camera height.
+            rest = max(self._rest_pitch, self._nominal_rest_pitch)
+            lift = math.radians(max(0.0, rest + self._want_lift))
+            self._stance_up = np.array([math.sin(lift), 0.0, math.cos(lift)])
+        else:
+            self._stance_up = self._up0
+
+    def _draw_speed(self) -> float:
+        task = self.cfg.task
+        if task.speed == "cap":
+            return 1.0
+        if task.speed == "still":
+            return 0.0
+        if self._fixed_speed is not None:
+            return float(self._fixed_speed)
+        if self.np_random.random() < task.speed_stop_prob:
+            return 0.0
+        return self._u((task.speed_back_min, 1.0))
+
     def _actuate(self, cmd_rad: np.ndarray) -> None:
         """The relay and servo between the phone's command and the joint: dropped
         packets, a fractional delay, a slew-rate limit and a first-order lag."""
@@ -458,13 +544,13 @@ class GrowBotHeadingEnv(gym.Env):
             acc = acc + self.np_random.normal(0, r.accel_noise_m_s2, 3)
             gyro = gyro + self.ep.gyro_bias + self.np_random.normal(0, r.gyro_noise_rad_s, 3)
         phase = 2 * math.pi * self.cfg.task.gait_hz * self.step_index * CONTROL_DT
+        cmd = [self._err_obs / 180.0]
+        if self.cfg.task.speed == "command":
+            cmd.append(self.speed_cmd)
+        if self.cfg.task.tilt_command:
+            cmd.append(self.tilt_cmd)
         return np.concatenate(
-            [
-                acc,
-                gyro,
-                self.prev_action,
-                [self._err_obs / 180.0, math.sin(phase), math.cos(phase)],
-            ]
+            [acc, gyro, self.prev_action, cmd, [math.sin(phase), math.cos(phase)]]
         )
 
     def _push_frame(self) -> None:

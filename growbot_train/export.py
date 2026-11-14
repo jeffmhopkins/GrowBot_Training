@@ -26,7 +26,7 @@ import torch
 from stable_baselines3 import PPO
 
 from growbot_train import config as config_mod
-from growbot_train.env import CHANNELS, CONTROL_DT
+from growbot_train.env import CONTROL_DT, channels_for
 from growbot_train.policy import runner_forward
 
 FORMAT = "growbot-policy"
@@ -56,9 +56,10 @@ def build_policy(model: PPO, norm: Any, cfg: config_mod.Config, name: str) -> di
     n = mean.shape[0]
     frames = cfg.task.history_frames
     front = "nose" if cfg.task.facing == "nose" else "camera end (its tail)"
-    if n != frames * len(CHANNELS):
-        raise ValueError(f"normaliser has {n} inputs, config expects {frames * len(CHANNELS)}")
-    return {
+    channels = channels_for(cfg)
+    if n != frames * len(channels):
+        raise ValueError(f"normaliser has {n} inputs, config expects {frames * len(channels)}")
+    policy: dict[str, Any] = {
         "format": FORMAT,
         "version": 1,
         "name": name,
@@ -84,7 +85,7 @@ def build_policy(model: PPO, norm: Any, cfg: config_mod.Config, name: str) -> di
             },
             "segments": [
                 {
-                    "channels": list(CHANNELS),
+                    "channels": list(channels),
                     "frames": frames,
                     "order": "newest_first",
                     "layout": "frame_major",
@@ -112,8 +113,31 @@ def build_policy(model: PPO, norm: Any, cfg: config_mod.Config, name: str) -> di
         "training": {
             "config": cfg.to_dict(),
             "speed_cap_m_s": cfg.reward.speed_cap_m_s,
+            "speed": cfg.task.speed,
         },
     }
+    if cfg.task.speed == "command":
+        policy["obs_spec"]["cmd_forward"] = {
+            "meaning": "speed_command",
+            "range": [cfg.task.speed_back_min, 1],
+            "scale": (
+                f"+1 walks toward the target at {cfg.reward.speed_cap_m_s * 100:g} cm/s, "
+                "0 stands still and keeps turning to face it, below 0 backs away "
+                "(trained down to the range's low end)"
+            ),
+        }
+    if cfg.task.tilt_command:
+        lo, hi = cfg.task.tilt_lift_deg
+        policy["obs_spec"]["cmd_pitch"] = {
+            "meaning": "camera_height",
+            "range": [-1, 1],
+            "scale": (
+                f"-1 holds the body {-lo:g} degrees flatter than its resting stance (the "
+                f"camera looks almost straight up), +1 {hi:g} degrees taller (the camera "
+                "looks furthest toward the horizon), linear in between"
+            ),
+        }
+    return policy
 
 
 def verify(policy: dict[str, Any], model: PPO, n: int = 256, seed: int = 0) -> float:
