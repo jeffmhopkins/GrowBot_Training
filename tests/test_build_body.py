@@ -211,28 +211,48 @@ def test_cloning_refuses_a_clock_that_does_not_match(tmp_path) -> None:
 
 
 class _FakeVec:
-    def __init__(self, targets: list[float], yaws: list[float]) -> None:
-        self.targets, self.yaws = targets, yaws
+    def __init__(self, errs: list[float]) -> None:
+        self.errs = errs
 
     def get_attr(self, name: str) -> list[float]:
-        assert name == "target_deg"
-        return self.targets
-
-    def env_method(self, name: str) -> list[float]:
-        assert name == "yaw_deg"
-        return self.yaws
+        assert name == "_err_obs"
+        return self.errs
 
 
 def test_a_steered_clone_spins_toward_the_target_and_stops_on_it() -> None:
     from growbot_train.gait import _steer
 
-    want = np.array([[0.1, 0.9]] * 3)
-    # Target counter-clockwise, clockwise (and across the wrap at 180), and nearly on.
-    vec = _FakeVec([90.0, 170.0, 5.0], [0.0, -170.0, 0.0])
-    out = _steer(want, vec, deadband_deg=10.0)
+    want = np.array([[0.1, 0.9]] * 4)
+    # Observed error counter-clockwise, clockwise, inside and on the deadband edge.
+    out = _steer(want, _FakeVec([90.0, -20.0, 5.0, 10.0]), deadband_deg=10.0)
     assert out[0].tolist() == [0.1, 0.9]  # the gait as given: counter-clockwise
-    assert out[1].tolist() == [0.9, 0.1]  # 170 is 20 clockwise of -170: legs swapped
+    assert out[1].tolist() == [0.9, 0.1]  # clockwise: legs swapped
     assert out[2].tolist() == [0.0, 0.0]  # on target: stand still
+    assert out[3].tolist() == [0.1, 0.9]  # at the edge it still turns
+
+
+def test_a_steered_clone_sees_targets_all_the_way_round(tmp_path) -> None:
+    from growbot_train.env import wrap_deg
+
+    cfg = _build_cfg()
+    cfg.task.gait_hz = 2.0
+    cfg.task.episode_seconds = 2.0
+    cfg.task.facing = "camera"
+    cfg.train.warm_gait_steer = True
+    seen: list[float] = []
+
+    class Spy(GrowBotHeadingEnv):
+        def step(self, action):  # type: ignore[override]
+            seen.append(abs(wrap_deg(self.target_deg - self.yaw_deg())))
+            return super().step(action)
+
+    vec = VecNormalize(DummyVecEnv([lambda: Spy(cfg), lambda: Spy(cfg)]), clip_obs=CLIP_OBS)
+    vec.set_attr("dr_scale", 0.15)  # the curriculum's start: narrow bodies and targets
+    model = PPO("MlpPolicy", vec, n_steps=64, batch_size=64, seed=0, device="cpu")
+    clone_gait(model, vec, cfg, Keyframes.load(_gait_json(tmp_path, 2.0)), 600, 1, lambda *_: None)
+    assert max(seen) > 90.0
+    # Afterwards the curriculum's narrowing applies to targets again.
+    assert vec.get_attr("target_scale") == [None, None]
 
 
 def _spin_deg_s(gait: Keyframes, cfg: Config) -> float:

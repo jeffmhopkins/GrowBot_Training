@@ -314,9 +314,11 @@ error sat at 85 to 90 degrees, no better than chance, for 8 million steps), so l
 starts from a spin: before PPO it clones `configs/gaits/look_spin.json`, an
 anti-phase leg swing that spins the nominal body about 16 degrees a second, steered
 (`train.warm_gait_steer`): the gait as saved toward a target counter-clockwise, legs
-swapped toward one clockwise, and standing still within 10 degrees of it. The clone
-alone, before any PPO, gets the heading error to about 19 degrees on random bodies with
-no falls. Its legs swing up to a radian, so `task.action_to_rad` is 1.3, and the body
+swapped toward one clockwise, and standing still within 10 degrees of it. It steers on
+the heading error the policy observes, and with targets all the way round even while the
+curriculum keeps the bodies narrow. The clone alone, before any PPO, faces targets
+dead behind within 13 seconds on the nominal body (2 degrees off after), and averages
+26 degrees of error on fully random bodies with 3 falls in 24. Its legs swing up to a radian, so `task.action_to_rad` is 1.3, and the body
 randomisation ramps up over the first 15M steps, as for lift and fall. It keeps the camera height input. Unlike the camera walk it trains on
 the printed build with bare-print surfaces (see [Bodies](#bodies)), like the heading walk.
 It's the camera walk otherwise, and only the lines marked CHANGED differ from that file.

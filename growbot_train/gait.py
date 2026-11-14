@@ -43,13 +43,10 @@ class Keyframes:
 
 
 def _steer(want: np.ndarray, vec, deadband_deg: float) -> np.ndarray:
-    from growbot_train.env import wrap_deg
-
-    targets = vec.get_attr("target_deg")
-    yaws = vec.env_method("yaw_deg")
+    # Steer on the heading error the policy observes (noise, drift and stale readings
+    # included), so each label is a function of what the policy can see.
     out = want.copy()
-    for i, (target, yaw) in enumerate(zip(targets, yaws, strict=True)):
-        err = wrap_deg(target - yaw)
+    for i, err in enumerate(vec.get_attr("_err_obs")):
         if abs(err) < deadband_deg:
             out[i] = 0.0
         elif err < 0:
@@ -76,6 +73,9 @@ def clone_gait(model, vec, cfg, gait: Keyframes, samples: int, epochs: int, log=
     rng = np.random.default_rng(cfg.train.seed)
     lim = math.tanh(3.0)  # leave the policy room either side of the gait
     raw, targets = [], []
+    if cfg.train.warm_gait_steer:
+        # Targets all the way round, even while the curriculum keeps the bodies narrow.
+        vec.set_attr("target_scale", 1.0)
     vec.reset()
     while len(raw) * vec.num_envs < samples:
         t = np.array(vec.get_attr("step_index"), dtype=float) * CONTROL_DT
@@ -86,6 +86,8 @@ def clone_gait(model, vec, cfg, gait: Keyframes, samples: int, epochs: int, log=
         raw.append(vec.get_original_obs().copy())
         targets.append(a)
         vec.step((a + rng.normal(0.0, 0.3, a.shape)).astype(np.float32))
+    if cfg.train.warm_gait_steer:
+        vec.set_attr("target_scale", None)
     obs = torch.as_tensor(vec.normalize_obs(np.concatenate(raw)), dtype=torch.float32)
     act = torch.as_tensor(np.concatenate(targets), dtype=torch.float32)
     policy = model.policy
