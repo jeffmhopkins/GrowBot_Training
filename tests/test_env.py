@@ -323,3 +323,16 @@ def test_camera_height_command_moves_the_stance_it_pays_for() -> None:
         env.step(np.zeros(2))
         seen.add(round(env.tilt_cmd, 3))
     assert 1.0 in seen and min(seen) >= -1.0 and len(seen) > 5
+
+
+def test_a_config_without_the_new_inputs_draws_no_extra_random_numbers() -> None:
+    # Same seed, same episode as before the speed and height inputs existed.
+    cfg = Config()
+    env = GrowBotHeadingEnv(cfg)
+    env.reset(seed=7)
+    after_reset = env.np_random.random()
+    cfg2 = Config()
+    cfg2.task.speed = "command"
+    env2 = GrowBotHeadingEnv(cfg2)
+    env2.reset(seed=7)
+    assert env2.np_random.random() != after_reset

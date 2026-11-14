@@ -70,6 +70,8 @@ class Diagnostics(BaseCallback):
             self.sums["speed"] += info["speed"]
             self.sums["abs_err_deg"] += info["abs_err_deg"]
             self.sums["lift_deg"] += info["lift_deg"]
+            self.sums["want_lift_deg"] += info["want_lift_deg"]
+            self.sums["speed_miss"] += info["speed_miss"]
             self.falls += int(info["fell"])
             for k, v in info["terms"].items():
                 self.sums["term_" + k] += v
@@ -93,6 +95,8 @@ class Diagnostics(BaseCallback):
                     "abs_err_deg": self.sums["abs_err_deg"] / self.n,
                     "falls_per_1k_steps": 1000 * self.falls / self.n,
                     "lift_deg": self.sums["lift_deg"] / self.n,
+                    "want_lift_deg": self.sums["want_lift_deg"] / self.n,
+                    "speed_miss": self.sums["speed_miss"] / self.n,
                 },
             )
         self.sums.clear()

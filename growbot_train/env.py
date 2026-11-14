@@ -315,7 +315,10 @@ class GrowBotHeadingEnv(gym.Env):
         self._rest_pitch = _pitch_deg(self._up0)
         self._fixed_tilt = options.get("tilt_cmd")
         self.tilt_cmd = self._draw_tilt()
-        self._next_tilt = self._u(self.cfg.task.tilt_command_every_s)
+        # Timers only for the inputs a config uses, so older configs keep their random
+        # stream (same seed, same episodes as before these inputs existed).
+        if self.cfg.task.tilt_command:
+            self._next_tilt = self._u(self.cfg.task.tilt_command_every_s)
         self._set_stance()
         # A folded start: legs tucked, body lying nearly flat. The levelling above was
         # already done on neutral legs, as the app does, so this only changes the pose.
@@ -350,7 +353,8 @@ class GrowBotHeadingEnv(gym.Env):
         # "speed_cmd" pins the speed command for the whole episode (evaluation).
         self._fixed_speed = options.get("speed_cmd")
         self.speed_cmd = self._draw_speed()
-        self._next_speed = self._u(self.cfg.task.speed_command_every_s)
+        if self.cfg.task.speed == "command":
+            self._next_speed = self._u(self.cfg.task.speed_command_every_s)
         self.hist = np.zeros((self.frames, len(self.channels)))
         self._push_frame()
         return self._obs(), {}
@@ -376,7 +380,7 @@ class GrowBotHeadingEnv(gym.Env):
             self.target_deg = wrap_deg(self.target_deg + self._u((-lim, lim)))
             self._next_retarget = t + self._u(cfg.task.retarget_every_s)
 
-        if t >= self._next_speed:
+        if cfg.task.speed == "command" and t >= self._next_speed:
             self.speed_cmd = self._draw_speed()
             self._next_speed = t + self._u(cfg.task.speed_command_every_s)
 
@@ -399,9 +403,10 @@ class GrowBotHeadingEnv(gym.Env):
         speed = float(np.linalg.norm(self.vel_avg))
         if cfg.task.speed == "cap":
             progress = r.progress * min(v_along, cap) / cap
+            speed_miss = abs(v_along - cap)
         else:
             want = self.speed_cmd * cap * np.array([math.cos(tr), math.sin(tr)])
-            miss = float(np.linalg.norm(self.vel_avg - want))
+            miss = speed_miss = float(np.linalg.norm(self.vel_avg - want))
             progress = r.progress * max(0.0, 1.0 - miss / (r.speed_track_tol * cap))
         terms = {
             "progress": progress,
@@ -448,7 +453,9 @@ class GrowBotHeadingEnv(gym.Env):
             "abs_err_deg": abs(err_true),
             "fell": fell,
             "pitch_deg": pitch,
-            "lift_deg": pitch - self._rest_pitch,
+            # From the same base the stance reward uses, so it reads against want_lift_deg.
+            "lift_deg": pitch - max(self._rest_pitch, self._nominal_rest_pitch),
+            "speed_miss": speed_miss,
             "speed_cmd": self.speed_cmd,
             "tilt_cmd": self.tilt_cmd,
             "want_lift_deg": self._want_lift,
