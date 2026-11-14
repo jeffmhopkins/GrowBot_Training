@@ -120,6 +120,10 @@ def sweep_cases(cfg: config_mod.Config) -> dict[str, dict[str, Any]]:
         "slippery": {key: lo},
         "grippy": {key: hi},
         "slow_relay": {"delay_s": r.relay_delay_s[1]},
+        "slow_sensors": {"sensor_delay_s": r.sensor_delay_s[1]},
+        "weak_torque": {"torque_scale": r.servo_torque_scale[0]},
+        "narrow_feet": {"foot_width": r.foot_width_scale[0]},
+        "mis_trimmed": {"trim": np.array([r.trim_err_rad, -r.trim_err_rad])},
         "nose_heavy": {"com": np.array([r.com_x_m[1], 0.0, 0.0])},
         "tail_heavy": {"com": np.array([r.com_x_m[0], 0.0, 0.0])},
     }

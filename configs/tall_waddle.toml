@@ -1,0 +1,102 @@
+# GrowBot tall waddle: upstream's live-app walk rhythm (forward-0930's seed), on the
+# printed build, retrained with the camera walk's inputs (heading, signed speed).
+# Starts from the camera walk; lines marked CHANGED differ from configs/camera_walk.toml.
+name = "tall_waddle"
+
+[reward]
+# The reward is added up every control tick (25 per second). Bigger number = the robot
+# cares more about that thing. See README "The reward" for what each one does.
+progress = 2.0          # walking along the target direction, full value at the speed cap
+heading = 0.5           # pointing at the target: full value dead on, zero facing away
+speed_cap_m_s = 0.01    # 1 cm/s. Tail first this body can only scoot (see README)
+speed_window_s = 1.0    # speed is averaged over this long before the cap is checked
+overspeed = 1.0         # penalty for going faster than the cap (grows with the square); gentler, as turning on the spot drifts past this low cap
+stop_drift_free = 1.5   # during a stop, drift up to this x the cap is free (1.5 cm/s, the old allowance)
+tilt = 1.0              # penalty for leaning away from the taller stance
+fall = 10.0             # one-off penalty when it tips past fall_tilt_deg (episode ends)
+action_rate = 0.05      # penalty for jerky leg commands (change since last tick, squared)
+effort = 0.01           # small penalty for big leg angles
+stance = 0.0            # CHANGED: off: randomised bodies waddle anywhere from 60 to 80 degrees, so one target would pay it to drop out of the rhythm
+stance_tol_deg = 6.0    # how close to the taller stance counts (degrees)
+back_lean = 0.0         # CHANGED: off, for the same reason; going over backwards is still a fall
+back_lean_margin_deg = 12.0  # how far past the stance before that penalty starts
+wobble = 0.0            # penalty for rocking (roll and pitch spin, squared)
+turn = 0.5              # pay per degree the heading error shrinks (a clear signal to turn)
+
+[task]
+body = "build"              # CHANGED: the printed body with a Pixel on top
+surfaces = ["pla", "pla", "pla", "pla"]  # CHANGED: bare print everywhere (see growbot_train/surfaces.py)
+start_pitch_deg = 35.0      # CHANGED: set down tail first, as the real one is
+servo_torque_nm = 0.25      # an MG90S's real torque (upstream's model allows 1.5)
+episode_seconds = 30.0      # longer, so each episode holds several commands
+initial_error_deg = 180.0   # first target: up to this many degrees off the camera end
+retarget_every_s = [4.0, 10.0]  # the target moves every 4-10 s...
+retarget_max_deg = 120.0        # ...by up to this much
+gait_hz = 1.80969723562966  # CHANGED: the waddle's own rate (upstream's seed), so the cloned rhythm lines up with the clock
+history_frames = 5          # how many past ticks of sensors the policy sees
+action_to_rad = 1.4         # CHANGED: the waddle holds its legs at 41-69 degrees; leave room past that
+fall_tilt_deg = 55.0        # tipped this far from the starting stance = fallen (the app aborts at 55)
+facing = "camera"           # tail first, toward what the camera sees
+stand_lift_deg = 18.0       # CHANGED: the waddle stands at about 61 degrees, 18 above rest (63 is the most these legs reach)
+lying_start_prob = 0.0      # share of episodes that start folded flat (off until it can scoot)
+lying_leg_rad = [-0.95, -0.75]  # how far both legs tuck for a folded start (radians)
+back_fall_pitch_deg = 88.0  # CHANGED: randomised bodies waddle up to about 80 and the start kicks past 85; past 88 is going over backwards
+speed = "command"           # a speed input: +1 walk to the face, 0 stop and look, <0 back away
+speed_command_every_s = [3.0, 8.0]  # a new speed this often...
+speed_stop_prob = 0.3              # ...3 in 10 of them a stop (turn on the spot to face it)...
+speed_back_min = -1.0              # ...the rest anywhere from backing away at full speed to +1
+tilt_command = false        # CHANGED: no camera-height input; the waddle sets its own height
+tilt_lift_deg = [-30.0, 6.0]       # what -1 and +1 mean, degrees from the resting pitch
+tilt_command_every_s = [3.0, 8.0]  # a new height this often...
+tilt_tall_prob = 0.5               # ...half the time standing tall, otherwise anywhere in range
+
+[randomization]
+# Every episode gets a slightly different robot, so the policy works on the real one.
+enabled = true
+mass_scale = [0.80, 1.25]
+com_x_m = [-0.030, 0.030]
+com_y_m = [-0.015, 0.015]
+com_z_m = [-0.010, 0.015]
+leg_length_scale = [0.85, 1.15]
+leg_asymmetry = [0.96, 1.04]
+servo_gain_scale = [0.75, 1.25]
+friction = [0.2, 2.2]        # one friction on every geom, when task.surfaces is empty
+floor_friction_scale = [0.5, 1.6]  # with task.surfaces: the whole floor's slickness
+servo_slew_rad_s = [8.7, 10.5]
+servo_lag_s = [0.015, 0.035]
+relay_delay_s = [0.020, 0.160]
+servo_torque_scale = [0.5, 1.2]   # torque limit x this: MG90Ss vary
+trim_err_rad = 0.087        # each leg's zero off by up to 5 degrees
+sensor_delay_s = [0.0, 0.12]  # the phone's readings arrive this late
+foot_width_scale = [0.57, 1.0]  # foot width along the body, share of the printed 21 mm
+relay_drop_prob = 0.08
+imu_tilt_rad = 0.15
+accel_noise_m_s2 = 0.3
+gyro_noise_rad_s = 0.1
+gyro_bias_rad_s = 0.02
+heading_noise_deg = 3.0
+heading_drift_deg_per_s = 0.5
+heading_refresh_ticks = [1, 6]
+push_every_s = [0.0, 0.0]   # a sudden shove this often (off until it can scoot)
+push_pitch_rad_s = 0.0      # how hard a shove spins it (pitch, rad/s)
+
+[train]
+total_steps = 50000000      # CHANGED: starts from a moving rhythm, so a shorter run
+warm_gait = "configs/gaits/tall_waddle.json"  # CHANGED: clone upstream's waddle rhythm before PPO
+n_envs = 0                  # 0 = one simulator per CPU thread
+n_steps = 256
+batch_size = 4096
+n_epochs = 5
+learning_rate = 3e-4
+gamma = 0.99
+gae_lambda = 0.95
+clip_range = 0.2
+ent_coef = 0.0
+log_std_init = -0.5
+policy_layers = [128, 128]
+value_layers = [256, 256]
+checkpoint_every_steps = 2000000
+# How often the live folder's 3D replay and policy_latest.json are refreshed from the
+# current network (a pause of a second or two each time; a few minutes apart on the box).
+live_replay_every_steps = 500000
+seed = 0

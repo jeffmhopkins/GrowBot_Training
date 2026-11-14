@@ -131,6 +131,8 @@ class Episode:
     slew: np.ndarray
     lag: np.ndarray
     delay_s: float
+    sensor_delay_s: float
+    trim: np.ndarray
     imu_rot: np.ndarray
     gyro_bias: np.ndarray
     heading_drift_deg_s: float
@@ -188,6 +190,7 @@ class GrowBotHeadingEnv(gym.Env):
                 "geom_solimp",
                 "actuator_gainprm",
                 "actuator_biasprm",
+                "actuator_forcerange",
             )
         }
         if self._split:
@@ -267,6 +270,12 @@ class GrowBotHeadingEnv(gym.Env):
     def _u(self, lo_hi: tuple[float, float]) -> float:
         return float(self.np_random.uniform(lo_hi[0], lo_hi[1]))
 
+    def _u_if(self, lo_hi: tuple[float, float]) -> float:
+        """A draw only where the range has width, so a run saved before a draw existed
+        (its range backfilled to one value) keeps its random stream: same seed, same
+        episodes."""
+        return float(lo_hi[0]) if lo_hi[0] == lo_hi[1] else self._u(lo_hi)
+
     def _apply_body(self, params: dict[str, Any]) -> None:
         m, nom = self.model, self._nominal
         for k, v in nom.items():
@@ -281,12 +290,18 @@ class GrowBotHeadingEnv(gym.Env):
         ):
             half0 = nom["geom_size"][geom, 2]
             half = half0 * s
-            hx, hy = nom["geom_size"][geom, 0], nom["geom_size"][geom, 1]
+            fw = params["foot_width"]
+            hx, hy = nom["geom_size"][geom, 0] * fw, nom["geom_size"][geom, 1]
             mass = nom["body_mass"][leg] * s * ms
             for g in every:
                 m.geom_size[g, 2] = half
                 m.geom_pos[g, 2] = -half
-                gx, gy = nom["geom_size"][g, 0], nom["geom_size"][g, 1]
+                # The split mode's tail-side and nose-side halves narrow with the foot,
+                # about its middle, so the foot stays under its mass.
+                mid = nom["geom_pos"][geom, 0]
+                m.geom_size[g, 0] = nom["geom_size"][g, 0] * fw
+                m.geom_pos[g, 0] = mid + (nom["geom_pos"][g, 0] - mid) * fw
+                gx, gy = m.geom_size[g, 0], nom["geom_size"][g, 1]
                 m.geom_rbound[g] = math.sqrt(gx * gx + gy * gy + half * half)
             m.body_mass[leg] = mass
             m.body_ipos[leg, 2] = -half
@@ -300,6 +315,7 @@ class GrowBotHeadingEnv(gym.Env):
             self._leg_half.append(half)
         m.actuator_gainprm[:] = nom["actuator_gainprm"] * params["gain"]
         m.actuator_biasprm[:] = nom["actuator_biasprm"] * params["gain"]
+        m.actuator_forcerange[:] = nom["actuator_forcerange"] * params["torque_scale"]
         if self._split:
             floor = FLOORS[params["floor"]]
             for surf, mat in zip(SURFACES, self.cfg.task.surfaces, strict=True):
@@ -321,6 +337,8 @@ class GrowBotHeadingEnv(gym.Env):
                 "com": np.array([self._u(r.com_x_m), self._u(r.com_y_m), self._u(r.com_z_m)]),
                 "leg_scale": [shared * self._u(r.leg_asymmetry) for _ in range(2)],
                 "gain": self._u(r.servo_gain_scale),
+                "torque_scale": self._u_if(r.servo_torque_scale),
+                "foot_width": self._u_if(r.foot_width_scale),
                 # One value for every geom: MuJoCo takes the larger of two touching
                 # geoms' friction, so per-geom draws would skew the floor grippy.
                 "friction": np.full(ng, self._u(r.friction)),
@@ -329,6 +347,12 @@ class GrowBotHeadingEnv(gym.Env):
                 slew=rng.uniform(*r.servo_slew_rad_s, 2),
                 lag=rng.uniform(*r.servo_lag_s, 2),
                 delay_s=self._u(r.relay_delay_s),
+                sensor_delay_s=self._u_if(r.sensor_delay_s),
+                trim=(
+                    rng.uniform(-r.trim_err_rad, r.trim_err_rad, 2)
+                    if r.trim_err_rad
+                    else np.zeros(2)
+                ),
                 imu_rot=_rot(rng.uniform(-r.imu_tilt_rad, r.imu_tilt_rad, 3)),
                 gyro_bias=rng.uniform(-r.gyro_bias_rad_s, r.gyro_bias_rad_s, 3),
                 heading_drift_deg_s=self._u(
@@ -351,6 +375,8 @@ class GrowBotHeadingEnv(gym.Env):
                 slew=np.full(2, 9.6),
                 lag=np.full(2, 0.025),
                 delay_s=0.04,
+                sensor_delay_s=0.0,
+                trim=np.zeros(2),
                 imu_rot=np.eye(3),
                 gyro_bias=np.zeros(3),
                 heading_drift_deg_s=0.0,
@@ -376,6 +402,8 @@ class GrowBotHeadingEnv(gym.Env):
             "com": np.zeros(3),
             "leg_scale": [1.0, 1.0],
             "gain": 1.0,
+            "torque_scale": 1.0,
+            "foot_width": 1.0,
             "friction": self._nominal["geom_friction"][:, 0].copy(),
         }
         if self._split:
@@ -406,7 +434,9 @@ class GrowBotHeadingEnv(gym.Env):
         leg_top = m.body_pos[self._legs[0], 2]
         self._place(d, 2 * max(self._leg_half) - leg_top + 0.003, q)
         d.qpos[7:9] = self.np_random.uniform(-0.05, 0.05, 2)
-        d.ctrl[:] = 0.0
+        # The legs hold where a mis-trimmed robot's do, so the stance it settles into, and
+        # levels on, is its own.
+        d.ctrl[:] = np.clip(self.ep.trim, -CTRL_LIMIT, CTRL_LIMIT)
         for _ in range(round(self._settle_s() / m.opt.timestep)):  # settle onto the feet
             mujoco.mj_step(m, d)
         d.time = 0.0
@@ -433,7 +463,7 @@ class GrowBotHeadingEnv(gym.Env):
         legs = np.zeros(2)
         if lying:
             legs[:] = self._u(self.cfg.task.lying_leg_rad)
-            d.ctrl[:] = legs
+            d.ctrl[:] = np.clip(legs + self.ep.trim, -CTRL_LIMIT, CTRL_LIMIT)
             for _ in range(round(0.6 / m.opt.timestep)):
                 mujoco.mj_step(m, d)
             d.time = 0.0
@@ -462,6 +492,7 @@ class GrowBotHeadingEnv(gym.Env):
         if self.cfg.task.speed == "command":
             self._next_speed = self._u(self.cfg.task.speed_command_every_s)
         self.hist = np.zeros((self.frames, len(self.channels)))
+        self._imu_queue = np.tile(np.r_[self._imu_raw()], (DELAY_SLOTS, 1))
         self._push_frame()
         return self._obs(), {}
 
@@ -629,7 +660,8 @@ class GrowBotHeadingEnv(gym.Env):
         slewed = np.clip(delayed, self.motor - step, self.motor + step)
         alpha = CONTROL_DT / (ep.lag + CONTROL_DT)
         self.motor = (1 - alpha) * self.motor + alpha * slewed
-        self.data.ctrl[:] = np.clip(self.motor, -CTRL_LIMIT, CTRL_LIMIT)
+        # A mis-trimmed leg holds a little off wherever it's told to go.
+        self.data.ctrl[:] = np.clip(self.motor + ep.trim, -CTRL_LIMIT, CTRL_LIMIT)
 
     def _up_in_body(self) -> np.ndarray:
         # World "up" expressed in the torso frame: the bottom row of the rotation matrix.
@@ -657,9 +689,20 @@ class GrowBotHeadingEnv(gym.Env):
         gyro = rot @ d.sensordata[self._gyro_adr : self._gyro_adr + 3]
         return acc, gyro
 
+    def _imu_late(self) -> tuple[np.ndarray, np.ndarray]:
+        """The IMU reading the policy gets this tick: ep.sensor_delay_s old, between ticks
+        interpolated, the way the relay's delay is."""
+        acc, gyro = self._imu_raw()
+        self._imu_queue = np.concatenate([np.r_[acc, gyro][None], self._imu_queue[:-1]])
+        idx = min(self.ep.sensor_delay_s / CONTROL_DT, DELAY_SLOTS - 1.001)
+        i0 = int(idx)
+        frac = idx - i0
+        late = (1 - frac) * self._imu_queue[i0] + frac * self._imu_queue[i0 + 1]
+        return late[:3], late[3:]
+
     def _frame(self) -> np.ndarray:
         r = self.cfg.randomization
-        acc, gyro = self._imu_raw()
+        acc, gyro = self._imu_late()
         if self._noisy:
             acc = acc + self.np_random.normal(0, r.accel_noise_m_s2, 3)
             gyro = gyro + self.ep.gyro_bias + self.np_random.normal(0, r.gyro_noise_rad_s, 3)

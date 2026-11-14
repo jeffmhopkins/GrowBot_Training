@@ -53,6 +53,9 @@ class Scenario:
     swing_rad: float = 1.5
     # Camera height: the average pitch (degrees nose-up) the gait must hold, 0 for none.
     min_pitch_deg: float = 0.0
+    # Leg angle (radians) held while it is set down, and the gait eases in from. Long
+    # rocker legs at 0 tip it onto its nose; tucked they let it sit on its tail.
+    rest_leg_rad: float = 0.0
     # Foot shape (a reprinted leg): "flat" (stock), "round" (a half-round tip), "bevel"
     # (the sole cut at foot_deg; positive leaves the nose-side edge lowest, negative the
     # tail-side edge), or "toe_nose" / "toe_tail" (an L: a toe sticking out foot_deg mm
@@ -326,6 +329,13 @@ class Bench:
         pitch = math.radians(self.start_pitch_deg)
         d.qpos[3:7] = [math.cos(pitch / 2), 0.0, -math.sin(pitch / 2), 0.0]
         d.qpos[2] = 2 * half - leg_top + 0.003 + 0.09 * math.sin(pitch)
+        rest = self.scen.rest_leg_rad if self.scen else 0.0
+        if rest:
+            # Held with tucked legs: lift clear of the floor first so the long feet
+            # don't start buried in it.
+            d.qpos[2] += 0.03
+            d.qpos[7:9] = rest
+            d.ctrl[:] = rest
         for _ in range(round(1.5 / m.opt.timestep)):
             self._step()
 
@@ -351,11 +361,20 @@ class Bench:
             # This draw of the robot can't even sit on its tail (a far-back centre of mass
             # tips it over when set down): no gait's fault, so not counted.
             return dict.fromkeys(
-                ("v_fwd", "v_side", "yaw_deg_s", "max_tilt", "max_pitch", "mean_pitch", "fell"),
+                (
+                    "v_fwd",
+                    "v_side",
+                    "yaw_deg_s",
+                    "max_tilt",
+                    "max_pitch",
+                    "mean_pitch",
+                    "lifted",
+                    "fell",
+                ),
                 0.0,
             ) | {"bad_start": 1.0}
-        motor = np.zeros(2)
-        queue = np.zeros((DELAY_SLOTS, 2))
+        motor = np.full(2, self.scen.rest_leg_rad)
+        queue = np.full((DELAY_SLOTS, 2), self.scen.rest_leg_rad)
         slew = np.array(dom.slew) * CONTROL_DT
         alpha = CONTROL_DT / (np.array(dom.lag) + CONTROL_DT)
         idx = min(dom.delay_s / CONTROL_DT, DELAY_SLOTS - 1.001)
@@ -363,12 +382,15 @@ class Bench:
         sub = round(CONTROL_DT / m.opt.timestep)
         n_ticks = round(seconds / CONTROL_DT)
         max_tilt = max_pitch = pitch_sum = 0.0
-        pitch_n = 0
+        pitch_n = lifted = 0
+        body = set(self.geoms["tail"]) | set(self.geoms["belly"])
         fell = False
         lim = self.scen.swing_rad
         for k in range(n_ticks):
             t = k * CONTROL_DT
-            cmd = np.clip(np.asarray(gait(t), dtype=float), -lim, lim) * min(1.0, t / ramp_s)
+            rest = self.scen.rest_leg_rad
+            cmd = np.clip(np.asarray(gait(t), dtype=float), -lim, lim)
+            cmd = rest + (cmd - rest) * min(1.0, t / ramp_s)
             if rng.random() < dom.drop_prob:
                 cmd = queue[0]
             queue = np.concatenate([cmd[None], queue[:-1]])
@@ -385,6 +407,9 @@ class Bench:
             if k * CONTROL_DT >= ramp_s:
                 pitch_sum += pitch
                 pitch_n += 1
+                # Whole body off the floor, standing on its feet alone (a vault or a hop).
+                con = d.contact[: d.ncon]
+                lifted += not any(c.geom1 in body or c.geom2 in body for c in con)
             # Past vertical it goes over onto the screen; a big roll is over on its side.
             if pitch > FALL_PITCH_DEG or abs(roll) > 45 or pitch < -20:
                 fell = True
@@ -400,6 +425,7 @@ class Bench:
             "max_tilt": max_tilt,
             "max_pitch": max_pitch,
             "mean_pitch": pitch_sum / max(1, pitch_n),
+            "lifted": lifted / max(1, pitch_n),
             "fell": float(fell),
             "bad_start": 0.0,
         }

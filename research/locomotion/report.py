@@ -13,15 +13,22 @@ from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
-from lab import Bench, Domain, KeyframeGait
+from lab import Bench, Domain, KeyframeGait, Scenario
 from search import BY_NAME
 
 HERE = Path(__file__).parent
 SCALES = (0.7, 1.0, 1.3)
 
 
+def scenario_of(res: dict) -> Scenario:
+    if res["name"] in BY_NAME:
+        return BY_NAME[res["name"]]
+    # A co-design result names no fixed scenario: it carries the foot it chose.
+    return Scenario(res["name"], res["surfaces"], res["note"], **res["scenario"])
+
+
 def floor_sweep(res: dict) -> dict[str, list[float]]:
-    scen = BY_NAME[res["name"]]
+    scen = scenario_of(res)
     gait = KeyframeGait(np.array(res["x"]), scen.swing_rad)
     body = res["body"].removesuffix(".xml")
     out = {}
