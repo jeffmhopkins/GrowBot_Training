@@ -43,8 +43,7 @@ def test_build_body_sits_on_its_tail_and_materials_land_on_their_surfaces() -> N
 
 
 def test_random_robots_all_start_resting_on_their_tails() -> None:
-    # Two ways to rest: on the tail's bottom edge and the feet (about 40 degrees), or
-    # flat on the tail's cut face (about 60, the cut is 30 degrees off upright).
+    # It rests on the tail's 45-degree cut face, with or without its feet down.
     env = GrowBotHeadingEnv(_build_cfg(("pla",) * 4))
     for seed in range(60):
         env.reset(seed=seed)
@@ -88,22 +87,24 @@ def test_floors_and_surface_friction_are_drawn_per_episode() -> None:
 
 @pytest.mark.parametrize("scale", [1.04, 1.1, 1.15])
 def test_longer_legs_stand_on_the_floor_not_in_it(scale) -> None:
-    env = GrowBotHeadingEnv(_build_cfg(("pla",) * 4))
-    env.reset(seed=0, options={"overrides": {"leg_scale": [scale, scale]}})
-    m, d = env.model, env.data
-    for g in env._leg_all[0]:
-        assert m.geom_size[g, 2] == pytest.approx(env._leg_half[0])
-    d.ctrl[:] = 0.5  # swing the feet down onto the floor
-    for _ in range(200):
-        mujoco.mj_step(m, d)
-    floor = m.geom("floor").id
-    touching = set()
-    for c in d.contact[: d.ncon]:
-        if floor in (c.geom1, c.geom2):
-            touching.add(c.geom2 if c.geom1 == floor else c.geom1)
-            assert c.dist > -0.001  # resting on it, not sunk in
-    toes = {g for s in ("toe_nose", "toe_tail") for g in env._surface_geoms[s]}
-    assert touching & toes
+    # It may rest on its tail alone, so swing the legs until the feet find the floor.
+    toes_down = False
+    for swing in (-0.5, 0.5, -1.0):
+        env = GrowBotHeadingEnv(_build_cfg(("pla",) * 4))
+        env.reset(seed=0, options={"overrides": {"leg_scale": [scale, scale]}})
+        m, d = env.model, env.data
+        for g in env._leg_all[0]:
+            assert m.geom_size[g, 2] == pytest.approx(env._leg_half[0])
+        d.ctrl[:] = swing
+        for _ in range(200):
+            mujoco.mj_step(m, d)
+        floor = m.geom("floor").id
+        toes = {g for s in ("toe_nose", "toe_tail") for g in env._surface_geoms[s]}
+        for c in d.contact[: d.ncon]:
+            if floor in (c.geom1, c.geom2):
+                assert c.dist > -0.001  # resting on it, not sunk in
+                toes_down |= (c.geom2 if c.geom1 == floor else c.geom1) in toes
+    assert toes_down
 
 
 def test_floor_edges_in_the_sweep_match_the_training_range() -> None:

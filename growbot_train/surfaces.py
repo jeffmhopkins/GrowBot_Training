@@ -104,7 +104,12 @@ def split_contacts(root: ET.Element) -> None:
         g for g in torso.findall("geom")
         if g.get("type") == "box" and g.get("contype") != "0"
     ]  # fmt: skip
-    line = min(_x_extent(g)[0] for g in shell) + TAIL_PAD_M
+    # A body can say how far in its tail reaches (<custom><numeric name="tail_pad_m">):
+    # the printed build's backplate overhangs a cut-back tray, so the edge it rests on
+    # sits further in than the outline's end.
+    pad = root.find("custom/numeric[@name='tail_pad_m']")
+    tail_pad = float(pad.get("data")) if pad is not None else TAIL_PAD_M
+    line = min(_x_extent(g)[0] for g in shell) + tail_pad
     n = {"tail": 0, "belly": 0}
 
     def add(kind: str, like: ET.Element, x0: float, x1: float) -> None:
