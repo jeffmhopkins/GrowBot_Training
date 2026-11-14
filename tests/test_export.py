@@ -94,6 +94,7 @@ def test_speed_command_policy_declares_cmd_forward(tiny_speed_run: Path) -> None
     assert p["obs_spec"]["cmd_forward"]["meaning"] == "speed_command"
     # The app needs to know which heading the error was measured from.
     assert p["obs_spec"]["cmd_yaw"]["heading_from"] == "body"
+    assert p["obs_spec"]["cmd_yaw"]["lens_fade"] > 0
     assert p["training"]["speed"] == "command"
     assert chans[chans.index("cmd_forward") + 1] == "cmd_pitch"
     assert p["obs_spec"]["cmd_pitch"]["meaning"] == "camera_height"

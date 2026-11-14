@@ -84,9 +84,7 @@ def record(
         return [
             parts,
             round(env.target_deg, 2),
-            round(info["abs_err_deg"], 1)
-            if info
-            else round(abs(wrap_deg(env.target_deg - env.yaw_deg())), 1),
+            round(info["abs_err_deg"], 1) if info else round(env.scored_err_deg(), 1),
             round(info["v_along"] * 100, 2) if info else 0.0,
             round(info["speed"] * 100, 2) if info else 0.0,
         ]
