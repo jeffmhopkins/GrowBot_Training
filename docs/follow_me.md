@@ -22,24 +22,53 @@ One exported policy with one input set, so the app never swaps files mid-walk:
 
 | Input | Meaning |
 | --- | --- |
-| `cmd_yaw` | heading error to the person, degrees / 180, positive = turn left |
-| `cmd_forward` | signed speed, -1..+1 of the cap |
-| `cmd_pitch` | camera height / tilt, -1 low (looking up) .. +1 tall |
+| `cmd_yaw` | heading error to the person, degrees / 180, positive = target to the left (turn left), measured from where the camera points |
+| `cmd_forward` | signed speed, -1..+1 of one shared cap |
+| `cmd_pitch` | camera height: -1 low (the camera looks almost straight up) .. +1 tall (toward the horizon) |
 
 What it does with them:
 
-- **Speed above 0:** walk tall, camera first, toward the heading (lift and fall,
-  `configs/lift_fall.toml`).
-- **Speed below 0:** back away in the low waddle (camera walk, `configs/camera_walk.toml`).
+- **Speed above 0:** walk tall, camera first, toward the heading. Teacher: lift and
+  fall (`configs/lift_fall.toml`).
+- **Speed below 0:** back away low. Teacher: the camera walk's backing half
+  (`configs/camera_walk.toml`). Which gait Jeff means by "the original low waddle" is
+  still to settle: the camera walk, or the first heading walk, which is lower but walks
+  nose first.
 - **Speed 0:** stand, spin in place to face the heading, and tilt the camera to the
-  commanded pitch (look, `configs/look.toml`).
+  commanded pitch. Teacher: look (`configs/look.toml`).
 
-Each skill trains on its own first (their inputs differ: lift and fall has no speed
-input, the camera walk and look do). The master is then distilled from them into one
-student with the shared inputs above: each teacher is queried only in its own mode,
-matched in radians (their `action_to_rad` differ), and the training episodes switch
-modes partway through so the student also learns the hand-overs. PPO fine-tunes the
-student after.
+Each skill trains on its own first. The master is then distilled from them into one
+student with the shared inputs above. Each teacher is queried only in its own mode, with
+its own inputs rebuilt from the student's. The training episodes switch modes partway
+through, so the student also learns the hand-overs. PPO fine-tunes the student after.
+
+The teachers don't line up yet, and the distillation has to bridge these gaps:
+
+- **Inputs:**
+  - lift and fall sees only the heading, with no speed and no camera height;
+  - look sees heading and camera height, with no speed;
+  - only the camera walk sees all three.
+- **Speed:**
+  - lift and fall walks only at its 5 cm/s cap: its cloned gait has one speed, and PPO
+    unlearned it when asked for others;
+  - the camera walk's cap is 1 cm/s.
+  
+  So forward speeds between 0 and full have no teacher yet. The follower can treat
+  forward as stop-or-go until one does, and the master's cap per direction has to be
+  set.
+- **Camera height:** -1 is 20 degrees under rest in look and 30 in the camera walk.
+  Lift and fall stands about 18 degrees taller than rest whatever `cmd_pitch` says, so
+  `cmd_pitch` only steers the camera at speed 0 and when backing.
+- **Clock:** each teacher's gait clock ticks at its own rate (look 1 Hz, camera walk
+  2 Hz, lift and fall 2.347 Hz). The student needs the clock per mode, or its own clock
+  with the teachers' phases mapped onto it.
+- **Heading:** look measures the error from where the camera points (`heading_from =
+  "lens"`), which is what the tracker reports. The other two measure it from the tail
+  end's direction; the difference is small when the robot isn't rolling.
+- **Body:** look and lift and fall train on the printed build. The camera walk trains on
+  upstream's sim body, so it needs retraining on the build before it can teach.
+- **Leg range:** each teacher's full action means a different swing (`action_to_rad`), so
+  they are matched in radians, not raw actions.
 
 ### 2. Person tracker (on the phone, in the browser)
 
@@ -58,7 +87,10 @@ the phone in the PWA:
   slowly toward where they were last seen. After a few seconds, stop and say so.
 
 Readings are smoothed (a short moving average) and stamped with their age; the policy
-already trains with heading readings that are noisy and up to 6 ticks stale.
+already trains with heading readings that are noisy (3 degrees), drifting (0.5 degrees a
+second) and held for up to 5 ticks (0.2 s), with no added delay. A real camera pipeline
+lags more, so the final test adds the lag (below) and the policy may need to train with
+it.
 
 **More than one person.** The tracker follows one chosen person, not whoever is in frame:
 
