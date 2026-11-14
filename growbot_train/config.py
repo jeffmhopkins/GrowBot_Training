@@ -183,7 +183,8 @@ class RandomizationConfig:
     # policy learns to catch itself. (0, 0) = no shoves.
     push_every_s: tuple[float, float] = (0.0, 0.0)
     push_pitch_rad_s: float = 0.0
-    # Curriculum: start every range (and how far off the target starts or jumps) at
+    # Curriculum: start every body, servo, friction and sensor-offset range (and how far
+    # off the target starts or jumps; not the sensor noise or refresh rate) at
     # ramp_from of its full width around the as-built robot, widening to the full range
     # over ramp_steps of training. A fragile gait cloned before PPO only pays on robots
     # near the one it was found on; on the full spread from step 0 PPO unlearns it.

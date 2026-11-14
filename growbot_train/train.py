@@ -217,6 +217,9 @@ def main(argv: list[str] | None = None) -> int:
         vec.training = True
         model = PPO.load(resume, env=vec, device="cpu")
         reset = False
+        # learn() resets the envs before the first rollout callback, so a resumed run
+        # would spend its first episodes at full randomisation without this.
+        vec.set_attr("dr_scale", ramp_scale(cfg, model.num_timesteps))
     else:
         vec = VecNormalize(vec, norm_obs=True, norm_reward=True, clip_obs=CLIP_OBS, gamma=t.gamma)
         model = PPO(
