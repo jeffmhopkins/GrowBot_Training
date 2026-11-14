@@ -60,6 +60,15 @@ def _tilt_offset(vec, offset: tuple[float, ...]) -> np.ndarray:
     return lo + (tilt + 1.0) / 2.0 * (hi - lo)
 
 
+def _labels(want: np.ndarray, vec, cfg) -> np.ndarray:
+    """The gait's leg commands per env, steered and shifted for camera height as set."""
+    if cfg.train.warm_gait_steer:
+        want = _steer(want, vec, cfg.train.warm_gait_deadband_deg)
+    if cfg.train.warm_gait_tilt_offset:
+        want = want + _tilt_offset(vec, tuple(cfg.train.warm_gait_tilt_offset))[:, None]
+    return want
+
+
 def clone_gait(model, vec, cfg, gait: Keyframes, samples: int, epochs: int, log=print) -> float:
     """Fit the policy's mean action to the gait, from states the gait itself visits (with
     some action noise so it also sees how to get back onto the gait). Also warms the
@@ -82,6 +91,8 @@ def clone_gait(model, vec, cfg, gait: Keyframes, samples: int, epochs: int, log=
     lim = math.tanh(3.0)  # leave the policy room either side of the gait
     raw, targets = [], []
     offset = tuple(cfg.train.warm_gait_tilt_offset)
+    if offset and len(offset) != 2:
+        raise ValueError("train.warm_gait_tilt_offset is two numbers: at height -1 and +1")
     if offset and not cfg.task.tilt_command:
         raise ValueError("train.warm_gait_tilt_offset needs task.tilt_command")
     if cfg.train.warm_gait_steer:
@@ -91,10 +102,7 @@ def clone_gait(model, vec, cfg, gait: Keyframes, samples: int, epochs: int, log=
     while len(raw) * vec.num_envs < samples:
         t = np.array(vec.get_attr("step_index"), dtype=float) * CONTROL_DT
         want = np.array([gait(ti) for ti in t]) / cfg.task.action_to_rad
-        if cfg.train.warm_gait_steer:
-            want = _steer(want, vec, cfg.train.warm_gait_deadband_deg)
-        if offset:
-            want = want + _tilt_offset(vec, offset)[:, None]
+        want = _labels(want, vec, cfg)
         a = np.arctanh(np.clip(want, -lim, lim))
         raw.append(vec.get_original_obs().copy())
         targets.append(a)

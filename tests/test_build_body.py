@@ -271,6 +271,27 @@ def test_the_clone_shifts_both_legs_with_the_camera_height_command() -> None:
     np.testing.assert_allclose(out, [-0.55, -0.2, 0.15])
 
 
+class _BothVec:
+    def __init__(self, errs: list[float], tilts: list[float]) -> None:
+        self.attrs = {"_err_obs": errs, "tilt_cmd": tilts}
+
+    def get_attr(self, name: str) -> list[float]:
+        return self.attrs[name]
+
+
+def test_the_offset_lands_on_steered_labels_after_the_swap() -> None:
+    from growbot_train.gait import _labels
+
+    cfg = _build_cfg()
+    cfg.train.warm_gait_steer = True
+    cfg.train.warm_gait_tilt_offset = (-0.5, 0.1)
+    want = np.array([[0.1, 0.9]] * 3)
+    out = _labels(want, _BothVec([90.0, -20.0, 5.0], [-1.0, 1.0, 0.0]), cfg)
+    np.testing.assert_allclose(out[0], [-0.4, 0.4])  # counter-clockwise, camera high
+    np.testing.assert_allclose(out[1], [1.0, 0.2])  # swapped, then shifted
+    np.testing.assert_allclose(out[2], [-0.2, -0.2])  # on target: hold the height
+
+
 def test_a_tilt_offset_clone_needs_a_camera_height_input(tmp_path) -> None:
     cfg = _build_cfg()
     cfg.task.gait_hz = 2.0
