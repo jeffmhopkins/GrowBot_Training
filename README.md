@@ -343,7 +343,18 @@ target (`reward.heading_width_deg = 40`: 60 degrees off earns a tenth, where the
 paid three quarters). The policy isn't told how far it has wandered, as the phone can't
 measure that. The weights were checked against the cloned spin in the simulator:
 charging drift harder (a tighter speed band, or an uncapped anchor) made standing still
-score better than turning, which is how earlier runs froze. It keeps the camera height input. Unlike the camera walk it trains on
+score better than turning, which is how earlier runs froze. The run with those (Jeff,
+2026-11-14) turned without falling but still crept backward at about 1.7 cm/s, most
+of it inside the free speed band, and it held the camera about 37 degrees up whatever
+the camera height asked (42 to 68). The clone had held one posture whatever the input,
+so the policy learned to ignore it. So the clone now lowers or raises both legs with the
+camera height input (`train.warm_gait_tilt_offset`; the spin aims the camera about 65
+degrees up at -1 and 47 at +1, where standing still with the legs level gives 48),
+holding the asked height pays twice as much (`reward.stance = 1`), and the free speed
+band narrows from 1.5 to 0.75 cm/s as the curriculum ramps
+(`reward.stop_drift_free_final`). Checked offline against standing still: the
+crept-back policy still beat it by a clear margin at the narrow band, while the clone
+it starts from only about ties it at the wide one, so the band starts wide. It keeps the camera height input. Unlike the camera walk it trains on
 the printed build with bare-print surfaces (see [Bodies](#bodies)), like the heading walk.
 It's the camera walk otherwise, and only the lines marked CHANGED differ from that file.
 From JBrain it's the "GrowBot look" job.
