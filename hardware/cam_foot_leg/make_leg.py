@@ -14,6 +14,9 @@ The hub isn't redrawn: every void of upstream's leg within the hub box (the tape
 slot, the spline bore and the screw hole) is cut out of the new leg, so the horn fit is
 upstream's to the facet. Upstream's STL is fetched at a pinned commit and checked by hash.
 
+Between them runs a femur: a shaft flaring from the hub into the sole, an S-shaped marrow
+slot down it, and its servo face sculpted like bone (thickness()).
+
 Frame (mm): the axle at the origin, the leg hanging down -z, the outer (screw-head) face
 at y = 0 and the servo face, where the horn slot opens, at y = -13. In the left leg's
 file +x points to the nose; the right leg is its mirror image. The STLs are written lying
@@ -31,9 +34,10 @@ from pathlib import Path
 
 import manifold3d as mf
 import numpy as np
+import shapely
 from shapely import affinity
-from shapely.geometry import LineString, MultiPoint, Point, Polygon
-from shapely.ops import unary_union, voronoi_diagram
+from shapely.geometry import LineString, Point, Polygon
+from shapely.ops import unary_union
 
 HERE = Path(__file__).resolve().parent
 
@@ -57,14 +61,19 @@ HUB_BOX = ((-5.0, 5.0), (-THICK - 0.5, 0.5), (-20.0, 6.0))
 
 CHAMFER = 0.8  # on every edge of both faces, as 0.2 mm layer steps
 SOLE_BAND = 5.0  # solid rim behind the sole
-FLANK_WALL = 3.0
-HUB_KEEP = 25.0  # where the ribs start thinning: the slot reaches 19.1 mm below the axle
 HUB_WALL = 4.5  # round the horn slot, a little more than the stock leg's 3.5 at its tip
-CELL_COUNT = 12
-CELL_SEED = 9
-RIB_MIN, RIB_MAX = 2.2, 3.4
-CELL_ROUND = 2.6
-CELL_MIN_AREA = 12.0
+# The femur: a shaft from the hub flaring into the sole, its marrow slot an S.
+SHAFT = ((0.0, -15.0), (-4.0, -40.0), (-1.0, -62.0))  # quadratic Bezier, hub to sole
+SHAFT_W = (18.0, 12.5, 46.0)  # width at the hub, mid-shaft and the sole
+SLOT_W = (3.5, 4.5, 7.0)
+FILLET = 6.0  # where the shaft meets the hub and the sole
+# The servo face is sculpted like bone: rounded over toward every edge, and the shaft's
+# middle dished a little, easing back to the full 13 mm at the hub and along the sole.
+ROUND_R = 5.0  # how far in from each edge the rounding reaches
+ROUND_DROP = 3.5  # how far the servo face falls at the very edge
+WAIST_DEPTH = 1.6
+FULL_BLEND = 8.0  # mm over which the sculpting fades into the full-thickness hub and sole
+GRID = 0.3  # heightfield step, mm
 LABEL_DEPTH = 0.6
 
 
@@ -77,16 +86,6 @@ def _polar(r: float, phi: float) -> tuple[float, float]:
     return r * math.sin(phi), -r * math.cos(phi)
 
 
-def _tangent_point(p: tuple[float, float], r: float, side: float) -> tuple[float, float]:
-    """Where the line from p touches the circle of radius r round the origin, on the
-    outside of the leg (side -1: tail flank, +1: nose flank)."""
-    d = math.hypot(*p)
-    base = math.atan2(p[1], p[0])
-    off = math.acos(r / d)
-    cands = [(r * math.cos(base + s * off), r * math.sin(base + s * off)) for s in (1, -1)]
-    return max(cands, key=lambda c: side * c[0])
-
-
 def sole_points(dip: float, n: int = 80) -> list[tuple[float, float]]:
     """The sole from tail edge to nose edge, the dipped stretch dip mm short of the
     simulated curve, with a square step where the dip begins (a line to dip to)."""
@@ -95,75 +94,117 @@ def sole_points(dip: float, n: int = 80) -> list[tuple[float, float]]:
     return tail + nose
 
 
-def outline(dip: float) -> Polygon:
-    """The leg's side profile: the hub circle and the sole joined by straight flanks
-    tangent to both, the sole's corners eased just enough not to chip."""
-    sole = sole_points(dip)
-    t_tail = _tangent_point(sole[0], HUB_R, -1.0)
-    t_nose = _tangent_point(sole[-1], HUB_R, 1.0)
-    a0 = math.atan2(t_nose[1], t_nose[0])
-    a1 = math.atan2(t_tail[1], t_tail[0])
-    if a1 < a0:
-        a1 += 2 * math.pi
-    cap = [(HUB_R * math.cos(a), HUB_R * math.sin(a)) for a in np.linspace(a0, a1, 60)]
-    poly = Polygon(sole + cap).buffer(0)
-    return poly.buffer(-0.6, join_style="round").buffer(0.6, join_style="round")
-
-
 def _boss() -> Polygon:
     """The solid round the hub: the horn slot's outline grown by its wall, merged into the
-    hub circle as one teardrop, so the cells flow round it instead of meeting a ring."""
+    stock leg's hub circle as one teardrop."""
     slot = Polygon([(-4.4, 4.4), (4.4, 4.4), (4.4, -19.1), (-4.4, -19.1)])
     return slot.buffer(HUB_WALL).union(Point(0, 0).buffer(HUB_R + 2.0, 128)).convex_hull
 
 
-def _seeds(region: Polygon) -> list[Point]:
-    """Cell centres spread evenly over the open area by Lloyd relaxation from a fixed random
-    start, so the cells come out even in size but irregular in shape, like grown bone."""
-    rng = np.random.default_rng(CELL_SEED)
-    x0, z0, x1, z1 = region.bounds
-    pts: list[Point] = []
-    while len(pts) < CELL_COUNT:
-        p = Point(rng.uniform(x0, x1), rng.uniform(z0, z1))
-        if region.contains(p):
-            pts.append(p)
-    for _ in range(40):
-        cells = voronoi_diagram(MultiPoint(pts), envelope=region.envelope.buffer(30))
-        pts = [c.intersection(region).centroid for c in cells.geoms]
-    return pts
+def _sole_band(dip: float) -> Polygon:
+    inner = [_polar(sole_radius(p) - SOLE_BAND, p) for p in np.linspace(ARC, -ARC, 60)]
+    return Polygon(sole_points(dip) + inner).buffer(0)
 
 
-def _rib(c: Point) -> float:
-    """Rib width at a cell: thickest by the hub, where the bending load is greatest, and
-    by the sole, which takes the floor's hits; thinnest across the middle."""
-    r = math.hypot(c.x, c.y)
-    t = (r - HUB_KEEP) / (SOLE_MID - SOLE_BAND - HUB_KEEP)
-    return RIB_MIN + (RIB_MAX - RIB_MIN) * (2.0 * t - 1.0) ** 2
+def _below_sole(dip: float) -> Polygon:
+    """Everything beyond the sole curve, extended past its ends, so nothing but the sole
+    ever reaches the floor."""
+    tail = [_polar(sole_radius(p), p) for p in np.linspace(-ARC - 0.6, -ARC, 12)[:-1]]
+    nose = [_polar(sole_radius(p) - dip, p) for p in np.linspace(ARC, ARC + 0.6, 12)[1:]]
+    edge = tail + sole_points(dip) + nose
+    return Polygon(edge + [_polar(300.0, ARC + 0.6), _polar(300.0, -ARC - 0.6)]).buffer(0)
 
 
-def windows(profile: Polygon) -> Polygon:
-    """Organic through-cuts: Voronoi cells of the open area, each shrunk by half its rib
-    and rounded hard, so the ribs between them taper and fillet into each other like
-    trabecular bone. The rim, flanks and hub boss stay solid."""
-    inner = profile.buffer(-FLANK_WALL, join_style="round")
-    sole_keep = Polygon(
-        [(0.0, 0.0)]
-        + [_polar(sole_radius(p) - SOLE_BAND, p) for p in np.linspace(-ARC - 0.2, ARC + 0.2, 80)]
+def _bezier(p0, p1, p2, n: int = 48) -> np.ndarray:
+    t = np.linspace(0.0, 1.0, n)[:, None]
+    p0, p1, p2 = map(np.asarray, (p0, p1, p2))
+    return (1 - t) ** 2 * p0 + 2 * (1 - t) * t * p1 + t**2 * p2
+
+
+def _stroke(pts: np.ndarray, widths: tuple[float, float, float]) -> Polygon:
+    """A smooth band along pts whose width eases from widths[0] through widths[1] to
+    widths[2]: circles along the path, each neighbouring pair hulled."""
+    w0, wm, w1 = widths
+    t = np.linspace(0.0, 1.0, len(pts))
+    w = (1 - t) ** 2 * w0 + 2 * (1 - t) * t * wm + t**2 * w1
+    discs = [Point(*p).buffer(r / 2, 32) for p, r in zip(pts, w, strict=True)]
+    return unary_union([discs[i].union(discs[i + 1]).convex_hull for i in range(len(discs) - 1)])
+
+
+def face(dip: float) -> Polygon:
+    """The side profile: a femur from the hub boss flaring into the sole band, filleted
+    where they meet, with an S-shaped marrow slot down the shaft."""
+    shaft = _stroke(_bezier(*SHAFT), SHAFT_W)
+    solid = unary_union([shaft, _boss(), _sole_band(dip)])
+    solid = solid.buffer(FILLET, 64).buffer(-FILLET, 64).buffer(-0.6).buffer(0.6)
+    solid = solid.difference(_below_sole(dip)).union(_sole_band(dip))
+    t = np.linspace(0.0, 1.0, 40)
+    slot = np.column_stack([-1.5 - 2.2 * np.sin(t * math.pi * 1.5), -28.0 - 29.0 * t])
+    return solid.difference(_stroke(slot, SLOT_W))
+
+
+def _smooth(x: np.ndarray) -> np.ndarray:
+    x = np.clip(x, 0.0, 1.0)
+    return x * x * (3 - 2 * x)
+
+
+def thickness(prof: Polygon, x: np.ndarray, z: np.ndarray, dip: float) -> np.ndarray:
+    """How far the solid reaches from the outer face at each (x, z): THICK at the hub and
+    along the sole, rounded over toward the shaft's edges and its slot, and dished a
+    little mid-shaft, like the waist of a long bone."""
+    pts = shapely.points(x, z)
+    # Signed: negative outside the profile, so the curve carries on smoothly past the edge
+    # instead of folding back into a ridge there.
+    edge = shapely.distance(pts, prof.boundary)
+    edge = np.where(shapely.contains_xy(prof, x, z), edge, -edge)
+    roundover = ROUND_DROP * np.clip(1.0 - edge / ROUND_R, 0.0, None) ** 2
+    waist = WAIST_DEPTH * np.exp(-(((z + 40.0) / 11.0) ** 2)) * _smooth(edge / 6.0)
+    hub = 1.0 - _smooth(shapely.distance(pts, _boss()) / FULL_BLEND)
+    r = np.hypot(x, z)
+    phi = np.arctan2(x, -z)
+    to_sole = (np.vectorize(sole_radius)(phi) - SOLE_BAND) - r
+    sole = 1.0 - _smooth(to_sole / FULL_BLEND)
+    full = np.maximum(hub, sole)
+    return THICK - (roundover + waist) * (1.0 - full)
+
+
+def _heightfield(prof: Polygon, dip: float) -> mf.Manifold:
+    """The solid between the outer face and the sculpted servo face: a closed grid mesh,
+    flat beyond the outer face and following thickness() on the servo side. A heightfield
+    has no overhang anywhere, so the sculpting prints without supports outer face down."""
+    x0, z0, x1, z1 = prof.bounds
+    xs = np.arange(x0 - 1.0, x1 + 1.0 + GRID, GRID)
+    zs = np.arange(z0 - 1.0, z1 + 1.0 + GRID, GRID)
+    gx, gz = np.meshgrid(xs, zs, indexing="ij")
+    drop = THICK - thickness(prof, gx.ravel(), gz.ravel(), dip).reshape(gx.shape)
+    # Where nothing is carved, clear the face entirely so no surface lands on y = -THICK.
+    top = np.where(drop < 0.05, -THICK - 1.0, -THICK + drop)
+    nx, nz = gx.shape
+    verts = np.concatenate(
+        [
+            np.column_stack([gx.ravel(), top.ravel(), gz.ravel()]),
+            np.column_stack([gx.ravel(), np.full(gx.size, 1.0), gz.ravel()]),
+        ]
     )
-    region = inner.intersection(sole_keep).difference(_boss())
-    cells = voronoi_diagram(MultiPoint(_seeds(region)), envelope=profile.envelope.buffer(20))
-    cuts = []
-    for cell in cells.geoms:
-        piece = cell.buffer(-_rib(cell.centroid) / 2, join_style="mitre").intersection(region)
-        for g in getattr(piece, "geoms", [piece]):
-            if g.is_empty or g.area < CELL_MIN_AREA:
-                continue
-            rounded = g.buffer(-CELL_ROUND, join_style="round").buffer(
-                CELL_ROUND, join_style="round"
-            )
-            if rounded.area >= CELL_MIN_AREA:
-                cuts.append(rounded)
-    return unary_union(cuts)
+    idx = np.arange(nx * nz).reshape(nx, nz)
+    off = nx * nz
+    a, b, c, d = idx[:-1, :-1], idx[1:, :-1], idx[1:, 1:], idx[:-1, 1:]
+    tris = [np.stack([a, b, c], -1), np.stack([a, c, d], -1)]  # top, facing -y
+    tris += [np.stack([a, c, b], -1) + off, np.stack([a, d, c], -1) + off]  # bottom, +y
+
+    def wall(line: np.ndarray) -> np.ndarray:
+        """Quads down the grid's rim; walked the same way round as the top's edges, so
+        each quad is wound against its top triangle's shared edge."""
+        p, q = line[:-1], line[1:]
+        return np.concatenate([np.stack([q + off, q, p], -1), np.stack([p + off, q + off, p], -1)])
+
+    rim = [idx[:, 0], idx[-1, :], idx[::-1, -1], idx[0, ::-1]]
+    sides = [wall(line) for line in rim]
+    tri = np.concatenate([t.reshape(-1, 3) for t in tris] + sides).astype(np.uint32)
+    hf = mf.Manifold(mf.Mesh(vert_properties=verts.astype(np.float32), tri_verts=tri))
+    if hf.status() != mf.Error.NoError:
+        raise ValueError(f"heightfield isn't a closed solid: {hf.status()}")
+    return hf
 
 
 def _letter(side: str) -> Polygon:
@@ -247,8 +288,8 @@ def hub_voids(stock: mf.Manifold) -> mf.Manifold:
 
 def build(stock: mf.Manifold, dip: float = 0.75, side: str = "left") -> mf.Manifold:
     """The leg for one side; side 'right' is the mirror image of 'left'."""
-    face = outline(dip)
-    leg = body(face.difference(windows(face))) - hub_voids(stock)
+    prof = face(dip)
+    leg = (body(prof) ^ _heightfield(prof, dip)) - hub_voids(stock)
     # The label sits on the servo face beside the slot, reading upright with the leg
     # hanging; the right leg's is pre-mirrored so it reads correctly once mirrored.
     mark = _letter(side)

@@ -47,7 +47,7 @@ def test_sole_matches_the_benchs_winning_foot() -> None:
 
 
 def test_only_the_dipped_stretch_is_recessed_and_by_the_dip() -> None:
-    outline = leg_mod.outline(0.75)
+    outline = leg_mod.face(0.75)
     for phi, short in ((-0.97 * leg_mod.ARC, 0.0), (0.0, 0.75), (0.9 * leg_mod.ARC, 0.75)):
         x, z = leg_mod._polar(1.0, phi)
         inside = [
@@ -57,11 +57,29 @@ def test_only_the_dipped_stretch_is_recessed_and_by_the_dip() -> None:
         assert reach == pytest.approx(leg_mod.sole_radius(phi) - short, abs=0.03)
 
 
+def test_only_the_sole_can_reach_the_floor() -> None:
+    prof = leg_mod.face(0.75)
+    # Slivers from the two curves' different sampling only; nothing pokes out 0.02 mm.
+    assert prof.intersection(leg_mod._below_sole(0.75)).buffer(-0.02).is_empty
+
+
+def test_servo_face_is_sculpted_only_on_the_shaft() -> None:
+    prof = leg_mod.face(0.75)
+    x = np.array([0.0, 6.0, -2.0, 7.5])
+    z = np.array([-10.0, -18.0, -64.0, -40.0])
+    t = leg_mod.thickness(prof, x, z, 0.75)
+    # The hub (round the horn slot) and the sole keep the full 13 mm.
+    assert t[:3] == pytest.approx([leg_mod.THICK] * 3, abs=0.01)
+    # Mid-shaft by the edge, it's rounded over.
+    assert t[3] < leg_mod.THICK - 1.0
+    assert t[3] > leg_mod.THICK - leg_mod.ROUND_DROP - leg_mod.WAIST_DEPTH - 0.01
+
+
 def test_both_legs_are_closed_solids_and_mirror_images(legs) -> None:
     left, right = legs["left"], legs["right"]
     for leg in (left, right):
         assert leg.status() == mf.Error.NoError
-        assert leg.genus() >= 9  # the screw hole and at least eight cells
+        assert leg.genus() == 2  # the screw hole and the marrow slot
     assert left.volume() == pytest.approx(right.volume(), rel=1e-3)
     # Same shape mirrored: only the engraved letter differs.
     mirrored = left.mirror([1.0, 0.0, 0.0])

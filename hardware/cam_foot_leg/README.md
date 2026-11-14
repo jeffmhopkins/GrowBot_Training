@@ -24,18 +24,22 @@ by hash) into `.upstream/`.
 - **Mount:** the horn slot, the spline bore and the screw hole aren't redrawn. They're
   cut from upstream's leg, so the MG90S horn fits and screws in exactly as it does on the
   stock leg.
-- **Organic cutouts:** twelve bone-like cells, a Voronoi pattern relaxed to even
-  sizes, with every corner rounded so the ribs taper and fillet into each other. The ribs
-  are 3.4 mm beside the hub and the sole, which take the most load, and 2.2 mm across the
-  middle. The rim, flanks and a teardrop boss round the horn slot stay solid. The fan has
-  about 1.4 times the stock leg's side area but the same 21.1 cm³ of plastic. Every edge
-  on both faces has a 0.8 mm chamfer. `CELL_SEED` and `CELL_COUNT` give other patterns.
+- **Femur shape:** a bone shaft runs from a teardrop head round the horn slot and flares
+  into the sole, filleted where it meets both. An S-shaped marrow slot runs down the shaft.
+- **Sculpted servo face:** the shaft's top rounds over toward every edge and the slot,
+  and dishes a little mid-shaft like a long bone's waist. It fades back to the full
+  13 mm round the hub and along the sole, so the horn capture and the sole's contact
+  width are untouched. It's a heightfield on top of a flat outer face, so it still prints
+  without supports. Each leg uses 22.2 cm³ of plastic (the stock leg uses 21.1).
+- Every edge of the flat outer face, and of the full-thickness hub and sole, has a 0.8 mm
+  chamfer.
 
 ## Printing and fitting
 
 - The STLs lie flat, outer (screw-head) face down. Every void widens upward, so print in
   PLA with no supports, like upstream's legs. The 0.8 mm chamfers are modelled as 0.2 mm
-  steps, so print at 0.2 mm layers or finer.
+  steps, so print at 0.2 mm layers or finer; the sculpted face prints as ordinary top
+  layers.
 - **L** and **R** are engraved on the servo face. They're mirror images: fit each leg so
   its long (tail) corner points to the tail, the battery end. Only one leg does that on
   each side.
