@@ -150,6 +150,9 @@ class Arrow extends THREE.Group {
   }
 }
 const IN = DATA.inputs || {};
+// The asked camera aim only lies along the target for a camera-first body; a nose-first
+// one's lens leans away from it, so that job keeps the flat target arrow.
+const TIPPED = !!(IN.camera_height && IN.camera_first);
 const LOOK_LEN = 0.13, SPEED_LEN = 0.15;  // metres for the look arrows; for full speed (the cap)
 const look = new Arrow(0.004), aim = new Arrow(0.003, 0.4);
 const speedCmd = new Arrow(0.004), speedNow = new Arrow(0.003, 0.4);
@@ -217,7 +220,7 @@ function show() {
   // The command: toward the target, tipped up to the camera aim it asks for when the job
   // has a camera height input. Beside it, faint, where the camera actually points.
   o3.set(p[0], p[1], p[2] + 0.07);
-  look.place(o3, IN.camera_height ? v3.set(...want) : v3.set(Math.cos(t), Math.sin(t), 0), LOOK_LEN);
+  look.place(o3, TIPPED ? v3.set(...want) : v3.set(Math.cos(t), Math.sin(t), 0), LOOK_LEN);
   aim.visible = !!IN.camera_first;
   if (IN.camera_first) aim.place(o3, v3.set(...lens), LOOK_LEN);
   // On the floor: the speed asked for (signed, so backing away points away from the
@@ -253,7 +256,7 @@ $("tAim").hidden = !IN.camera_first;
 if (IN.camera_height) $("sAimLabel").textContent = "camera aim up, asked / now";
 const key = (color, text, faint) => `<i style="background:var(${color})${faint ? ";opacity:.4" : ""}"></i>${text}`;
 $("legend").innerHTML = [
-  key("--target", IN.camera_height ? "heading and camera aim asked" : "target direction"),
+  key("--target", TIPPED ? "heading and camera aim asked" : "target direction"),
   IN.camera_first ? key("--target", "camera aim now", true) : "",
   IN.speed ? key("--ok", "speed command (×cap)") : "",
   key("--ok", "velocity", true),
