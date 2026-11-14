@@ -1,0 +1,26 @@
+{
+ "source": "research/locomotion/search.py scenario w1 on the final build (stock bare legs): a lift-and-fall gait the bench found, 5.2 cm/s tail first on the as-built robot",
+ "hz": 2.347,
+ "keys_rad": [
+  [
+   -0.631,
+   1.494,
+   -1.352,
+   1.496,
+   1.477,
+   1.407,
+   1.491,
+   -1.497
+  ],
+  [
+   -1.04,
+   1.372,
+   -1.252,
+   1.008,
+   1.478,
+   1.492,
+   1.485,
+   1.456
+  ]
+ ]
+}
