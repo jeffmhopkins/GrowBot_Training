@@ -2,7 +2,7 @@
 # legs lift the body high on its tail and let it fall back down a little further tail
 # first, about twice a second. The bench (research/locomotion/search.py, scenario w1)
 # found it on the printed build; this retrains it with the camera walk's inputs
-# (heading, signed speed). Lines marked CHANGED differ from configs/camera_walk.toml.
+# (heading, speed). Lines marked CHANGED differ from configs/camera_walk.toml.
 name = "lift_fall"
 
 [reward]
@@ -18,7 +18,7 @@ tilt = 1.0              # penalty for leaning away from the taller stance
 fall = 10.0             # one-off penalty when it tips past fall_tilt_deg (episode ends)
 action_rate = 0.01      # CHANGED: the gait snaps its legs across most of their range; charge that less
 effort = 0.01           # small penalty for big leg angles
-stance = 0.0            # CHANGED: off: the gait bounces between 50 and 85 degrees, so one target height would pay it to stop
+stance = 0.0            # CHANGED: off: the gait bounces (55-64 degrees as built, up to the 80s on other bodies), so one target height would pay it to stop
 stance_tol_deg = 6.0    # how close to the taller stance counts (degrees)
 back_lean = 0.0         # CHANGED: off, for the same reason; going over backwards is still a fall
 back_lean_margin_deg = 12.0  # how far past the stance before that penalty starts
@@ -42,11 +42,11 @@ facing = "camera"           # tail first, toward what the camera sees
 stand_lift_deg = 18.0       # CHANGED: it stands at about 61 degrees, 18 above rest
 lying_start_prob = 0.0      # share of episodes that start folded flat (off until it can scoot)
 lying_leg_rad = [-0.95, -0.75]  # how far both legs tuck for a folded start (radians)
-back_fall_pitch_deg = 88.0  # CHANGED: it throws the body up past 80 at times; past 88 is going over onto the screen
+back_fall_pitch_deg = 88.0  # CHANGED: other bodies get thrown up past 80 at times; past 88 is going over onto the screen
 speed = "command"           # a speed input: +1 walk to the face, 0 stop and look, <0 back away
 speed_command_every_s = [3.0, 8.0]  # a new speed this often...
-speed_stop_prob = 0.3              # ...3 in 10 of them a stop (turn on the spot to face it)...
-speed_back_min = -1.0              # ...the rest anywhere from backing away at full speed to +1
+speed_stop_prob = 0.15             # CHANGED: ...fewer of them a stop: the gait has one speed, and stopping it costs at first...
+speed_back_min = 0.0               # CHANGED: ...the rest from 0 to full speed camera first: no backing away yet, as the cloned gait can't, and asking for it would pay it to freeze
 tilt_command = false        # CHANGED: no camera-height input; the gait sets its own height
 tilt_lift_deg = [-30.0, 6.0]       # what -1 and +1 mean, degrees from the resting pitch
 tilt_command_every_s = [3.0, 8.0]  # a new height this often...

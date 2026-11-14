@@ -18,7 +18,7 @@ There are three walks, each a config file:
 | --- | --- | --- | --- |
 | [`heading_walk.toml`](configs/heading_walk.toml) | nose first | its resting stance (about 34 degrees nose-up) | standing |
 | [`camera_walk.toml`](configs/camera_walk.toml) | **tail first, toward what the phone's camera sees** | a few degrees taller, to lift the camera's view | standing (folded starts and shoves come back once it can scoot) |
-| [`lift_fall.toml`](configs/lift_fall.toml) | tail first by lifting the body and letting it fall; backs away nose first | tall, bouncing (about 50 to 85 degrees) | standing |
+| [`lift_fall.toml`](configs/lift_fall.toml) | tail first by lifting the body and letting it fall | tall, bouncing (about 55 to 64 degrees as built) | standing |
 
 See [The camera walk](#the-camera-walk) for why the second one exists and what it can and
 can't do with this body.
@@ -284,7 +284,9 @@ feet alone two-thirds of the time, and each time it drops back onto its tail it 
 little further tail first: about 5 cm/s on the as-built robot on both floors. Open loop it only works on robots close
 to the as-built one; `configs/lift_fall.toml` clones it (`configs/gaits/lift_fall.json`)
 and lets PPO add the feedback that keeps it going on the rest, steered with the camera
-walk's heading and signed speed (walk up camera first, stop and face it, or back away).
+walk's heading and speed (walk up camera first, or stop and face it). It isn't asked to
+back away yet: the cloned gait has one speed, so a command it can't follow would pay it
+to freeze, as the camera walk's runs did.
 The speed cap is 5 cm/s, the stance bonus and lean-back penalty are off as the body
 bounces through every height, and only going over onto the screen (past 88 degrees) or
 forwards ends an episode. From JBrain it's the "GrowBot lift and fall" job.

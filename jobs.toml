@@ -47,7 +47,7 @@ est_hours = "2-5 h"
 notes = """The stock-leg gait like the clip: the legs lift the body high on its tail and let \
 it fall back down a little further tail first, about twice a second \
 (configs/lift_fall.toml). It clones the gait the bench found, then learns to steer it with \
-a heading and a signed speed (walk up camera first, stop and face it, or back away). \
+a heading and a speed (walk up camera first, or stop and face it). \
 Downloads and the Live card work as for the heading walk."""
 
 [[job]]
