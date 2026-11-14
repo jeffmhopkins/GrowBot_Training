@@ -144,12 +144,26 @@ class GrowBotHeadingEnv(gym.Env):
                 "actuator_biasprm",
             )
         }
+        self._nominal_rest_pitch = self._settled_pitch()
         self.frames = cfg.task.history_frames
         n_obs = len(CHANNELS) * self.frames
         self.observation_space = gym.spaces.Box(-np.inf, np.inf, (n_obs,), np.float32)
         self.action_space = gym.spaces.Box(-ACTION_LIMIT, ACTION_LIMIT, (2,), np.float32)
         self._renderer: mujoco.Renderer | None = None
         self.target_deg = 0.0
+
+    def _settled_pitch(self) -> float:
+        """Resting pitch of the as-built body on neutral legs. A randomised body can rest
+        far from it (a nose-heavy one may settle flat, then sit back up after a bump), so
+        anything that must not move with that uses this instead."""
+        m = self.model
+        d = mujoco.MjData(m)
+        leg_top = m.body_pos[self._legs[0], 2]
+        half = float(m.geom_size[self._leg_geoms[0], 2])
+        d.qpos[2] = 2 * half - leg_top + 0.003
+        for _ in range(round(1.0 / m.opt.timestep)):
+            mujoco.mj_step(m, d)
+        return _pitch_deg(d.xmat[self._torso][6:9])
 
     # ---------------------------------------------------------------- randomisation
     def _u(self, lo_hi: tuple[float, float]) -> float:
@@ -363,10 +377,16 @@ class GrowBotHeadingEnv(gym.Env):
             terms["stance"] = r.stance * math.exp(-((miss / r.stance_tol_deg) ** 2))
         pitch = _pitch_deg(up)
         if r.back_lean:
-            limit = self._rest_pitch + cfg.task.stand_lift_deg + r.back_lean_margin_deg
+            # From whichever rest is higher, so a body that happened to settle flat is not
+            # charged for sitting in the ordinary stance.
+            rest = max(self._rest_pitch, self._nominal_rest_pitch)
+            limit = rest + cfg.task.stand_lift_deg + r.back_lean_margin_deg
             terms["back_lean"] = -r.back_lean * (max(0.0, pitch - limit) / 10.0) ** 2
         fell = stance_cos < math.cos(math.radians(cfg.task.fall_tilt_deg))
-        if cfg.task.back_fall_pitch_deg and pitch > cfg.task.back_fall_pitch_deg:
+        # A tail-heavy body may rest steeper than the line itself; it falls only once it
+        # goes clearly past where it rests.
+        back_line = max(cfg.task.back_fall_pitch_deg, self._rest_pitch + 10.0)
+        if cfg.task.back_fall_pitch_deg and pitch > back_line:
             fell = True
         if fell:
             terms["fall"] = -r.fall

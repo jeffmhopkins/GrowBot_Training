@@ -214,7 +214,8 @@ mixed in from the beginning rather than in a later phase, which is simpler and w
 a skill this small.
 
 **Why not train it to get back up from its back?** In the sim it can't. Past about 95
-degrees nose-up it rolls over onto the phone, and then both legs point at the sky: the
+degrees nose-up (for the standard build; a tail-heavy randomised body tips a little
+later) it rolls over onto the phone, and then both legs point at the sky: the
 servos only swing them 90 degrees each way, so they never reach the floor. No policy can
 fix that, so training aims to never get there. If it happens on the real robot, a
 hardware stop would be the answer: a short strut or bumper behind the tail that props it
