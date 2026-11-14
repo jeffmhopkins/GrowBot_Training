@@ -11,12 +11,10 @@ from pathlib import Path
 from growbot_train.config import load
 
 ROOT = Path(__file__).resolve().parent.parent
-NAME = re.compile(r"^[a-z][a-z0-9_]{2,63}$")
+NAME = re.compile(r"^growbot_[a-z0-9_]{1,56}$")
 CONFIG = re.compile(r"^configs/[A-Za-z0-9_-]{1,64}\.toml$")
 KEYS = {"name", "title", "config", "est_hours", "notes", "disk_gb"}
 LIMITS = {"title": 120, "est_hours": 20, "notes": 1000}
-# The Launcher's own jobs; a repo job can't take their names.
-BUILTIN = {"erdos_straus_1e12", "erdos_straus_1e12_native", "erdos_straus_1e13_native"}
 
 
 def _jobs() -> list[dict]:
@@ -33,7 +31,7 @@ def test_every_job_is_well_formed() -> None:
     for job in _jobs():
         assert set(job) <= KEYS, job
         assert {"name", "title", "config"} <= set(job), job
-        assert NAME.fullmatch(job["name"]) and job["name"] not in BUILTIN
+        assert NAME.fullmatch(job["name"])
         assert job["name"] not in names, f"{job['name']} is listed twice"
         names.add(job["name"])
         assert job["title"].strip()
