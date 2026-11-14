@@ -30,10 +30,11 @@ What it does with them:
 
 - **Speed above 0:** walk tall, camera first, toward the heading. Teacher: lift and
   fall (`configs/lift_fall.toml`).
-- **Speed below 0:** back away low. Teacher: the camera walk's backing half
-  (`configs/camera_walk.toml`). Which gait Jeff means by "the original low waddle" is
-  still to settle: the camera walk, or the first heading walk, which is lower but walks
-  nose first.
+- **Speed below 0:** back away from the person in the original low waddle, nose first
+  (Jeff, 2026-11-14). The camera sits at the tail, so walking nose first is walking
+  away from what the camera sees. Teacher: the heading walk (`configs/heading_walk.toml`),
+  already trained on the printed build. It is given the heading half a turn from the
+  person's, so its nose points away from them while the camera still faces them.
 - **Speed 0:** stand, spin in place to face the heading, and tilt the camera to the
   commanded pitch. Teacher: look (`configs/look.toml`).
 
@@ -47,27 +48,27 @@ The teachers don't line up yet, and the distillation has to bridge these gaps:
 - **Inputs:**
   - lift and fall sees only the heading, with no speed and no camera height;
   - look sees heading and camera height, with no speed;
-  - only the camera walk sees all three.
+  - the heading walk sees only the heading, measured from the nose.
 - **Speed:**
   - lift and fall walks only at its 5 cm/s cap: its cloned gait has one speed, and PPO
     unlearned it when asked for others;
-  - the camera walk's cap is 1 cm/s.
+  - the heading walk walks only at its 3 cm/s cap.
   
-  So forward speeds between 0 and full have no teacher yet. The roadmap trains them
+  So speeds between 0 and full have no teacher yet, either way. The roadmap trains them
   (phase 1); until then the follower treats forward as stop-or-go. The master's cap
   per direction has to be set.
-- **Camera height:** -1 is 20 degrees under rest in look and 30 in the camera walk.
-  Lift and fall stands about 18 degrees taller than rest whatever `cmd_pitch` says, so
-  `cmd_pitch` only steers the camera at speed 0 and when backing, until the tall walk
-  learns a camera-height input (roadmap phase 1).
-- **Clock:** each teacher's gait clock ticks at its own rate (look 1 Hz, camera walk
-  2 Hz, lift and fall 2.347 Hz). The student needs the clock per mode, or its own clock
+- **Camera height:** only look has it (-1 is 20 degrees under rest). Lift and fall
+  stands about 18 degrees taller than rest and the heading walk walks at its rest
+  height, whatever `cmd_pitch` says. So `cmd_pitch` only steers the camera at speed 0,
+  until the walks learn a camera-height input (roadmap phase 1).
+- **Clock:** each teacher's gait clock ticks at its own rate (look and heading walk
+  1 Hz, lift and fall 2.347 Hz). The student needs the clock per mode, or its own clock
   with the teachers' phases mapped onto it.
 - **Heading:** look measures the error from where the camera points (`heading_from =
-  "lens"`), which is what the tracker reports. The other two measure it from the tail
-  end's direction; the difference is small when the robot isn't rolling.
-- **Body:** look and lift and fall train on the printed build. The camera walk trains on
-  upstream's sim body, so it needs retraining on the build before it can teach.
+  "lens"`), which is what the tracker reports. Lift and fall measures it from the tail
+  end's direction (small difference when the robot isn't rolling); the heading walk from
+  the nose, so its heading is the person's turned half a turn.
+- **Body:** all three train on the printed build.
 - **Leg range:** each teacher's full action means a different swing (`action_to_rad`), so
   they are matched in radians, not raw actions.
 
@@ -186,7 +187,7 @@ skill (with the follower limited to that skill's mode) for that baseline.
 ## Order of work
 
 1. Each skill trains and passes its own eval: look (spin and aim), lift and fall (tall,
-   forward), the low backing gait (retrained on the build).
+   forward), the low nose-first waddle (heading walk) for backing.
 2. The person, camera model, tracker and follower in the simulator, with the baseline
    on the single skills.
 3. The master distilled and fine-tuned; the final test above.
