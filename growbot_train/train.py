@@ -29,6 +29,7 @@ from stable_baselines3.common.vec_env import (
 
 from growbot_train import config as config_mod
 from growbot_train.env import GrowBotHeadingEnv
+from growbot_train.live import Live
 
 # The app's runner does not clip, so the normaliser must not either: a wide bound keeps
 # training and the phone computing the same numbers.
@@ -54,8 +55,9 @@ class Diagnostics(BaseCallback):
     """Logs what the walk is actually doing (speed along the target, heading error,
     falls, each reward term) so a reward change can be judged by more than one number."""
 
-    def __init__(self) -> None:
+    def __init__(self, live: Live | None = None) -> None:
         super().__init__()
+        self.live = live
         self.sums: dict[str, float] = defaultdict(float)
         self.n = 0
         self.falls = 0
@@ -81,9 +83,39 @@ class Diagnostics(BaseCallback):
         self.logger.record(
             "time/steps_per_second", self.num_timesteps / max(1e-6, time.time() - self.t0)
         )
+        if self.live is not None:
+            self.live.update(
+                self.num_timesteps,
+                {
+                    "v_along": self.sums["v_along"] / self.n,
+                    "speed": self.sums["speed"] / self.n,
+                    "abs_err_deg": self.sums["abs_err_deg"] / self.n,
+                    "falls_per_1k_steps": 1000 * self.falls / self.n,
+                },
+            )
         self.sums.clear()
         self.n = 0
         self.falls = 0
+
+
+class LiveReplay(BaseCallback):
+    """Refresh the live folder's replay and latest policy from the current network, more
+    often than checkpoints are saved, so a phone sees the walk change as it learns."""
+
+    def __init__(self, every: int, live: Live) -> None:
+        super().__init__()
+        self.every = every
+        self.live = live
+        self.next = every
+
+    def _init_callback(self) -> None:
+        self.next = (self.model.num_timesteps // self.every + 1) * self.every
+
+    def _on_step(self) -> bool:
+        if self.num_timesteps >= self.next:
+            self.next = (self.num_timesteps // self.every + 1) * self.every
+            self.live.snapshot(self.model, self.num_timesteps)
+        return True
 
 
 class Checkpoint(BaseCallback):
@@ -180,15 +212,26 @@ def main(argv: list[str] | None = None) -> int:
         )
         reset = True
 
+    # The live folder (progress, latest replay and policy) is what a phone watches.
+    live = Live(out, cfg, t.total_steps, start_steps=0 if reset else model.num_timesteps)
     callbacks = CallbackList(
-        [Diagnostics(), Checkpoint(t.checkpoint_every_steps, out / "checkpoints")]
+        [
+            Diagnostics(live),
+            Checkpoint(t.checkpoint_every_steps, out / "checkpoints"),
+            LiveReplay(t.live_replay_every_steps, live),
+        ]
     )
-    model.learn(
-        total_timesteps=t.total_steps,
-        callback=callbacks,
-        reset_num_timesteps=reset,
-        tb_log_name="ppo",
-    )
+    try:
+        model.learn(
+            total_timesteps=t.total_steps,
+            callback=callbacks,
+            reset_num_timesteps=reset,
+            tb_log_name="ppo",
+        )
+    except BaseException:
+        live.mark("failed")
+        raise
+    live.mark("finishing")
     model.save(out / "final_model.zip")
     vec.save(str(out / "vecnormalize.pkl"))
     vec.close()

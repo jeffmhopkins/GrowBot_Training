@@ -95,6 +95,7 @@ class TrainConfig:
     policy_layers: tuple[int, ...] = (128, 128)
     value_layers: tuple[int, ...] = (256, 256)
     checkpoint_every_steps: int = 2_000_000
+    live_replay_every_steps: int = 500_000
     seed: int = 0
 
 

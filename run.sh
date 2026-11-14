@@ -12,10 +12,13 @@ RUN="runs/$NAME"
 PY=.venv/bin/python
 [ -x "$PY" ] || { echo "run ./install.sh first"; exit 1; }
 
+# Any step failing leaves the live folder saying so, not "training" forever.
+trap 'rc=$?; [ "$rc" -eq 0 ] || "$PY" -m growbot_train.live failed "$RUN" || true' EXIT
 "$PY" -m growbot_train.train --out "$RUN" "$@"
 "$PY" -m growbot_train.evaluate "$RUN"/policy_*.json --sweep --json "$RUN/eval.json" \
   | tee "$RUN/eval.txt"
 # A 3D replay page that opens in any browser, phone included (needs no graphics drivers).
 "$PY" -m growbot_train.replay "$RUN"/policy_*.json --out "$RUN/replay.html"
+"$PY" -m growbot_train.live finish "$RUN"
 tar czf "runs/$NAME.tar.gz" -C runs "$NAME"
 echo "== packed runs/$NAME.tar.gz =="
