@@ -124,8 +124,10 @@ class TaskConfig:
     # With surfaces: the floors an episode may be on, one drawn each episode.
     floors: tuple[str, ...] = ("hard", "carpet")
     # Set down tail first at this nose-up angle (degrees) and let it settle, instead of
-    # level. The printed build needs it: level, it balances on its soles.
-    start_pitch_deg: float = 25.0
+    # level. The printed build needs it: level, it balances on its soles. Just under
+    # where it rests (about 37 degrees), so it settles without rocking: from 25 it swung
+    # past 55 and a body with long legs went over onto its back.
+    start_pitch_deg: float = 35.0
     # Servo torque limit (N m); 0 keeps the body file's. An MG90S stalls near 0.2 N m,
     # upstream's model allows 1.5.
     servo_torque_nm: float = 0.25
@@ -184,8 +186,8 @@ class TrainConfig:
     checkpoint_every_steps: int = 2_000_000
     live_replay_every_steps: int = 500_000
     seed: int = 0
-    # Before PPO, clone this open-loop gait (a JSON from configs/gaits/, see
-    # growbot_train/gait.py) into the policy so training starts from a moving robot.
+    # Before PPO, clone this open-loop gait (a search result or bare gait JSON,
+    # see growbot_train/gait.py) into the policy so training starts from a moving robot.
     # Its hz must equal task.gait_hz. Empty = start from scratch.
     warm_gait: str = ""
     warm_gait_samples: int = 200_000
@@ -240,8 +242,17 @@ def _coerce(cls: type, key: str, value: Any) -> Any:
     return value
 
 
-def from_dict(data: dict[str, Any]) -> Config:
+# A run saved before task.surfaces existed ran the old physics: one friction on every
+# geom, set down level, no torque cap. Its config.json must not pick up today's defaults.
+_LEGACY_TASK = {"surfaces": (), "start_pitch_deg": 0.0, "servo_torque_nm": 0.0}
+
+
+def from_dict(data: dict[str, Any], saved: bool = False) -> Config:
+    """``saved``: ``data`` is a run's or policy's own config, not a hand-written one."""
     cfg = Config()
+    if saved and "surfaces" not in data.get("task", {}):
+        for k, v in _LEGACY_TASK.items():
+            setattr(cfg.task, k, v)
     for key, value in data.items():
         if key == "name":
             cfg.name = str(value)
@@ -259,7 +270,8 @@ def from_dict(data: dict[str, Any]) -> Config:
 def load(path: str | Path | None, overrides: list[str] | None = None) -> Config:
     """A TOML config file, or a run's saved ``config.json``, plus ``--set`` overrides."""
     data: dict[str, Any] = {}
-    if path is not None and str(path).endswith(".json"):
+    saved = path is not None and str(path).endswith(".json")
+    if saved:
         data = json.loads(Path(path).read_text())
     elif path is not None:
         with open(path, "rb") as fh:
@@ -272,4 +284,4 @@ def load(path: str | Path | None, overrides: list[str] | None = None) -> Config:
             raise ValueError(f"override {item!r} must look like section.key=value")
         value = tomllib.loads(f"v = {raw.strip()}")["v"]
         data.setdefault(section, {})[key] = value
-    return from_dict(data)
+    return from_dict(data, saved=saved)

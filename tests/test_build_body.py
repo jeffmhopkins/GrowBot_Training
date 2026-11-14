@@ -22,7 +22,7 @@ def _build_cfg(surfaces=("pla", "pla", "pla", "rubber")) -> Config:
     cfg = Config()
     cfg.task.body = "build"
     cfg.task.surfaces = surfaces
-    cfg.task.start_pitch_deg = 25.0
+    cfg.task.start_pitch_deg = 35.0
     cfg.task.servo_torque_nm = 0.25
     cfg.task.action_to_rad = 1.5
     return cfg
@@ -39,6 +39,16 @@ def test_build_body_sits_on_its_tail_and_materials_land_on_their_surfaces() -> N
             assert m.geom_friction[g, 0] == pytest.approx(hard[mat])
     assert m.geom_friction[m.geom("floor").id, 0] == 0.0
     assert m.actuator_forcerange[0, 1] == pytest.approx(0.25)
+
+
+def test_random_robots_all_start_resting_on_their_tails() -> None:
+    env = GrowBotHeadingEnv(_build_cfg(("pla",) * 4))
+    for seed in range(60):
+        env.reset(seed=seed)
+        assert 20 < env._rest_pitch < 60, (seed, env._body_params["leg_scale"])
+    for scale in (0.85, 1.15):
+        env.reset(seed=0, options={"overrides": {"leg_scale": [scale, scale]}})
+        assert 20 < env._rest_pitch < 60, scale
 
 
 def test_floors_and_surface_friction_are_drawn_per_episode() -> None:
@@ -59,12 +69,32 @@ def test_floors_and_surface_friction_are_drawn_per_episode() -> None:
     assert seen == {"hard", "carpet"}
 
 
-def test_longer_legs_move_their_contact_halves_too() -> None:
-    env = GrowBotHeadingEnv(_build_cfg())
-    env.reset(seed=0, options={"overrides": {"leg_scale": [1.1, 1.1]}})
-    m = env.model
+@pytest.mark.parametrize("scale", [1.04, 1.1, 1.15])
+def test_longer_legs_stand_on_the_floor_with_both_toes(scale) -> None:
+    env = GrowBotHeadingEnv(_build_cfg(("pla",) * 4))
+    env.reset(seed=0, options={"overrides": {"leg_scale": [scale, scale]}})
+    m, d = env.model, env.data
     for g in env._leg_all[0]:
         assert m.geom_size[g, 2] == pytest.approx(env._leg_half[0])
+    floor = m.geom("floor").id
+    touching = set()
+    for c in d.contact[: d.ncon]:
+        if floor in (c.geom1, c.geom2):
+            touching.add(c.geom2 if c.geom1 == floor else c.geom1)
+            assert c.dist > -0.001  # resting on it, not sunk in
+    toes = {g for s in ("toe_nose", "toe_tail") for g in env._surface_geoms[s]}
+    assert touching & toes
+
+
+def test_floor_edges_in_the_sweep_match_the_training_range() -> None:
+    from growbot_train.evaluate import sweep_cases
+
+    cfg = _build_cfg()
+    cases = sweep_cases(cfg)
+    assert cases["slippery"] == {"floor_scale": cfg.randomization.floor_friction_scale[0]}
+    env = GrowBotHeadingEnv(cfg)
+    env.reset(seed=0, options={"overrides": cases["grippy"]})
+    assert env._body_params["floor_scale"] == cfg.randomization.floor_friction_scale[1]
 
 
 def test_bad_material_names_fail_loudly() -> None:
@@ -72,6 +102,28 @@ def test_bad_material_names_fail_loudly() -> None:
         GrowBotHeadingEnv(_build_cfg(("pla", "pla", "skin", "pla")))  # bench-only ratchet
     with pytest.raises(ValueError):
         GrowBotHeadingEnv(_build_cfg(("pla", "pla")))
+    cfg = _build_cfg()
+    cfg.task.floors = ()
+    with pytest.raises(ValueError, match="floor"):
+        GrowBotHeadingEnv(cfg)
+
+
+def test_a_run_saved_before_surfaces_keeps_its_old_physics(tmp_path) -> None:
+    from dataclasses import asdict
+
+    from growbot_train import config as config_mod
+
+    old = asdict(Config())
+    old["task"]["body"] = "rollout"
+    for k in ("surfaces", "floors", "start_pitch_deg", "servo_torque_nm"):
+        del old["task"][k]
+    cfg = config_mod.from_dict(old, saved=True)
+    assert (cfg.task.surfaces, cfg.task.start_pitch_deg, cfg.task.servo_torque_nm) == ((), 0, 0)
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps(old))
+    assert config_mod.load(path).task.surfaces == ()
+    # A hand-written config without the key gets today's defaults.
+    assert config_mod.from_dict({"task": {"gait_hz": 2.0}}).task.surfaces == Config().task.surfaces
 
 
 def test_legacy_setup_has_one_friction_everywhere() -> None:

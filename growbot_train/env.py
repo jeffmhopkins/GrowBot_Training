@@ -149,6 +149,11 @@ class GrowBotHeadingEnv(gym.Env):
         self.model = mujoco.MjModel.from_xml_string(
             body_xml(cfg.task.body, self._split, cfg.task.servo_torque_nm)
         )
+        if self._split:
+            # Each leg is three geoms in split mode, so MuJoCo prunes its contacts with
+            # a per-body box fixed at compile time; a leg lengthened per episode would
+            # poke through it and sink into the floor. The bodies are few: check them all.
+            self.model.opt.disableflags |= mujoco.mjtDisableBit.mjDSBL_MIDPHASE
         self.data = mujoco.MjData(self.model)
         self.n_substeps = max(1, round(CONTROL_DT / self.model.opt.timestep))
         self.max_steps = round(cfg.task.episode_seconds / CONTROL_DT)
@@ -165,6 +170,7 @@ class GrowBotHeadingEnv(gym.Env):
         # Every geom of each leg (the mass box, plus the contact halves when split), so a
         # longer or shorter leg moves them all.
         self._leg_all = [[g for g in range(m.ngeom) if m.geom_bodyid[g] == b] for b in self._legs]
+        self._scaled_geoms = {g for leg in self._leg_all for g in leg}
         self._surface_geoms = surface_geoms(m) if self._split else {}
         self._accel_adr = m.sensor_adr[m.sensor("accel").id]
         self._gyro_adr = m.sensor_adr[m.sensor("gyro").id]
@@ -221,14 +227,35 @@ class GrowBotHeadingEnv(gym.Env):
             out = np.zeros(4)
             mujoco.mju_mulQuat(out, q, nose_up)
             q = out
-            z += 0.09 * math.sin(pitch)
         d.qpos[0:3] = [0.0, 0.0, z]
         d.qpos[3:7] = q
+        if pitch:
+            # Tilted, the lowest point is the tail's corner, not a sole: set that just
+            # clear of the floor. A drop from higher rocks it past its rest, and a body
+            # with longer legs then goes right over onto its back.
+            mujoco.mj_kinematics(self.model, d)
+            d.qpos[2] += 0.001 - self._lowest_point(d)
+
+    def _lowest_point(self, d: mujoco.MjData) -> float:
+        m = self.model
+        low = math.inf
+        for g in range(m.ngeom):
+            if m.geom_type[g] == mujoco.mjtGeom.mjGEOM_PLANE or not m.geom_contype[g]:
+                continue
+            centre, half = m.geom_aabb[g, :3], m.geom_aabb[g, 3:]
+            if g in self._scaled_geoms:  # the aabb is compiled; legs change per episode
+                centre, half = np.zeros(3), m.geom_size[g]
+            rot = d.geom_xmat[g].reshape(3, 3)
+            reach = np.abs(rot[2]) @ half
+            low = min(low, d.geom_xpos[g, 2] + rot[2] @ centre - reach)
+        return low
 
     def _check_surfaces(self) -> None:
         task = self.cfg.task
         if len(task.surfaces) != len(SURFACES):
             raise ValueError(f"task.surfaces needs one material each for {SURFACES}")
+        if not task.floors:
+            raise ValueError("task.floors needs at least one floor")
         for floor in task.floors:
             if floor not in FLOORS:
                 raise ValueError(f"unknown floor {floor!r}; known: {sorted(FLOORS)}")
@@ -331,8 +358,8 @@ class GrowBotHeadingEnv(gym.Env):
             )
         # A robustness sweep pins single parameters to the edge of their range.
         for k, v in overrides.items():
-            if k == "friction" and self._split:
-                body["floor_scale"] = float(v)  # the sweep's slippery/grippy edges
+            if k == "floor_scale" and self._split:
+                body["floor_scale"] = float(v)
             elif k == "friction":
                 body["friction"] = np.full(ng, float(v))
             elif k in body:

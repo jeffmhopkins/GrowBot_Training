@@ -36,7 +36,7 @@ class JsonPolicy:
         self.path = Path(path)
         self.data = json.loads(self.path.read_text())
         seg = self.data["obs_spec"]["segments"]
-        cfg = config_mod.from_dict(self.config) if self.config else config_mod.Config()
+        cfg = config_mod.from_dict(self.config, saved=True) if self.config else config_mod.Config()
         expected = channels_for(cfg) if self.config else CHANNELS
         if len(seg) != 1 or tuple(seg[0]["channels"]) != expected:
             raise ValueError(f"{self.path} was not trained for this environment's inputs")
