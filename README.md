@@ -150,10 +150,14 @@ Every tick the reward is the sum of these terms. All the weights live in
 
 With a speed command (`task.speed = "command"`, the camera walk) or none at all
 (`"still"`, the look policy), `progress` pays instead for matching the wanted velocity,
-direction included: full value on it, falling in a straight line to nothing
-`speed_track_tol` (1.5 times the cap) away. So a stop command pays for standing still,
-and -1 pays for backing away at the cap. A straight line rather than a bell curve, so
-standing still when told to walk is clearly worse but still close enough to feel the pull.
+direction included: the wanted speed minus how far off it is, over the cap. Standing
+still scores exactly zero whatever the command, just as it does for the first walk:
+walking at the commanded +1 or -1 earns the full value (a slower command earns its share
+of it). During a stop, drifting up to `stop_drift_free` (half the cap) is free, so
+turning on the spot to face the target costs nothing; drifting further costs. The first
+version paid a third of the weight for standing still when told to walk, and charged for
+every bit of drift during a stop, which outbid the heading reward: the first camera walk
+and look runs both froze in place rather than turn.
 
 Speeds are averaged over `speed_window_s` (1 second) before the cap is checked, because a
 paddling gait lurches within each step.

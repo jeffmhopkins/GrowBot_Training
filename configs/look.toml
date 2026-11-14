@@ -9,7 +9,7 @@ name = "look"
 [reward]
 # The reward is added up every control tick (25 per second). Bigger number = the robot
 # cares more about that thing. See README "The reward" for what each one does.
-progress = 2.0          # here: staying put (speed command is always 0)
+progress = 2.0          # here only a cost: drifting more than stop_drift_free x the cap
 heading = 1.5           # CHANGED: facing the target is the whole job here
 speed_cap_m_s = 0.03    # "slow": 3 cm/s. Upstream's forward walk does about 3.6 cm/s
 speed_window_s = 1.0    # speed is averaged over this long before the cap is checked
@@ -22,7 +22,6 @@ stance = 0.5            # as camera walk: bonus for standing taller than at rest
 stance_tol_deg = 6.0    # how close to the taller stance counts (degrees)
 back_lean = 2.0         # as camera walk: penalty for leaning back past the stance + margin
 back_lean_margin_deg = 12.0  # how far past the stance before that penalty starts
-speed_track_tol = 1.5   # with a speed input: pay drops to zero this far (x cap) from the wanted speed
 wobble = 0.05           # CHANGED: penalty for rocking, for a steady camera
 
 [task]

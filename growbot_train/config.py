@@ -43,10 +43,15 @@ class RewardConfig:
     back_lean: float = 0.0
     back_lean_margin_deg: float = 12.0
     # With task.speed "command" or "still", progress pays for matching the wanted
-    # velocity instead: weight * max(0, 1 - miss / (tol * cap)), where miss is how far the
-    # averaged velocity is from the wanted one (direction included), in m/s. Linear, not
-    # a bell curve, so standing still when told to walk still feels a pull to move.
-    speed_track_tol: float = 1.5
+    # velocity instead: weight * (|wanted| - miss) / cap, floored at -weight, where miss is
+    # how far the averaged velocity is from the wanted one (direction included), in m/s.
+    # Standing still always scores exactly zero, as it does in "cap" mode: an earlier
+    # form paid a third of the weight for standing still when told to walk.
+    # During a stop (the command is exactly 0, and always in "still" mode) drift up to
+    # stop_drift_free * cap is free. Turning on the spot drifts a little, and charging
+    # for it outbid the heading reward: the first camera walk and look runs froze rather
+    # than turn to face the target.
+    stop_drift_free: float = 0.5
     # Rocking costs weight * (roll rate^2 + pitch rate^2), rad/s: a steadier camera.
     wobble: float = 0.0
 
@@ -173,6 +178,10 @@ class Config:
         path.write_text(json.dumps(self.to_dict(), indent=2) + "\n")
 
 
+# Settings that have been removed but still sit in older runs' saved config.json (and in
+# the config each exported policy carries), skipped so those runs still load.
+_RETIRED = {("reward", "speed_track_tol")}
+
 _SECTIONS = {
     "reward": RewardConfig,
     "task": TaskConfig,
@@ -212,6 +221,8 @@ def from_dict(data: dict[str, Any]) -> Config:
             raise KeyError(f"unknown section [{key}]")
         section = getattr(cfg, key)
         for k, v in value.items():
+            if (key, k) in _RETIRED:
+                continue
             setattr(section, k, _coerce(_SECTIONS[key], k, v))
     return cfg
 

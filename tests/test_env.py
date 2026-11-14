@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import math
 
 import numpy as np
@@ -263,7 +264,7 @@ def test_speed_command_rides_cmd_forward_and_redraws() -> None:
 
 
 @pytest.mark.parametrize("speed", ["command", "still"])
-def test_standing_still_pays_only_when_told_to_stop(speed: str) -> None:
+def test_standing_still_never_pays(speed: str) -> None:
     cfg = Config()
     cfg.task.speed = speed
     env = GrowBotHeadingEnv(cfg)
@@ -272,12 +273,69 @@ def test_standing_still_pays_only_when_told_to_stop(speed: str) -> None:
     for _ in range(25):
         _, _, _, _, info = env.step(np.zeros(2))
     assert info["speed_cmd"] == 0.0
-    assert info["terms"]["progress"] > 0.9 * cfg.reward.progress
+    # Free pay for standing still is what froze the first camera walk and look runs.
+    assert -0.2 * cfg.reward.progress < info["terms"]["progress"] <= 0.0
     if speed == "command":
         env.reset(seed=0, options={"nominal": True, "speed_cmd": 1.0})
         for _ in range(25):
             _, _, _, _, info = env.step(np.zeros(2))
-        assert info["terms"]["progress"] < 0.5 * cfg.reward.progress
+        assert abs(info["terms"]["progress"]) < 0.2 * cfg.reward.progress
+
+
+def test_a_stop_lets_it_drift_a_little_for_free() -> None:
+    cfg = Config()
+    cfg.task.speed = "still"
+    env = GrowBotHeadingEnv(cfg)
+    env.reset(seed=0, options={"nominal": True})
+    cap = cfg.reward.speed_cap_m_s
+    terms = []
+    for drift in (0.3 * cap, 2.0 * cap):
+        env.vel_avg = np.array([drift, 0.0])
+        env.data.qvel[0:2] = env.vel_avg
+        _, _, _, _, info = env.step(np.zeros(2))
+        terms.append(info["terms"]["progress"])
+    assert terms[0] == 0.0
+    assert terms[1] < -0.5 * cfg.reward.progress
+
+
+def test_the_free_drift_is_only_for_an_exact_stop() -> None:
+    cfg = Config()
+    cfg.task.speed = "command"
+    env = GrowBotHeadingEnv(cfg)
+    cap = cfg.reward.speed_cap_m_s
+    terms = {}
+    for cmd in (0.0, 0.3):
+        env.reset(seed=0, options={"nominal": True, "speed_cmd": cmd})
+        tr = math.radians(env.target_deg + 90)  # sideways: no part of it is wanted
+        env.vel_avg = 0.3 * cap * np.array([math.cos(tr), math.sin(tr)])
+        env.data.qvel[0:2] = env.vel_avg
+        _, _, _, _, info = env.step(np.zeros(2))
+        terms[cmd] = info["terms"]["progress"]
+    assert terms[0.0] == 0.0
+    assert terms[0.3] < -0.05 * cfg.reward.progress
+
+
+def test_old_runs_with_a_retired_setting_still_load(tmp_path) -> None:
+    from growbot_train.config import load
+
+    old = Config().to_dict()
+    old["reward"]["speed_track_tol"] = 1.5
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps(old))
+    assert load(path).reward.progress == Config().reward.progress
+
+
+def test_walking_as_commanded_pays_in_full() -> None:
+    cfg = Config()
+    cfg.task.speed = "command"
+    env = GrowBotHeadingEnv(cfg)
+    env.reset(seed=0, options={"nominal": True, "speed_cmd": -1.0})
+    tr = math.radians(env.target_deg)
+    cap = cfg.reward.speed_cap_m_s
+    env.vel_avg = -cap * np.array([math.cos(tr), math.sin(tr)])
+    env.data.qvel[0:2] = env.vel_avg  # keep the average there through one step
+    _, _, _, _, info = env.step(np.zeros(2))
+    assert info["terms"]["progress"] > 0.8 * cfg.reward.progress
 
 
 def test_wobble_costs_rocking_and_bad_speed_mode_fails() -> None:
