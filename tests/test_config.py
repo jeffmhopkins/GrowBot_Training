@@ -106,6 +106,13 @@ def test_look_differs_from_the_camera_walk_only_where_it_says() -> None:
         ("reward", "tilt"),
         ("task", "heading_from"),
         ("task", "tilt_lift_deg"),
+        ("randomization", "ramp_steps"),
+        ("train", "log_std_init"),
+        ("train", "warm_gait"),
+        ("train", "warm_gait_steer"),
+        ("task", "action_to_rad"),
+        ("train", "warm_gait_samples"),
+        ("train", "warm_gait_epochs"),
         ("task", "retarget_max_deg"),
         ("reward", "speed_cap_m_s"),
         ("reward", "overspeed"),
@@ -120,6 +127,15 @@ def test_look_differs_from_the_camera_walk_only_where_it_says() -> None:
     }
     assert look["name"] == "look"
     assert SHIPPED.with_name("look.toml").read_text().count("# CHANGED:") == len(changed)
+
+
+def test_the_look_spin_fits_the_look_action_range() -> None:
+    from growbot_train.gait import Keyframes
+
+    cfg = config_mod.load(SHIPPED.with_name("look.toml"))
+    gait = Keyframes.load(SHIPPED.parents[1] / cfg.train.warm_gait)
+    assert gait.hz == cfg.task.gait_hz
+    assert abs(gait.keys).max() < 0.9 * cfg.task.action_to_rad
 
 
 def test_lift_fall_differs_from_the_camera_walk_only_where_it_says() -> None:

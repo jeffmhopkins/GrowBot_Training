@@ -309,7 +309,15 @@ body's own heading, so swinging the lens over with a roll earns nothing and only
 the whole body does. Leaning costs four times as much (`reward.tilt = 4`), and the
 lowest camera height is 20 degrees under rest rather than 30, so the lens never looks
 straight up and loses its heading. An earlier run leaned toward the target instead of
-turning, because leaning was cheap. It keeps the camera height input. Unlike the camera walk it trains on
+turning, because leaning was cheap. The next never found turning on its own (its heading
+error sat at 85 to 90 degrees, no better than chance, for 8 million steps), so look now
+starts from a spin: before PPO it clones `configs/gaits/look_spin.json`, an
+anti-phase leg swing that spins the nominal body about 16 degrees a second, steered
+(`train.warm_gait_steer`): the gait as saved toward a target counter-clockwise, legs
+swapped toward one clockwise, and standing still within 10 degrees of it. The clone
+alone, before any PPO, gets the heading error to about 19 degrees on random bodies with
+no falls. Its legs swing up to a radian, so `task.action_to_rad` is 1.3, and the body
+randomisation ramps up over the first 15M steps, as for lift and fall. It keeps the camera height input. Unlike the camera walk it trains on
 the printed build with bare-print surfaces (see [Bodies](#bodies)), like the heading walk.
 It's the camera walk otherwise, and only the lines marked CHANGED differ from that file.
 From JBrain it's the "GrowBot look" job.

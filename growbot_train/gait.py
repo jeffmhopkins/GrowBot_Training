@@ -42,10 +42,28 @@ class Keyframes:
         return (1 - f) * self.keys[:, i] + f * self.keys[:, (i + 1) % k]
 
 
+def _steer(want: np.ndarray, vec, deadband_deg: float) -> np.ndarray:
+    from growbot_train.env import wrap_deg
+
+    targets = vec.get_attr("target_deg")
+    yaws = vec.env_method("yaw_deg")
+    out = want.copy()
+    for i, (target, yaw) in enumerate(zip(targets, yaws, strict=True)):
+        err = wrap_deg(target - yaw)
+        if abs(err) < deadband_deg:
+            out[i] = 0.0
+        elif err < 0:
+            out[i] = want[i, ::-1]
+    return out
+
+
 def clone_gait(model, vec, cfg, gait: Keyframes, samples: int, epochs: int, log=print) -> float:
     """Fit the policy's mean action to the gait, from states the gait itself visits (with
     some action noise so it also sees how to get back onto the gait). Also warms the
-    observation normaliser. Returns the final mean squared error (pre-squash action)."""
+    observation normaliser. Returns the final mean squared error (pre-squash action).
+
+    With cfg.train.warm_gait_steer the gait is a counter-clockwise spin, cloned mirrored
+    (legs swapped) toward a clockwise target and as zero action near the target."""
     import torch
 
     from growbot_train.env import CONTROL_DT
@@ -62,6 +80,8 @@ def clone_gait(model, vec, cfg, gait: Keyframes, samples: int, epochs: int, log=
     while len(raw) * vec.num_envs < samples:
         t = np.array(vec.get_attr("step_index"), dtype=float) * CONTROL_DT
         want = np.array([gait(ti) for ti in t]) / cfg.task.action_to_rad
+        if cfg.train.warm_gait_steer:
+            want = _steer(want, vec, cfg.train.warm_gait_deadband_deg)
         a = np.arctanh(np.clip(want, -lim, lim))
         raw.append(vec.get_original_obs().copy())
         targets.append(a)

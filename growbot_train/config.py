@@ -218,6 +218,13 @@ class TrainConfig:
     warm_gait: str = ""
     warm_gait_samples: int = 200_000
     warm_gait_epochs: int = 40
+    # Clone warm_gait as a steered spin instead of a walk: the gait must turn the robot
+    # counter-clockwise; with the target clockwise of the heading it is cloned with its
+    # legs swapped (which spins it the other way), and within warm_gait_deadband_deg of
+    # the target as standing still (zero action), so the clone already turns toward the
+    # target and stops on it.
+    warm_gait_steer: bool = False
+    warm_gait_deadband_deg: float = 10.0
 
 
 @dataclass

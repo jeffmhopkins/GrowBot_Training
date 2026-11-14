@@ -210,6 +210,60 @@ def test_cloning_refuses_a_clock_that_does_not_match(tmp_path) -> None:
         clone_gait(model, vec, cfg, Keyframes.load(_gait_json(tmp_path, 2.0)), 64, 1)
 
 
+class _FakeVec:
+    def __init__(self, targets: list[float], yaws: list[float]) -> None:
+        self.targets, self.yaws = targets, yaws
+
+    def get_attr(self, name: str) -> list[float]:
+        assert name == "target_deg"
+        return self.targets
+
+    def env_method(self, name: str) -> list[float]:
+        assert name == "yaw_deg"
+        return self.yaws
+
+
+def test_a_steered_clone_spins_toward_the_target_and_stops_on_it() -> None:
+    from growbot_train.gait import _steer
+
+    want = np.array([[0.1, 0.9]] * 3)
+    # Target counter-clockwise, clockwise (and across the wrap at 180), and nearly on.
+    vec = _FakeVec([90.0, 170.0, 5.0], [0.0, -170.0, 0.0])
+    out = _steer(want, vec, deadband_deg=10.0)
+    assert out[0].tolist() == [0.1, 0.9]  # the gait as given: counter-clockwise
+    assert out[1].tolist() == [0.9, 0.1]  # 170 is 20 clockwise of -170: legs swapped
+    assert out[2].tolist() == [0.0, 0.0]  # on target: stand still
+
+
+def _spin_deg_s(gait: Keyframes, cfg: Config) -> float:
+    from growbot_train.env import wrap_deg
+
+    env = GrowBotHeadingEnv(cfg)
+    env.reset(seed=0, options={"nominal": True, "retarget": False, "tilt_cmd": 1.0})
+    prev, turned = env.body_yaw_deg(), 0.0
+    for _ in range(100):
+        a = np.clip(gait(env.step_index * CONTROL_DT) / cfg.task.action_to_rad, -0.99, 0.99)
+        _, _, term, _, _ = env.step(np.arctanh(a))
+        assert not term
+        y = env.body_yaw_deg()
+        turned += wrap_deg(y - prev)
+        prev = y
+    return turned / (100 * CONTROL_DT)
+
+
+def test_the_look_spin_turns_counter_clockwise_and_mirrored_clockwise() -> None:
+    from pathlib import Path
+
+    from growbot_train import config as config_mod
+
+    root = Path(__file__).resolve().parents[1]
+    cfg = config_mod.load(root / "configs" / "look.toml")
+    gait = Keyframes.load(root / cfg.train.warm_gait)
+    assert gait.hz == cfg.task.gait_hz
+    assert _spin_deg_s(gait, cfg) > 8.0
+    assert _spin_deg_s(Keyframes(gait.hz, gait.keys[::-1].tolist()), cfg) < -8.0
+
+
 def test_the_replay_draws_each_leg_once() -> None:
     from growbot_train.replay import _geoms
 
