@@ -1,6 +1,7 @@
 """The printable cam-foot leg: its sole is the bench's winning foot, the dip recess is where
 and as deep as asked, the hub's voids come from the stock leg untouched, the pair are
-mirror images, and nothing overhangs printed outer face down.
+mirror images with the horn slot facing out on both, and printed inner face down nothing
+overhangs.
 
 A stand-in stock leg (a bar with a slot and a screw hole) keeps the test offline; the real
 STL's hash is checked when make_leg.py fetches it."""
@@ -63,7 +64,7 @@ def test_only_the_sole_can_reach_the_floor() -> None:
     assert prof.intersection(leg_mod._below_sole(0.75)).buffer(-0.02).is_empty
 
 
-def test_servo_face_is_sculpted_only_on_the_shaft() -> None:
+def test_outer_face_is_sculpted_only_on_the_shaft() -> None:
     prof = leg_mod.face(0.75)
     x = np.array([0.0, 6.0, -2.0, 7.5])
     z = np.array([-10.0, -18.0, -64.0, -40.0])
@@ -86,38 +87,51 @@ def test_both_legs_are_closed_solids_and_mirror_images(legs) -> None:
     assert (mirrored - right).volume() + (right - mirrored).volume() < 40.0
     lb, rb = left.bounding_box(), right.bounding_box()
     assert lb[0] == pytest.approx(-rb[3], abs=1e-4) and lb[3] == pytest.approx(-rb[0], abs=1e-4)
-    # The left leg's longer tail edge is at -x, toward the tail.
-    assert lb[0] < -25.0 and 21.0 < lb[3] < 22.0
+    # The right leg keeps the frame (slot out at -y, the robot's right): its longer tail
+    # edge is at -x, toward the tail. The left's is mirrored to +x.
+    assert rb[0] < -25.0 and 21.0 < rb[3] < 22.0
 
 
 def test_hub_voids_are_the_stock_legs_exactly(legs, stock) -> None:
     (x0, x1), _, (z0, z1) = leg_mod.HUB_BOX
     box = mf.Manifold.cube([x1 - x0, 13.0, z1 - z0]).translate([x0, -13.0, z0])
     for side, leg in legs.items():
-        ref = stock if side == "left" else stock.mirror([1.0, 0.0, 0.0])
+        ref = stock if side == "right" else stock.mirror([1.0, 0.0, 0.0])
         new, old = leg ^ box, ref ^ box
         assert (new - old).volume() + (old - new).volume() == pytest.approx(0.0, abs=1e-3)
 
 
-def test_nothing_overhangs_printed_outer_face_down(legs) -> None:
-    mesh = legs["left"].to_mesh()
+def test_nothing_overhangs_printed_inner_face_down(legs) -> None:
+    mesh = legs["right"].to_mesh()
     v = np.asarray(mesh.vert_properties)[:, :3]
     tri = v[np.asarray(mesh.tri_verts)]
     n = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
     area = np.linalg.norm(n, axis=1) / 2
     ny = n[:, 1] / np.maximum(2 * area, 1e-12)
     cy = tri[:, :, 1].mean(axis=1)
-    # Faces looking at the bed (+y) above the bed itself, past the chamfer's layer steps.
+    # Faces looking at the bed (the inner face, +y) above it, past the chamfer's steps and
+    # the engraved label's floor.
     over = (ny > 0.5) & (cy < -leg_mod.CHAMFER - 0.05)
     assert area[over].sum() == pytest.approx(0.0, abs=1e-6)
 
 
+def test_labels_stay_clear_of_the_edge_and_the_spline_hole() -> None:
+    prof = leg_mod.face(0.75)
+    inner = prof.buffer(-leg_mod.CHAMFER)
+    hole = geometry.Point(0, 0).buffer(3.6)
+    for side in ("left", "right"):
+        mark = leg_mod._label(side, prof)
+        assert mark.area > 5.0
+        assert mark.difference(inner).is_empty
+        assert mark.distance(hole) > 1.0
+
+
 def test_writes_a_binary_stl(tmp_path, legs) -> None:
     path = tmp_path / "leg.stl"
-    leg_mod.write_stl(legs["left"], path, "t")
+    leg_mod.write_stl(legs["right"], path, "t")
     data = path.read_bytes()
     n = int.from_bytes(data[80:84], "little")
     assert len(data) == 84 + 50 * n
     back = leg_mod.read_stl(path)
-    assert back.volume() == pytest.approx(legs["left"].volume(), rel=1e-4)
+    assert back.volume() == pytest.approx(legs["right"].volume(), rel=1e-4)
     assert math.isfinite(back.volume())

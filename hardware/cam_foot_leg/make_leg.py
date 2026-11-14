@@ -15,13 +15,15 @@ slot, the spline bore and the screw hole) is cut out of the new leg, so the horn
 upstream's to the facet. Upstream's STL is fetched at a pinned commit and checked by hash.
 
 Between them runs a femur: a shaft flaring from the hub into the sole, an S-shaped marrow
-slot down it, and its servo face sculpted like bone (thickness()).
+slot down it, and its outer face sculpted like bone (thickness()).
 
-Frame (mm): the axle at the origin, the leg hanging down -z, the outer (screw-head) face
-at y = 0 and the servo face, where the horn slot opens, at y = -13. In the left leg's
-file +x points to the nose; the right leg is its mirror image. The STLs are written lying
-flat for printing, outer face down (--leg-frame keeps this frame): every void then widens
-upward, so nothing overhangs and no supports are needed.
+Frame (mm): the axle at the origin, the leg hanging down -z, the inner face (against the
+servo, where the spline comes through) at y = 0, and the outer face, where the horn slot
+opens and the horn drops in, at y = -13. The outer face is the sculpted one. In the right
+leg's file +x points to the nose; the left leg is its mirror image. The STLs are written
+lying flat for printing, inner face down (--leg-frame keeps this frame): every void
+widens upward and the sculpted face is a heightfield on top, so nothing overhangs and no
+supports are needed.
 """
 
 from __future__ import annotations
@@ -67,14 +69,15 @@ SHAFT = ((0.0, -15.0), (-4.0, -40.0), (-1.0, -62.0))  # quadratic Bezier, hub to
 SHAFT_W = (18.0, 12.5, 46.0)  # width at the hub, mid-shaft and the sole
 SLOT_W = (3.5, 4.5, 7.0)
 FILLET = 6.0  # where the shaft meets the hub and the sole
-# The servo face is sculpted like bone: rounded over toward every edge, and the shaft's
+# The outer face is sculpted like bone: rounded over toward every edge, and the shaft's
 # middle dished a little, easing back to the full 13 mm at the hub and along the sole.
 ROUND_R = 5.0  # how far in from each edge the rounding reaches
-ROUND_DROP = 3.5  # how far the servo face falls at the very edge
+ROUND_DROP = 3.5  # how far the outer face falls at the very edge
 WAIST_DEPTH = 1.6
 FULL_BLEND = 8.0  # mm over which the sculpting fades into the full-thickness hub and sole
 GRID = 0.3  # heightfield step, mm
 LABEL_DEPTH = 0.6
+LABEL_AT = (5.6, -8.0)  # the left leg's, before mirroring
 
 
 def sole_radius(phi: float) -> float:
@@ -149,7 +152,7 @@ def _smooth(x: np.ndarray) -> np.ndarray:
 
 
 def thickness(prof: Polygon, x: np.ndarray, z: np.ndarray, dip: float) -> np.ndarray:
-    """How far the solid reaches from the outer face at each (x, z): THICK at the hub and
+    """How far the solid reaches from the inner face at each (x, z): THICK at the hub and
     along the sole, rounded over toward the shaft's edges and its slot, and dished a
     little mid-shaft, like the waist of a long bone."""
     pts = shapely.points(x, z)
@@ -169,9 +172,10 @@ def thickness(prof: Polygon, x: np.ndarray, z: np.ndarray, dip: float) -> np.nda
 
 
 def _heightfield(prof: Polygon, dip: float) -> mf.Manifold:
-    """The solid between the outer face and the sculpted servo face: a closed grid mesh,
-    flat beyond the outer face and following thickness() on the servo side. A heightfield
-    has no overhang anywhere, so the sculpting prints without supports outer face down."""
+    """The solid between the flat inner face and the sculpted outer face: a closed grid
+    mesh, flat beyond the inner face and following thickness() on the outer side. A
+    heightfield has no overhang anywhere, so with the inner face on the bed the sculpting
+    prints as plain top layers."""
     x0, z0, x1, z1 = prof.bounds
     xs = np.arange(x0 - 1.0, x1 + 1.0 + GRID, GRID)
     zs = np.arange(z0 - 1.0, z1 + 1.0 + GRID, GRID)
@@ -208,7 +212,7 @@ def _heightfield(prof: Polygon, dip: float) -> mf.Manifold:
 
 
 def _letter(side: str) -> Polygon:
-    """A stroke L or R 5.5 mm tall, laid out for reading on the servo face."""
+    """A stroke L or R 5.5 mm tall, as read with the leg hanging."""
     if side == "left":
         strokes = [LineString([(0, 5), (0, 0), (3, 0)])]
     else:
@@ -286,20 +290,28 @@ def hub_voids(stock: mf.Manifold) -> mf.Manifold:
     return box - stock
 
 
-def build(stock: mf.Manifold, dip: float = 0.75, side: str = "left") -> mf.Manifold:
-    """The leg for one side; side 'right' is the mirror image of 'left'."""
+def build(stock: mf.Manifold, dip: float = 0.75, side: str = "right") -> mf.Manifold:
+    """The leg for one side; side 'left' is the mirror image of 'right'. The horn slot
+    faces out from the body on both, so the right leg (on the robot's -y side) keeps this
+    frame and the left is mirrored for its nose to point forward too."""
     prof = face(dip)
     leg = (body(prof) ^ _heightfield(prof, dip)) - hub_voids(stock)
-    # The label sits on the servo face beside the slot, reading upright with the leg
-    # hanging; the right leg's is pre-mirrored so it reads correctly once mirrored.
+    leg = leg - _slab(_label(side, prof), 0.5, -LABEL_DEPTH)
+    if side == "left":
+        leg = leg.mirror([1.0, 0.0, 0.0])
+    return leg
+
+
+def _label(side: str, prof: Polygon) -> Polygon:
+    """L or R for the inner face beside the spline hole, out of sight once fitted. It reads
+    right way round looking at that face, so it's drawn mirrored on the right leg (seen
+    from +y, +x runs leftward) and plain on the left, which the mirror then flips."""
     mark = _letter(side)
     if side == "right":
         mark = affinity.scale(mark, xfact=-1, origin=(0, 0))
-    mark = affinity.translate(mark, 6.0 if side == "left" else -6.0, -16.0)
-    leg = leg - _slab(mark, -THICK + LABEL_DEPTH, -THICK - 0.5)
-    if side == "right":
-        leg = leg.mirror([1.0, 0.0, 0.0])
-    return leg
+    mark = affinity.translate(mark, LABEL_AT[0] * (-1 if side == "right" else 1), LABEL_AT[1])
+    # Never into the edge's chamfer, whatever the profile does beside the hub.
+    return mark.intersection(prof.buffer(-CHAMFER - 0.4))
 
 
 def write_stl(leg: mf.Manifold, path: Path, name: str) -> None:
@@ -325,10 +337,10 @@ def main() -> None:
     args = ap.parse_args()
     stock = upstream_leg(args.cache)
     args.out.mkdir(parents=True, exist_ok=True)
-    for side in ("left", "right"):
+    for side in ("right", "left"):
         leg = build(stock, args.dip, side)
         path = args.out / f"cam_foot_leg_{side}.stl"
-        # Flat for the slicer: outer face on the bed (z = 0), servo face up, sole toward -y.
+        # Flat for the slicer: inner face on the bed (z = 0), sculpted outer face up.
         out = leg if args.leg_frame else leg.rotate([-90.0, 0.0, 0.0])
         write_stl(out, path, f"GrowBot cam-foot leg ({side}), dip {args.dip} mm")
         print(f"{path}: {leg.volume() / 1000:.1f} cm^3 (stock {stock.volume() / 1000:.1f})")
