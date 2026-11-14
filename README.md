@@ -245,8 +245,8 @@ Every run keeps a `live/` folder up to date, and the Launcher shows it on the jo
 | File | What | Updated |
 | --- | --- | --- |
 | `progress.json` | percent done, time left, speed toward the target, heading error, falls | after every batch of experience (a few seconds) |
-| `replay.html` | 3D replay of the latest checkpoint: three short walks | at every checkpoint (every 2 million steps) |
-| `policy_latest.json` | that checkpoint as an app policy | at every checkpoint |
+| `replay.html` | 3D replay of the network as it is now: three short walks, played in a loop; the open page reloads itself between walks, so it picks up the newest one on its own | every half million steps (`train.live_replay_every_steps`; a few minutes apart on the box) |
+| `policy_latest.json` | that network as an app policy | with the replay |
 
 Its `state` goes from "training" to "finishing" while the run evaluates and draws the
 final replay. Then `replay.html` becomes the full six-walk replay of the final policy,

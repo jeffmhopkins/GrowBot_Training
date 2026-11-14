@@ -202,6 +202,17 @@ DATA.episodes.forEach((e, i) => $("episode").add(new Option(e.title + (e.fell ? 
 $("sCap").textContent = `cm/s speed (cap ${DATA.speed_cap_cm_s})`;
 if (DATA.note) $("legend").prepend(`${DATA.note} · `);
 $("episode").onchange = (e) => load(+e.target.value);
+// A live page (written while training) plays its walks in a loop and, between walks, reloads
+// itself so a newer checkpoint shows up on its own. The hash keeps the walk it was on.
+const LIVE = !!DATA.live;
+const RELOAD_MS = (DATA.reload_s || 120) * 1000;
+const opened = performance.now();
+function nextWalk() {
+  const i = (+$("episode").value + 1) % DATA.episodes.length;
+  if (performance.now() - opened > RELOAD_MS) { location.hash = String(i); location.reload(); return; }
+  $("episode").value = String(i);
+  load(i);
+}
 $("play").onclick = () => {
   if (!playing && frame >= ep.frames.length - 1) { frame = 0; clock = 0; }
   playing = !playing;
@@ -219,7 +230,11 @@ function resize() {
 }
 window.addEventListener("resize", resize);
 resize();
-load(0);
+const startAt = Number.parseInt(location.hash.slice(1), 10);
+const first = startAt >= 0 && startAt < DATA.episodes.length ? startAt : 0;
+$("episode").value = String(first);
+load(first);
+if (LIVE) $("legend").append(" · refreshes itself with each new checkpoint");
 
 let last = performance.now();
 renderer.setAnimationLoop((now) => {
@@ -229,7 +244,10 @@ renderer.setAnimationLoop((now) => {
     clock += dt * rate;
     const next = Math.min(ep.frames.length - 1, Math.floor(clock / DATA.dt));
     if (next !== frame) { frame = next; show(); }
-    if (frame >= ep.frames.length - 1) { playing = false; $("play").textContent = "Play"; }
+    if (frame >= ep.frames.length - 1) {
+      if (LIVE) nextWalk();
+      else { playing = false; $("play").textContent = "Play"; }
+    }
   }
   controls.update();
   renderer.render(scene, camera);

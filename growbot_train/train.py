@@ -98,12 +98,31 @@ class Diagnostics(BaseCallback):
         self.falls = 0
 
 
+class LiveReplay(BaseCallback):
+    """Refresh the live folder's replay and latest policy from the current network, more
+    often than checkpoints are saved, so a phone sees the walk change as it learns."""
+
+    def __init__(self, every: int, live: Live) -> None:
+        super().__init__()
+        self.every = every
+        self.live = live
+        self.next = every
+
+    def _init_callback(self) -> None:
+        self.next = (self.model.num_timesteps // self.every + 1) * self.every
+
+    def _on_step(self) -> bool:
+        if self.num_timesteps >= self.next:
+            self.next = (self.num_timesteps // self.every + 1) * self.every
+            self.live.snapshot(self.model, self.num_timesteps)
+        return True
+
+
 class Checkpoint(BaseCallback):
-    def __init__(self, every: int, folder: Path, live: Live | None = None) -> None:
+    def __init__(self, every: int, folder: Path) -> None:
         super().__init__()
         self.every = every
         self.folder = folder
-        self.live = live
         self.next = every
 
     def _init_callback(self) -> None:
@@ -118,8 +137,6 @@ class Checkpoint(BaseCallback):
             vec = self.model.get_vec_normalize_env()
             if vec is not None:
                 vec.save(str(self.folder / f"vecnormalize_{self.num_timesteps}.pkl"))
-            if self.live is not None:
-                self.live.snapshot(self.model, self.num_timesteps)
         return True
 
 
@@ -198,7 +215,11 @@ def main(argv: list[str] | None = None) -> int:
     # The live folder (progress, latest replay and policy) is what a phone watches.
     live = Live(out, cfg, t.total_steps, start_steps=0 if reset else model.num_timesteps)
     callbacks = CallbackList(
-        [Diagnostics(live), Checkpoint(t.checkpoint_every_steps, out / "checkpoints", live)]
+        [
+            Diagnostics(live),
+            Checkpoint(t.checkpoint_every_steps, out / "checkpoints"),
+            LiveReplay(t.live_replay_every_steps, live),
+        ]
     )
     try:
         model.learn(

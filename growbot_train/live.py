@@ -88,6 +88,7 @@ class Live:
             chosen = tuple(s for s in SCENARIOS if s[0] in LIVE_SCENARIOS)
             data = build(path, LIVE_SECONDS, 0, None, chosen, quiet=True)
             data["note"] = f"Checkpoint at {steps:,} steps, while training"
+            data["live"] = True
             tmp = self.folder / ".replay.html.tmp"
             write_html(data, tmp)
             os.replace(tmp, self.folder / "replay.html")

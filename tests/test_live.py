@@ -52,6 +52,7 @@ def test_snapshot_and_finish(tiny_run: Path, tmp_path: Path) -> None:
     assert (run / "live" / "policy_latest.json").exists()
     page = (run / "live" / "replay.html").read_text()
     assert "Checkpoint at 128 steps" in page
+    assert '"live":true' in page  # the open page refreshes itself
 
     # The run's end swaps in the final files and marks it done.
     (run / "policy_heading_walk.json").write_text("{}")
