@@ -3,6 +3,10 @@
 A printable pair of legs with the locomotion bench's winning curved ("cam") sole
 (`research/locomotion/codesign.py`), mounted exactly like upstream's stock leg.
 
+Ready to print: [`stl/cam_foot_leg_left.stl`](stl/cam_foot_leg_left.stl) and
+[`stl/cam_foot_leg_right.stl`](stl/cam_foot_leg_right.stl), built with the defaults below
+(0.75 mm dip). Regenerate them with `--out hardware/cam_foot_leg/stl` after any change.
+
 ```bash
 pip install -e ".[cad]"                       # manifold3d and shapely
 python hardware/cam_foot_leg/make_leg.py      # out/cam_foot_leg_left.stl and _right.stl
