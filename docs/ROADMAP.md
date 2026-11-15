@@ -135,8 +135,10 @@ The gaps it has to bridge are listed in [follow_me.md](follow_me.md#1-one-master
 (`growbot_train/master.py`, see the README's "The master policy"). `policies/master-1`
 (look-v7, lift-fall-2, nose-walk-1) is within 5% of its teachers on walking and backing
 speed, 1.3 degrees on aim and 1.3 s on turns. It falls 3 times in 114 switches; its
-teachers, driving the same scripts, fall 3 times in 100. Its per-mode runs fall only in lift-fall-2's walk, so it waits on
-the walks, not on the distillation. Still to come:
+teachers, driving the same scripts, fall 3 times in 100. `policies/master-2` (look-v9,
+lift-fall-2, nose-walk-1, backing only within 45 degrees) is within 4% of its teachers on
+speed and 0.7 degrees on aim, keeps the face in the camera's picture 97-100% of the time
+moving, and fell in none of 173 switches. Still to come:
 - distilling from the residual-gait walks once they pass. The distillation takes them
   already: labels are their full leg angles, and backing is stop-or-go at full speed
   until the app runner has a speed-scaled clock;

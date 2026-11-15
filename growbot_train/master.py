@@ -50,7 +50,7 @@ FRAMES = 5
 SQUASH = 0.9993  # tanh(ACTION_LIMIT): the furthest a squashed action reaches
 
 DEFAULT_TEACHERS = {
-    "look": "policies/look-v7/policy_look.json",
+    "look": "policies/look-v9/policy_look.json",
     "walk": "policies/lift-fall-2/policy_lift_fall.json",
     "back": "policies/nose-walk-1/policy_nose_walk.json",
 }
@@ -773,7 +773,7 @@ def main(argv: list[str] | None = None) -> int:
     d.add_argument("--out", type=Path, required=True)
     for m in MODES:
         d.add_argument(f"--{m}", default=DEFAULT_TEACHERS[m], help=f"{m} teacher JSON")
-    d.add_argument("--episodes", type=int, default=64, help="minute-long episodes per round")
+    d.add_argument("--episodes", type=int, default=128, help="minute-long episodes per round")
     d.add_argument("--rounds", default="1,0.5,0.25,0,0", help="teacher-driving share per round")
     d.add_argument("--epochs", type=int, default=40)
     d.add_argument("--workers", type=int, default=4)
