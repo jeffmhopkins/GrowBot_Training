@@ -9,6 +9,7 @@ import tomllib
 from pathlib import Path
 
 from growbot_train.config import load
+from growbot_train.master import is_job, load_job
 
 ROOT = Path(__file__).resolve().parent.parent
 NAME = re.compile(r"^growbot_[a-z0-9_]{1,56}$")
@@ -46,4 +47,7 @@ def test_every_config_exists_and_loads() -> None:
         assert CONFIG.fullmatch(job["config"]), job["config"]
         path = ROOT / job["config"]
         assert path.is_file() and not path.is_symlink(), job["config"]
-        load(path)
+        if is_job(path):
+            load_job(path)
+        else:
+            load(path)

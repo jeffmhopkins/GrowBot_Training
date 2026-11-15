@@ -14,11 +14,16 @@ PY=.venv/bin/python
 
 # Any step failing leaves the live folder saying so, not "training" forever.
 trap 'rc=$?; [ "$rc" -eq 0 ] || "$PY" -m growbot_train.live failed "$RUN" || true' EXIT
-"$PY" -m growbot_train.train --out "$RUN" "$@"
-"$PY" -m growbot_train.evaluate "$RUN"/policy_*.json --sweep --json "$RUN/eval.json" \
-  | tee "$RUN/eval.txt"
-# A 3D replay page that opens in any browser, phone included (needs no graphics drivers).
-"$PY" -m growbot_train.replay "$RUN"/policy_*.json --out "$RUN/replay.html"
+if [ "${1:-}" = "--config" ] && "$PY" -c 'import sys; from growbot_train.master import is_job; sys.exit(not is_job(sys.argv[1]))' "${2:-}"; then
+  # A master config distils the trained skills into one policy instead of training.
+  "$PY" -m growbot_train.master job --out "$RUN" --config "$2"
+else
+  "$PY" -m growbot_train.train --out "$RUN" "$@"
+  "$PY" -m growbot_train.evaluate "$RUN"/policy_*.json --sweep --json "$RUN/eval.json" \
+    | tee "$RUN/eval.txt"
+  # A 3D replay page that opens in any browser, phone included (needs no graphics drivers).
+  "$PY" -m growbot_train.replay "$RUN"/policy_*.json --out "$RUN/replay.html"
+fi
 "$PY" -m growbot_train.live finish "$RUN"
 tar czf "runs/$NAME.tar.gz" -C runs "$NAME"
 echo "== packed runs/$NAME.tar.gz =="

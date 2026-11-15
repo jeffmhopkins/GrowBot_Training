@@ -252,3 +252,104 @@ def test_a_residual_teacher_reads_back_its_own_correction_in_the_student_env(
         assert np.allclose(teacher.hist[0][i0 : i0 + 2], last, atol=1e-6)
         last = runner_forward(teacher.data, teacher.hist.reshape(-1))
         env.step(np.arctanh(master.to_student(teacher.act_rad())))
+
+
+def _senses(err: float, forward: float = 0.0, tilt: float = 1.0) -> master.Senses:
+    return master.Senses(
+        acc=np.zeros(3),
+        gyro=np.zeros(3),
+        prev_rad=np.zeros(2),
+        err_lens=err,
+        err_body=err,
+        forward=forward,
+        tilt=tilt,
+        step_index=0,
+    )
+
+
+def _settle(hold: master.Hold, errs) -> list[np.ndarray]:
+    return [hold.legs_rad(_senses(e), "look", np.array([0.1 * k, -0.1 * k])) for k, e in errs]
+
+
+def test_the_hold_freezes_the_last_seconds_mean_stance_once_settled() -> None:
+    hold = master.Hold()
+    w = master.HOLD_WINDOW
+    out = _settle(hold, [(k, 2.0) for k in range(w)])
+    assert hold.holding
+    # The tick that completes the window still sends look's own legs; the next is held.
+    assert out[-1] == pytest.approx([0.1 * (w - 1), -0.1 * (w - 1)])
+    mean = 0.1 * (w - 1) / 2
+    held = hold.legs_rad(_senses(3.0), "look", np.array([9.0, 9.0]))
+    assert held == pytest.approx([mean, -mean])
+
+
+def test_the_hold_waits_out_a_sway_that_reaches_too_far() -> None:
+    hold = master.Hold()
+    # Averages near zero, but swings past HOLD_SPREAD_DEG within the second.
+    big = master.HOLD_SPREAD_DEG + 1.0
+    _settle(hold, [(k, big if k % 2 else -big) for k in range(master.HOLD_WINDOW)])
+    assert not hold.holding
+    hold.reset()
+    _settle(hold, [(k, master.HOLD_ENTER_DEG + 1.0) for k in range(master.HOLD_WINDOW)])
+    assert not hold.holding
+
+
+@pytest.mark.parametrize(
+    ("mode", "senses"),
+    [
+        ("look", _senses(master.HOLD_EXIT_DEG + 1.0)),
+        ("look", _senses(0.0, tilt=1.0 + 2 * master.HOLD_TILT_BAND)),
+        ("look", _senses(0.0, forward=1.0)),
+        ("walk", _senses(0.0, forward=1.0)),
+    ],
+)
+def test_the_hold_lets_go_when_aim_tilt_or_a_move_asks(mode: str, senses) -> None:
+    hold = master.Hold()
+    _settle(hold, [(k, 0.0) for k in range(master.HOLD_WINDOW)])
+    assert hold.holding
+    own = np.array([0.5, -0.5])
+    assert hold.legs_rad(senses, mode, own) == pytest.approx(own)
+    assert not hold.holding
+
+
+def test_teacher_driven_look_stands_still_once_held() -> None:
+    r = master.Rollout(master.DEFAULT_TEACHERS)
+    d = master.drive(r, None, 0, 0.0, 0.0, 6.0, nominal=True)
+    assert not d["fell"] and d["drift_cm"] < 1.0
+
+
+def test_the_master_job_distils_scores_and_reports_progress(tmp_path, monkeypatch) -> None:
+    cfg = tmp_path / "master.toml"
+    teachers = "\n".join(f'{m} = "{p}"' for m, p in master.DEFAULT_TEACHERS.items())
+    cfg.write_text(f"[master]\n{teachers}\nepisodes = 2\nrounds = [1.0, 0.0]\nepochs = 1\n")
+    assert master.is_job(cfg) and not master.is_job(master.Path("configs/look.toml"))
+    row = {"toward": 0.0, "speed": 0.02, "err": 4.0, "turn_s": 1.0, "frame_pct": 99.0}
+    row |= {"img_x": 2.0, "falls": 0, "runs": 5}
+    report = {m: {"+0": {"teacher": row, "master": {**row, "speed": 0.019}}} for m in master.MODES}
+    sw = {"falls": 1, "switches": 90, "episodes": 20}
+    report["switch"] = {"teacher": sw, "master": sw}
+    monkeypatch.setattr(master, "evaluate", lambda _path: report)
+    monkeypatch.setattr(master, "distill", _tiny_distill(master.distill))
+    path = master.run_job(tmp_path / "run", cfg)
+    assert path.name == "policy_master.json"
+    progress = json.loads((tmp_path / "run" / "live" / "progress.json").read_text())
+    assert progress["state"] == "finishing" and progress["summary"][0]["value"] == "2 of 2"
+    tail = (tmp_path / "run" / "eval.txt").read_text().splitlines()[-1]
+    assert tail == (
+        "eval summary: speed within 5% of the teachers, aim within 0.0 deg, "
+        "falls 0/15, 1 in 90 switches"
+    )
+
+
+def _tiny_distill(real):
+    def run(out, paths, rounds, episodes, **kw):
+        return real(out, paths, rounds, episodes, seconds=1.0, **{**kw, "workers": 1})
+
+    return run
+
+
+def test_a_master_config_must_name_a_teacher_per_mode(tmp_path) -> None:
+    cfg = tmp_path / "master.toml"
+    cfg.write_text('[master]\nlook = "policies/look-v9/policy_look.json"\n')
+    with pytest.raises(ValueError, match="teacher per mode"):
+        master.load_job(cfg)

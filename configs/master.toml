@@ -1,0 +1,10 @@
+# The master policy job: distils these single-skill teachers into one policy the app runs
+# whatever the follower asks, then scores it against them (README "The master policy").
+# Not a training config: run.sh sees the [master] table and runs growbot_train.master.
+[master]
+look = "policies/look-v9/policy_look.json"
+walk = "policies/lift-fall-2/policy_lift_fall.json"
+back = "policies/nose-walk-1/policy_nose_walk.json"
+episodes = 128  # minute-long episodes per round; 64 walked about 20% slow from +25
+rounds = [1.0, 0.5, 0.25, 0.0, 0.0]  # how often the teachers drive, per DAgger round
+epochs = 40
