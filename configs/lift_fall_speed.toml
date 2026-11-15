@@ -26,6 +26,7 @@ back_lean = 0.0         # off, for the same reason; going over backwards is stil
 back_lean_margin_deg = 12.0  # how far past the stance before that penalty starts
 wobble = 0.0            # penalty for rocking (roll and pitch spin, squared)
 turn = 0.5              # pay per degree the heading error shrinks (a clear signal to turn)
+frame = 0.5             # keep the face in the picture, as lift_fall
 anchor = 0.5            # CHANGED: wandering from where a stop began (or the target last moved) costs up to this per tick (past 2 cm), so a stop stays a stop
 
 [task]

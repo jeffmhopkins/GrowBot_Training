@@ -28,6 +28,7 @@ back_lean = 0.0         # CHANGED: off, for the same reason; going over backward
 back_lean_margin_deg = 12.0  # how far past the stance before that penalty starts
 wobble = 0.0            # penalty for rocking (roll and pitch spin, squared)
 turn = 0.5              # pay per degree the heading error shrinks (a clear signal to turn)
+frame = 0.5             # CHANGED: Jeff, 2026-11-15: pay while the face is in the picture (any spot, while walking); the old walk lost a standing face at 1 m on a third of random bodies
 
 [task]
 body = "build"              # CHANGED: the printed body with a Pixel on top
