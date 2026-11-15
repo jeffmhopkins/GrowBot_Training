@@ -1,0 +1,26 @@
+-- look
+ start  who       toward   speed    err  turn_s  falls
+   +90  teacher  -0.0101  0.0088    6.4    7.21  0.0/5
+   +90  master   -0.0094  0.0082    6.5    6.78  0.0/5
+   -90  teacher  -0.0095  0.0087    5.9    7.72  0.0/5
+   -90  master   -0.0091  0.0084    6.8    7.86  0.0/5
+  +180  teacher  -0.0053  0.0113    7.9   15.62  0.0/5
+  +180  master   -0.0056  0.0095    7.3   14.38  0.0/5
+-- walk
+ start  who       toward   speed    err  turn_s  falls
+    +0  teacher   0.0485  0.0516    4.1    0.04  0.0/5
+    +0  master    0.0484  0.0521    4.0    0.04  0.0/5
+   +45  teacher   0.0362  0.0457    7.2    2.82  1.0/5
+   +45  master    0.0383  0.0455    7.7    2.58  1.0/5
+   -45  teacher   0.0465  0.0525    4.7    2.02  0.0/5
+   -45  master    0.0446  0.0510    4.6    2.86  0.0/5
+-- back
+ start  who       toward   speed    err  turn_s  falls
+    +0  teacher  -0.0276  0.0289    6.1    0.04  0.0/5
+    +0  master   -0.0276  0.0284    6.1    0.04  0.0/5
+   +45  teacher  -0.0265  0.0281    7.3    2.73  0.0/5
+   +45  master   -0.0265  0.0281    7.6    2.74  0.0/5
+   -45  teacher  -0.0262  0.0289    6.7    4.30  0.0/5
+   -45  master   -0.0258  0.0286    8.0    5.51  0.0/5
+-- switches, teacher-driven: 3 falls in 100 mode switches over 20 minute-long runs
+-- switches, master-driven: 3 falls in 114 mode switches over 20 minute-long runs

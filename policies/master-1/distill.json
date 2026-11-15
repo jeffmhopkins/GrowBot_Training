@@ -1,0 +1,47 @@
+[
+ {
+  "round": 0,
+  "beta": 1.0,
+  "samples": 90085,
+  "falls": 8,
+  "episodes": 64,
+  "switches": 404,
+  "loss": 0.03666462198288041
+ },
+ {
+  "round": 1,
+  "beta": 0.5,
+  "samples": 181393,
+  "falls": 7,
+  "episodes": 64,
+  "switches": 369,
+  "loss": 0.024781378721345754
+ },
+ {
+  "round": 2,
+  "beta": 0.25,
+  "samples": 273091,
+  "falls": 5,
+  "episodes": 64,
+  "switches": 384,
+  "loss": 0.018301330088741366
+ },
+ {
+  "round": 3,
+  "beta": 0.0,
+  "samples": 360926,
+  "falls": 8,
+  "episodes": 64,
+  "switches": 341,
+  "loss": 0.015109744706488713
+ },
+ {
+  "round": 4,
+  "beta": 0.0,
+  "samples": 449841,
+  "falls": 9,
+  "episodes": 64,
+  "switches": 408,
+  "loss": 0.01339080687049677
+ }
+]
