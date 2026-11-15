@@ -17,7 +17,7 @@ arrive = 0.0            # one-off bonus per target for reaching it quickly (0 = 
 speed_cap_m_s = 0.03    # CHANGED: 3 cm/s. Look never walks, so the cap only sets how much drift a turn may have
 speed_window_s = 1.0    # speed is averaged over this long before the cap is checked
 overspeed = 4.0         # CHANGED: penalty for going faster than the cap (grows with the square)
-stop_drift_free = 0.8   # CHANGED: drift up to this x the cap is free (2.4 cm/s). This body drifts more the faster it spins (about 1.2 cm/s at the open-loop spin's 15 degrees a second on random bodies, more above), so at 0.5 the squared overspeed charge capped how fast it turned: v7 took 20 s for half a turn where the cloned spin manages 12-15. Standing still on target is the follower's Hold (follow.py), which stops creep there outright
+stop_drift_free = 0.8   # CHANGED: drift up to this x the cap is free (2.4 cm/s). This body drifts more the faster it spins (about 1.2 cm/s at the open-loop spin's 15 degrees a second on random bodies, more above), so at 0.5 the squared overspeed charge capped how fast it turned: v7 took 20 s for half a turn where the cloned spin manages 12-15 s. Standing still on target is the follower's Hold (follow.py), which stops creep there outright
 anchor = 0.4            # CHANGED: back to v7's; wandering from where this turn began costs, up to this per tick, full at 15 cm past anchor_free_m (1.0 in v8 bought nothing)
 anchor_free_m = 0.02    # ...the first 2 cm free
 tilt = 4.0              # CHANGED: penalty for leaning away from the stance; firm, so it turns instead of leaning
