@@ -31,7 +31,10 @@ to walk at all (its first run stood still for 3M steps). Two settings fix that.
 up to the command, and charges for going faster, so early flailing costs no more than
 standing still. `task.speed_ramp_steps` starts every command at full speed with no stops
 and widens the spread to the full range over the first 8M steps. Its evaluation adds a
-speed-tracking table, the speed it walks at for each commanded share of the cap. See
+speed-tracking table, the speed it walks at for each commanded share of the cap. The first
+run walked 1.7 cm/s but held 34-50 degrees off and rarely came round from behind, so it now
+uses lift and fall's turning reward too (`progress_width_deg`, `heading_width_deg`,
+`turn`, `arrive`). See
 [The camera walk](#the-camera-walk) for why the camera walk exists and what it can and
 can't do with this body.
 

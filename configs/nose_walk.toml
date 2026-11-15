@@ -11,8 +11,9 @@ name = "nose_walk"  # CHANGED: the run's name
 # cares more about that thing. See README "The reward" for what each one does.
 progress = 2.0          # walking along the target direction, full value at the speed cap
 heading = 0.5           # pointing at the target: full value dead on, zero facing away
-progress_width_deg = 0.0  # with > 0: progress pays only while pointing near the target (exp(-(error/width)^2))
-arrive = 0.0            # one-off bonus per target for reaching it quickly (0 = off)
+heading_width_deg = 40.0  # CHANGED: ...and it pays only near it (exp(-(error/40)^2)), as for lift and fall
+progress_width_deg = 45.0  # CHANGED: progress counts only while pointing near the target: the first nose walk held 34-50 degrees off and rarely came round from behind
+arrive = 30.0           # CHANGED: one-off bonus per target that needs a turn, once it has held within 15 degrees for 1 s, less the longer it took (none after 20 s)
 speed_cap_m_s = 0.03    # "slow": 3 cm/s. Upstream's forward walk does about 3.6 cm/s
 speed_window_s = 1.0    # speed is averaged over this long before the cap is checked
 overspeed = 4.0         # penalty for going faster than the cap (grows with the square)
@@ -25,7 +26,7 @@ stance_tol_deg = 6.0    # how close to the taller stance counts (degrees)
 back_lean = 0.0         # penalty for leaning back past the stance + margin (off here)
 back_lean_margin_deg = 12.0  # how far past the stance before that penalty starts
 wobble = 0.0            # penalty for rocking (roll and pitch spin, squared; off here)
-turn = 0.0              # pay per degree the heading error shrinks (off here)
+turn = 0.5              # CHANGED: pay per degree the heading error shrinks (a clear signal to turn)
 
 [task]
 body = "build"              # the printed body with a Pixel on top; "rollout"/"olie" are upstream's sim bodies
