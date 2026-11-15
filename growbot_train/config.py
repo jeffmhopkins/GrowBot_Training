@@ -84,6 +84,16 @@ class RewardConfig:
     anchor_free_m: float = 0.02
     # Rocking costs weight * (roll rate^2 + pitch rate^2), rad/s: a steadier camera.
     wobble: float = 0.0
+    # Keeping the person's face in the phone camera's picture, paid per tick: weight while
+    # a virtual face (drawn per target, out in the person's direction) is inside the
+    # frame, nothing outside it. Standing (speed 0), it also has to be centred across the
+    # picture: weight * (1 - (x / half the width)^2). Walking sways the camera and that's
+    # fine (Jeff, 2026-11-15) as long as the face stays in the picture. 0 = off.
+    frame: float = 0.0
+    frame_hfov_deg: float = 60.0  # follow.py's CameraSpec: the phone lies screen up
+    frame_vfov_deg: float = 75.0
+    frame_distance_m: tuple[float, float] = (0.7, 2.5)
+    frame_face_height_m: tuple[float, float] = (1.1, 1.65)
     # Pay per degree the heading error shrank this tick (negative when it grew), measured
     # against the current target so a retarget's jump is never paid. It adds up to
     # weight * (error at start - error at end), so it can't be farmed. Turning on the spot

@@ -12,6 +12,10 @@ on, task.initial_error_deg), and reports per case:
     over%    share of time the averaged speed was more than 10% over the cap
     err      average heading error over the second half, degrees; lower is better
     turn_s   seconds until the error first dropped under 20 degrees
+    frame%   share of time a virtual face in the person's direction (drawn per episode,
+             0.7-2.5 m out, 1.1-1.65 m high) was in the phone camera's picture
+    img_x    how far across the picture that face sat over the second half, degrees off
+             centre (the picture is 60 wide): what a stop has to centre
     falls    episodes that ended in a fall
 
 A policy with a speed input also gets a speed-tracking table: what it walks at, target
@@ -79,6 +83,7 @@ def run_episode(
     obs, _ = env.reset(seed=seed, options=start)
     cap = env.cfg.reward.speed_cap_m_s
     along, speed, errs, over = [], [], [], 0
+    framed, img_x = [], []
     turn_s = float("nan")
     fell = False
     done = False
@@ -88,6 +93,8 @@ def run_episode(
         speed.append(info["speed"])
         errs.append(info["abs_err_deg"])
         over += info["speed"] > 1.1 * cap
+        framed.append(info["in_frame"])
+        img_x.append(abs(info["image_x_deg"]))
         if np.isnan(turn_s) and info["abs_err_deg"] < 20:
             turn_s = env.step_index * CONTROL_DT
         fell = bool(term)
@@ -99,6 +106,8 @@ def run_episode(
         "over_pct": 100.0 * over / len(speed),
         "err": float(np.mean(errs[half:])),
         "turn_s": turn_s,
+        "frame_pct": 100.0 * float(np.mean(framed)),
+        "img_x": float(np.mean(img_x[half:])),
         "fell": float(fell),
     }
 
@@ -148,6 +157,8 @@ def speed_tracking(
             "want": cmd * cap,
             "toward": float(np.mean([r["toward"] for r in runs])),
             "speed": float(np.mean([r["speed"] for r in runs])),
+            "frame_pct": float(np.mean([r["frame_pct"] for r in runs])),
+            "img_x": float(np.mean([r["img_x"] for r in runs])),
             "falls": float(sum(r["fell"] for r in runs)),
             "episodes": float(episodes),
         }
@@ -194,12 +205,13 @@ def _table(title: str, rows: dict[str, dict[str, float]], cap: float) -> str:
     lines = [
         f"-- {title} (speed cap {cap:.3f} m/s)",
         f"{'start':>6} {'toward':>8} {'speed':>7} {'over%':>6} {'err':>6} "
-        f"{'turn_s':>7} {'falls':>6}",
+        f"{'turn_s':>7} {'frame%':>6} {'img_x':>6} {'falls':>6}",
     ]
     for name, m in rows.items():
         lines.append(
             f"{name:>6} {m['toward']:8.4f} {m['speed']:7.4f} {m['over_pct']:6.1f} "
-            f"{m['err']:6.1f} {m['turn_s']:7.2f} {int(m['falls']):>3}/{int(m['episodes'])}"
+            f"{m['err']:6.1f} {m['turn_s']:7.2f} {m['frame_pct']:6.1f} {m['img_x']:6.1f} "
+            f"{int(m['falls']):>3}/{int(m['episodes'])}"
         )
     return "\n".join(lines)
 
@@ -225,10 +237,15 @@ def main(argv: list[str] | None = None) -> int:
     if env.cfg.task.speed == "command":
         report["speed_tracking"] = rows = speed_tracking(env, policy, args.episodes)
         print(f"-- speed tracking, randomised bodies (cap {cap:.3f} m/s)", flush=True)
-        print(f"{'cmd':>6} {'want':>8} {'toward':>8} {'speed':>7} {'falls':>6}", flush=True)
+        print(
+            f"{'cmd':>6} {'want':>8} {'toward':>8} {'speed':>7} {'frame%':>6} {'img_x':>6} "
+            f"{'falls':>6}",
+            flush=True,
+        )
         for name, m in rows.items():
             print(
                 f"{name:>6} {m['want']:8.4f} {m['toward']:8.4f} {m['speed']:7.4f} "
+                f"{m['frame_pct']:6.1f} {m['img_x']:6.1f} "
                 f"{int(m['falls']):>3}/{int(m['episodes'])}",
                 flush=True,
             )
