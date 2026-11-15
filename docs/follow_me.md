@@ -146,15 +146,18 @@ A small controller between the tracker and the policy:
   forward teacher learns slower speeds (see the gaps above). Forward waits until the
   heading error is small (about 30 degrees, let go at 40 like the master's walk), so a
   person far behind gets a spin first, not a walk away from them while it turns. The
-  distance is averaged over about 1.5 s: each waddle swings the camera's reading about
-  0.3 m, and acting on every frame chattered between walking and standing. A walk starts
-  10 cm too far and keeps going until within 5 cm, so the 10-25 cm a spin drifts (look's
-  gait drifts as it turns) is walked back in one go: Jeff's "one more step forward"
-  (2026-11-15). `python -m growbot_train.master follow-spin POLICY` checks it: a person
-  standing 1 m off at 90-180 degrees, the master spins to them under the camera,
-  tracker and follower. Master v1 ends within 6 cm of the distance the camera reads on
-  every body; the truth is up to 18 cm further on bodies where the camera's floor
-  distance reads short.
+  distance is averaged over about 1.5 s of camera frames (longer when frames drop): each
+  waddle swings the camera's reading about 0.3 m, and acting on every frame chattered
+  between walking and standing. A walk waits for a second of frames in the average,
+  starts once it reads 10 cm too far and keeps going until within 5 cm, so the drift of a
+  spin (look's gait drifts 10-25 cm as it turns) is walked back in one go whenever the
+  camera sees it: Jeff's "one more step forward" (2026-11-15). Backing still starts 15 cm
+  too close. `python -m growbot_train.master follow-spin POLICY` checks it: a person
+  standing 1 m off at 90-180 degrees, the master spins to them under the camera, tracker
+  and follower. Master v1 ends with the camera reading within 6 cm of the set distance on
+  every body and the truth within 5 cm on the nominal one; on bodies where the camera's
+  floor distance reads short (up to 15 cm) the truth ends up to 18 cm out, which no
+  follower rule can see.
 - **Pitch:** the tracker's vertical error, integrated into `cmd_pitch`, so the camera
   keeps the face mid-frame.
 - **Hold:** once the camera has been within about 6 degrees of the person for a second

@@ -73,7 +73,7 @@ def test_the_tracker_says_lost_after_a_short_gap() -> None:
 
 
 def test_the_follower_walks_only_once_roughly_facing_the_person() -> None:
-    f = Follower(set_distance_m=1.0)
+    f = Follower(set_distance_m=1.0, frames=50)
     assert f.command(Sighting(10.0, 0.0, 2.0), lost=False)[1] == 1.0
     assert f.command(Sighting(90.0, 0.0, 2.0), lost=False)[1] == 0.0
 
@@ -89,7 +89,7 @@ def test_a_far_person_behind_never_makes_it_back_up() -> None:
 
 
 def test_stay_stops_walking_but_keeps_turning_and_tilting() -> None:
-    f = Follower()
+    f = Follower(frames=50)
     f.voice("stay")
     yaw, speed, tilt = f.command(Sighting(40.0, 10.0, 3.0), lost=False)
     assert yaw == 40.0 and speed == 0.0 and tilt < 1.0
@@ -330,8 +330,26 @@ def test_the_follower_keeps_distance_on_the_average_not_each_waddle() -> None:
     assert speeds[-100:] == [0.0] * 100
 
 
+def test_one_long_frame_never_starts_a_walk() -> None:
+    f = Follower(set_distance_m=1.0)
+    # Just found, the first frame reads a waddle's 0.25 m long: no walk yet...
+    assert f.command(_seen(1.25), lost=False)[1] == 0.0
+    # ...and a second of true readings averages it away before one could start.
+    speeds = [f.command(_seen(1.0), lost=False)[1] for _ in range(50)]
+    assert speeds == [0.0] * 50
+
+
+def test_backing_keeps_its_15_cm_band() -> None:
+    f = Follower(set_distance_m=1.0)
+    f.frames, f.distance = 50, 0.88
+    assert f.command(_seen(0.88), lost=False)[1] == 0.0
+    f.distance = 0.8
+    assert f.command(_seen(0.8), lost=False)[1] < 0.0
+
+
 def test_a_walk_once_started_closes_the_gap_to_within_the_stop_band() -> None:
     f = Follower(set_distance_m=1.0)
+    f.frames = 50
     assert f.command(_seen(1.2), lost=False)[1] == 1.0
     # Inside the 10 cm band but not yet within 5 cm: it keeps walking...
     f.distance = 1.08
@@ -345,7 +363,7 @@ def test_a_walk_once_started_closes_the_gap_to_within_the_stop_band() -> None:
 
 def test_a_walk_lets_go_of_the_heading_only_ten_degrees_wider() -> None:
     f = Follower(set_distance_m=1.0)
-    f.distance = 1.5
+    f.frames, f.distance = 50, 1.5
     assert f.command(_seen(1.5, bearing=35.0), lost=False)[1] == 0.0
     assert f.command(_seen(1.5, bearing=20.0), lost=False)[1] == 1.0
     assert f.command(_seen(1.5, bearing=35.0), lost=False)[1] == 1.0

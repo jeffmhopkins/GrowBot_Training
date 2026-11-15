@@ -279,7 +279,10 @@ class Follower:
     # acts on its average over about this long; acting on each frame chattered between
     # walking and standing and never closed the gap (Jeff, 2026-11-15: "zero creep").
     distance_avg_s: float = 1.5
+    # Too close backs away past this, as before the walk got its own bands.
+    back_band_m: float = 0.15
     distance: float | None = None
+    frames: int = 0  # fresh frames in the average; a walk waits for a second's worth
     walking: bool = False
     back_ramp_m: float = 0.5
     walk_within_deg: float = 30.0
@@ -320,7 +323,7 @@ class Follower:
         frame, the only time the camera height moves, so a held pitch isn't counted twice."""
         if tracked is None or lost:
             # A distance from before they were lost is stale by the time they're found.
-            self.distance, self.walking = None, False
+            self.distance, self.frames, self.walking = None, 0, False
         if tracked is None:
             # Never seen: spin on the spot until they come into view.
             return self.search_sign * self.search_deg, 0.0, self.tilt
@@ -332,23 +335,30 @@ class Follower:
         self.search_sign = 1.0 if bearing >= 0 else -1.0
         if fresh:
             self.tilt = float(np.clip(self.tilt - self.pitch_gain * tracked.pitch_deg, -1.0, 1.0))
-            a = min(1.0, CONTROL_DT / self.distance_avg_s)
+            self.frames += 1
+            # A plain mean until it holds distance_avg_s of frames, then a moving one: an
+            # early long frame weighs no more than any other.
+            a = max(1.0 / self.frames, CONTROL_DT / self.distance_avg_s)
             d = tracked.distance_m
             self.distance = d if self.distance is None else self.distance + a * (d - self.distance)
         speed = 0.0
         err = (tracked.distance_m if self.distance is None else self.distance) - self.set_distance_m
         # As the master's walk does, a walk lets go of the heading only 10 degrees wider.
         within = self.walk_within_deg + (10.0 if self.walking else 0.0)
+        # One frame can read 0.3 m long mid-waddle, so a walk waits until the average
+        # holds about a second of frames.
+        settled = self.frames * CONTROL_DT >= 1.0
         self.walking = (
             not self.stay
+            and (self.walking or settled)
             and err > (self.walk_stop_m if self.walking else self.dead_band_m)
             and abs(bearing) <= within
         )
         if not self.stay:
             if self.walking:
                 speed = 1.0
-            elif err < -self.dead_band_m:
-                speed = -min(1.0, (-err - self.dead_band_m) / self.back_ramp_m)
+            elif err < -self.back_band_m:
+                speed = -min(1.0, (-err - self.back_band_m) / self.back_ramp_m)
         return bearing, speed, self.tilt
 
 
