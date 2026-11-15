@@ -201,6 +201,25 @@ def test_cloning_a_gait_makes_the_policy_play_it(tmp_path) -> None:
     assert np.mean(errs) < 0.1
 
 
+def test_cloning_a_speed_policy_shows_the_normaliser_every_speed(tmp_path) -> None:
+    from growbot_train.env import channels_for
+
+    cfg = _build_cfg()
+    cfg.task.gait_hz = 2.0
+    cfg.task.episode_seconds = 2.0
+    cfg.task.speed = "command"
+    cfg.task.speed_command_every_s = (0.2, 0.4)
+    vec = VecNormalize(DummyVecEnv([lambda: GrowBotHeadingEnv(cfg)]), clip_obs=CLIP_OBS)
+    vec.set_attr("cmd_scale", 0.0)  # where the speed curriculum starts: full speed only
+    model = PPO("MlpPolicy", vec, n_steps=64, batch_size=64, seed=0, device="cpu")
+    clone_gait(model, vec, cfg, Keyframes.load(_gait_json(tmp_path, 2.0)), 400, 1, lambda *_: None)
+    chans = channels_for(cfg)
+    col = chans.index("cmd_forward")
+    var = vec.obs_rms.var.reshape(cfg.task.history_frames, len(chans))[:, col]
+    assert var.min() > 0.01
+    assert vec.get_attr("cmd_scale") == [0.0]  # put back for PPO
+
+
 def test_cloning_refuses_a_clock_that_does_not_match(tmp_path) -> None:
     cfg = _build_cfg()
     cfg.task.gait_hz = 1.0

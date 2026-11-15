@@ -184,3 +184,21 @@ def test_nose_walk_is_the_heading_walk_with_a_speed_input() -> None:
     # The master policy backs away from the camera with this one: nose first only.
     assert nose.task.speed == "command" and nose.task.facing == "nose"
     assert nose.task.speed_back_min >= 0.0
+
+
+def test_lift_fall_speed_is_lift_fall_with_a_speed_input() -> None:
+    path = SHIPPED.with_name("lift_fall_speed.toml")
+    fast = config_mod.load(path)
+    base = config_mod.load(SHIPPED.with_name("lift_fall.toml")).to_dict()
+    changed = {
+        (section, key)
+        for section, values in fast.to_dict().items()
+        if isinstance(values, dict)
+        for key, value in values.items()
+        if base[section][key] != value
+    }
+    if fast.name != base["name"]:
+        changed.add(("", "name"))
+    assert path.read_text().count("# CHANGED:") == len(changed)
+    assert fast.task.speed == "command" and fast.task.speed_reward == "progress"
+    assert fast.task.speed_back_min == 0.0  # backing up is the nose walk's
