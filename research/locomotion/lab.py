@@ -53,8 +53,10 @@ class Scenario:
     swing_rad: float = 1.5
     # Camera height: the average pitch (degrees nose-up) the gait must hold, 0 for none.
     min_pitch_deg: float = 0.0
-    # The other way: the average pitch it must stay under (a low waddle), 0 for none.
+    # The other way: the average pitch it must stay under (a low waddle), 0 for none...
     max_pitch_deg: float = 0.0
+    # ...and the highest it may rear on any step (an unchecked n1 vaulted to 59), 0 for none.
+    peak_pitch_deg: float = 0.0
     # Which way counts as forward: +1 tail (camera) first, -1 nose first.
     direction: float = 1.0
     # Leg angle (radians) held while it is set down, and the gait eases in from. Long
@@ -473,6 +475,7 @@ def score(
     min_pitch_deg: float = 0.0,
     max_pitch_deg: float = 0.0,
     direction: float = 1.0,
+    peak_pitch_deg: float = 0.0,
 ) -> float:
     """What the search climbs: speed the scenario's way, a little drift cost (a policy
     steers that out, but a gait that mostly spins is not a walk), and falling is ruinous.
@@ -484,6 +487,7 @@ def score(
         - r["fell"] * FALL_COST
         - 0.001 * max(0.0, min_pitch_deg - r["mean_pitch"])
         - 0.001 * (max(0.0, r["mean_pitch"] - max_pitch_deg) if max_pitch_deg else 0.0)
+        - 0.001 * (max(0.0, r["max_pitch"] - peak_pitch_deg) if peak_pitch_deg else 0.0)
         for r in results
     ]
     return float(np.mean(s))

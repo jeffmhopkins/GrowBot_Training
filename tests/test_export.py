@@ -140,3 +140,21 @@ def test_evaluation_starts_stay_within_the_trained_range() -> None:
     cfg.task.initial_error_deg = 60.0
     assert start_errors(cfg) == (0.0, 45.0, -45.0, 60.0, -60.0)
     assert start_errors(cfg, (0.0, 90.0, 180.0)) == (0.0, 60.0, -60.0)
+
+
+def test_replay_scenarios_stay_within_the_training_targets() -> None:
+    from types import SimpleNamespace
+
+    from growbot_train.replay import SCENARIOS, _within
+
+    cfg = SimpleNamespace(task=SimpleNamespace(initial_error_deg=60.0, retarget_max_deg=60.0))
+    got = {s[0]: _within(s, cfg) for s in SCENARIOS}
+    assert got["Target 90 degrees left"][:2] == ("Target 60 degrees left", 60.0)
+    assert got["Random body: target 90 right"][:2] == (
+        "Random body: target 60 degrees right",
+        -60.0,
+    )
+    assert got["Target turns every 6 s"][0] == "Target turns 60 degrees every 6 s"
+    assert got["Target turns every 6 s"][4] == 60.0
+    wide = SimpleNamespace(task=SimpleNamespace(initial_error_deg=180.0, retarget_max_deg=120.0))
+    assert all(_within(s, wide)[:4] == s for s in SCENARIOS)

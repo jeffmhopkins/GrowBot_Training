@@ -29,7 +29,8 @@ from growbot_train.policy import JsonPolicy
 TEMPLATE = Path(__file__).parent / "replay_template.html"
 PLACEHOLDER = "/*REPLAY_DATA*/null"
 
-# (title, starting heading error, seconds between 90-degree target turns or 0, nominal body)
+# (title, starting heading error, seconds between 90-degree target turns or 0, nominal body).
+# build() pulls each one into the range the policy trained on (see _within).
 SCENARIOS: tuple[tuple[str, float, float, bool], ...] = (
     ("Target ahead", 0.0, 0.0, True),
     ("Target 90 degrees left", 90.0, 0.0, True),
@@ -59,6 +60,7 @@ def record(
     seconds: float,
     turn_every: float,
     nominal: bool,
+    turn_deg: float = 90.0,
 ) -> dict[str, Any]:
     obs, _ = env.reset(
         seed=seed,
@@ -106,13 +108,35 @@ def record(
     every = round(turn_every / CONTROL_DT) if turn_every else 0
     for i in range(1, round(seconds / CONTROL_DT) + 1):
         if every and i % every == 0:
-            env.target_deg = wrap_deg(env.target_deg + 90.0)
+            # Left then right, so the target stays within one turn of where it began: a
+            # one-way series ends up behind a policy that never trains on that.
+            sign = 1.0 if (i // every) % 2 else -1.0
+            env.target_deg = wrap_deg(env.target_deg + sign * turn_deg)
         obs, _, term, _, info = env.step(policy.env_action(obs))
         frames.append(snapshot(info))
         if term:
             fell = True
             break
     return {"shapes": shapes, "frames": frames, "fell": fell}
+
+
+def _within(
+    scen: tuple[str, float, float, bool], cfg: Any
+) -> tuple[str, float, float, bool, float]:
+    """A scenario as this policy's training saw it: a start no wider than its first
+    targets and turns no bigger than its retargets (lift and fall speed trains within
+    60 degrees; a 90-degree preset showed it walking away from a target it never sees)."""
+    title, err, turn, nominal = scen
+    lim = cfg.task.initial_error_deg
+    step = min(90.0, cfg.task.retarget_max_deg)
+    if abs(err) > lim:
+        err = math.copysign(lim, err)
+        side = "left" if err > 0 else "right"
+        title = title.replace(title.split(": ")[-1], f"target {lim:g} degrees {side}")
+        title = title[0].upper() + title[1:]
+    if turn and step != 90.0:
+        title = title.replace("turns every", f"turns {step:g} degrees every")
+    return title, err, turn, nominal, step
 
 
 def build(
@@ -126,8 +150,9 @@ def build(
     policy = JsonPolicy(policy_path)
     env = env_for(policy, body)
     episodes = []
-    for i, (title, err, turn, nominal) in enumerate(scenarios):
-        ep = record(env, policy, seed + i, err, seconds, turn, nominal)
+    for i, scen in enumerate(scenarios):
+        title, err, turn, nominal, turn_deg = _within(scen, env.cfg)
+        ep = record(env, policy, seed + i, err, seconds, turn, nominal, turn_deg)
         ep["title"] = title
         episodes.append(ep)
         if not quiet:

@@ -203,6 +203,9 @@ WADDLE: list[Scenario] = [
 NOSE: list[Scenario] = [
     Scenario("n1", {**F, "toe_tail": "pla", "toe_nose": "pla"},
              "Nose-first low waddle, stock bare feet", direction=-1.0, max_pitch_deg=25.0),
+    Scenario("n2", {**F, "toe_tail": "pla", "toe_nose": "pla"},
+             "As n1, never rearing past 45 degrees", direction=-1.0, max_pitch_deg=25.0,
+             peak_pitch_deg=45.0),
 ]  # fmt: skip
 SCENARIOS += STOCK + FEET + VAULT + WADDLE + NOSE
 BY_NAME = {s.name: s for s in SCENARIOS}
@@ -226,7 +229,10 @@ def _eval(x: np.ndarray) -> float:
     for b in _BENCHES:
         per.setdefault(b.dom.floor, []).append(b.run(gait, _SECONDS))
     sc = _BENCHES[0].scen
-    s = [score(rs, sc.min_pitch_deg, sc.max_pitch_deg, sc.direction) for rs in per.values()]
+    s = [
+        score(rs, sc.min_pitch_deg, sc.max_pitch_deg, sc.direction, sc.peak_pitch_deg)
+        for rs in per.values()
+    ]
     return 0.5 * float(np.mean(s)) + 0.5 * min(s)
 
 
