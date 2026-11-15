@@ -58,9 +58,9 @@ def test_the_face_is_redrawn_in_range_per_target_without_moving_other_draws() ->
         assert r.frame_face_height_m[0] <= env._face_z <= r.frame_face_height_m[1]
         seen.add(env._face_dist)
     assert len(seen) == 20
-    a, b = _env(LOOK), _env(LOOK, frame=1.0)
-    assert np.allclose(a._obs(), b._obs())
-    assert a.np_random.random() == b.np_random.random()
+    before = env.np_random.bit_generator.state
+    env._new_target(99.0)
+    assert env.np_random.bit_generator.state == before
 
 
 def _frame_term(env) -> float:

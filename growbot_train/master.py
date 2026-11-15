@@ -683,7 +683,7 @@ def drive(
         speed.append(info["speed"])
         errs.append(err)
         framed.append(info["in_frame"])
-        img_x.append(abs(info["image_x_deg"]))
+        img_x.append(abs(info["image_x_deg"]) if info["in_frame"] else math.nan)
         if math.isnan(turn_s) and err < 15:
             turn_s = env.step_index * CONTROL_DT
         if term:
@@ -696,7 +696,7 @@ def drive(
         "err": float(np.mean(errs[half:])),
         "turn_s": turn_s,
         "frame_pct": 100.0 * float(np.mean(framed)),
-        "img_x": float(np.mean(img_x[half:])),
+        "img_x": float(np.nanmean(img_x[half:])) if any(framed[half:]) else math.nan,
         "fell": float(fell),
     }
 

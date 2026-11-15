@@ -36,8 +36,6 @@ from growbot_train.env import (
 from growbot_train.evaluate import env_for
 from growbot_train.policy import JsonPolicy
 
-# Where the phone's camera sits above the torso origin, metres along the lens axis.
-
 
 @dataclass
 class CameraSpec:

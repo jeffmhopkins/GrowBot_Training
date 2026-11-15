@@ -14,8 +14,8 @@ on, task.initial_error_deg), and reports per case:
     turn_s   seconds until the error first dropped under 20 degrees
     frame%   share of time a virtual face in the person's direction (drawn per episode,
              0.7-2.5 m out, 1.1-1.65 m high) was in the phone camera's picture
-    img_x    how far across the picture that face sat over the second half, degrees off
-             centre (the picture is 60 wide): what a stop has to centre
+    img_x    how far across the picture that face sat over the second half while in it,
+             degrees off centre (the picture is 60 wide): what a stop has to centre
     falls    episodes that ended in a fall
 
 A policy with a speed input also gets a speed-tracking table: what it walks at, target
@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from pathlib import Path
 from typing import Any
@@ -94,7 +95,7 @@ def run_episode(
         errs.append(info["abs_err_deg"])
         over += info["speed"] > 1.1 * cap
         framed.append(info["in_frame"])
-        img_x.append(abs(info["image_x_deg"]))
+        img_x.append(abs(info["image_x_deg"]) if info["in_frame"] else math.nan)
         if np.isnan(turn_s) and info["abs_err_deg"] < 20:
             turn_s = env.step_index * CONTROL_DT
         fell = bool(term)
@@ -107,7 +108,7 @@ def run_episode(
         "err": float(np.mean(errs[half:])),
         "turn_s": turn_s,
         "frame_pct": 100.0 * float(np.mean(framed)),
-        "img_x": float(np.mean(img_x[half:])),
+        "img_x": float(np.nanmean(img_x[half:])) if any(framed[half:]) else math.nan,
         "fell": float(fell),
     }
 

@@ -32,7 +32,7 @@ import numpy as np
 from growbot_train.config import Config
 from growbot_train.surfaces import FLOORS, SURFACES, split_contacts, surface_geoms
 
-# The phone camera sits this far out along the torso's up axis.
+# Where the phone's camera sits above the torso origin, metres along the lens axis.
 LENS_OFFSET_M = 0.03
 
 BODIES_DIR = Path(__file__).parent / "bodies"
