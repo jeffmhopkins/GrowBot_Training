@@ -363,8 +363,8 @@ From JBrain it's the "GrowBot lift and fall" job.
 The run with the 35% body cap (run ca607df3) is kept as `policies/lift-fall-1`, the
 forward teacher for now: on random bodies it ends about 17 degrees off the heading, walks
 3.9 cm/s toward it, and turns a quarter in about 5 s, with 4 falls in 36 evaluations
-(mostly half turns and slow-relay bodies). Its 16M checkpoint (`policies/lift-fall-1-16m`,
-27 degrees, 5 falls) is kept beside it to show the second half of the run was worth it.
+(half of them on half turns). Its 16M checkpoint (`policies/lift-fall-1-16m`,
+27 degrees, 5 falls) is kept beside it to show the rest of the run was worth it.
 
 ## The look policy
 

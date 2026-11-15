@@ -1,5 +1,5 @@
 {
-  "policy": "/tmp/claude-0/-home-user/f66f49bb-3e8a-5ba7-ba3d-ddb56e5efde2/scratchpad/keep/lf16/policy_lift_fall.json",
+  "policy": "policies/lift-fall-1-16m/policy_lift_fall.json",
   "speed_cap_m_s": 0.05,
   "randomized": {
     "+0": {

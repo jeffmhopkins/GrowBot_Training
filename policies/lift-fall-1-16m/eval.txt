@@ -6,8 +6,6 @@
    +90   0.0306  0.0362   16.4   25.9    5.44   2/6
    -90   0.0297  0.0331   13.3   29.6    5.81   2/6
   +180   0.0191  0.0250    5.5   85.2   18.15   1/6
-/home/user/GrowBot_Training/growbot_train/evaluate.py:103: RuntimeWarning: Mean of empty slice
-  agg = {k: float(np.nanmean([r[k] for r in runs])) for k in runs[0] if k != "fell"}
 -- nominal body, no noise (speed cap 0.050 m/s)
  start   toward   speed  over%    err  turn_s  falls
     +0   0.0568  0.0571   65.2    2.8    0.04   0/1
