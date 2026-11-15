@@ -429,7 +429,12 @@ paying until 30 s), so a quick turn that settles pays more. The creep is charged
 distance per turn instead of speed: the anchor charges up to 1.0 a tick (was 0.4) while
 the free speed band stays at 1.5 cm/s. This body drifts more the faster it turns, so a
 tighter speed band pays a slow turn (v5 learned exactly that), while the anchor charges a
-quick turn and a slow one alike for the same wander. Unlike the camera walk it trains on
+quick turn and a slow one alike for the same wander. v7 (run 200aa414, kept as
+`policies/look-v7`), trained before those two changes, ends 11.5 degrees off on average
+from every start, 180 included, takes about 20 s for half a turn and 10 s for a quarter,
+creeps 0.7 cm/s, and fell in none of its 36 randomised evaluations nor any of the 195 in
+the sweep. In the follow-me test it keeps the person in view less than v6 does (56% vs
+68% on the nominal body), so the follow baseline uses both. Unlike the camera walk it trains on
 the printed build with bare-print surfaces (see [Bodies](#bodies)), like the heading walk.
 It's the camera walk otherwise, and only the lines marked CHANGED differ from that file.
 From JBrain it's the "GrowBot look" job.
