@@ -127,3 +127,25 @@ def test_the_switch_test_runs_teacher_and_master_on_the_same_scripts() -> None:
     for who in (None, runner):
         out = master.switch_test(r, who, [1], 2.0)
         assert out["episodes"] == 1 and out["falls"] in (0, 1)
+
+
+def test_teacher_and_master_get_the_same_script() -> None:
+    r = master.Rollout(master.DEFAULT_TEACHERS)
+    policy = json.loads((master.Path("policies/master-1/policy_master.json")).read_text())
+    targets = []
+    for student in (None, policy):
+        seen = []
+        orig = master.Script.tick
+
+        def spy(self, env, t, seen=seen, orig=orig):
+            orig(self, env, t)
+            seen.append((round(env.target_deg, 6), self.forward, self.tilt))
+
+        master.Script.tick = spy
+        try:
+            r.episode(5, 20.0, student, beta=0.0)
+        finally:
+            master.Script.tick = orig
+        targets.append(seen)
+    n = min(len(targets[0]), len(targets[1]))
+    assert n > 0 and targets[0][:n] == targets[1][:n]

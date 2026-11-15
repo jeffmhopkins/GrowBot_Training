@@ -273,6 +273,8 @@ class Rollout:
     ) -> dict[str, Any]:
         env, teachers = self.env, self.teachers
         rng = np.random.default_rng(seed + 104729)
+        # Who drives draws from its own stream, so the script is the same whoever drives.
+        coin = np.random.default_rng(seed + 7919)
         env.reset(
             seed=seed,
             options={
@@ -313,7 +315,7 @@ class Rollout:
             obs.append(x)
             labels.append(label)
             modes.append(MODES.index(mode))
-            if student is None or rng.random() < beta:
+            if student is None or coin.random() < beta:
                 drive = label
             else:
                 drive = np.clip(runner_forward(student, x), -SQUASH, SQUASH)

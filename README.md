@@ -504,12 +504,15 @@ rule: lift and fall's gait rears up past look's back-fall line by design.
 `evaluate` drives the same robots once with the teachers (through the same mode rule)
 and once with the master, per mode and start. It then counts falls against mode
 switches in 20 minute-long runs of random commands, driven each way on the same scripts.
-The first master (`policies/master-1`, from look-v7, lift-fall-2 and nose-walk-1) matches
-its teachers within 5% on speed in every mode. Heading error is within 1.3 degrees: the
-worst is backing from -45, 8.0 against 6.7. Turn times are within a second, the worst
-being walking from -45, 2.9 s against 2.0. It fell 3 times in 108 mode switches, against a
-bar of under 1 in 50. Its teachers, driving the same scripts, fell 3 times in 100. In the per-mode runs only lift-fall-2's walk falls, master or teacher.
-So the master gets better as the teachers do.
+The first master (`policies/master-1`, from look-v7, lift-fall-2 and nose-walk-1) is
+within 5% of its teachers on speed while walking and backing. Standing to turn, it drifts
+less than look does (0.95 against 1.13 cm/s from +180). Its heading error is within 1.3
+degrees of theirs everywhere: the worst is backing from -45, 8.0 against 6.7. Its turn
+times are within 1.3 s: it is slower backing from -45 (5.5 s against 4.3) and quicker
+on a half turn (14.4 s against 15.6). It fell 3 times in 114 mode switches, against a
+bar of under 1 in 50. Its teachers, driving the same scripts, fell 3 times in 100. In
+the per-mode runs only lift-fall-2's walk falls, master or teacher, so the master gets
+better as the teachers do.
 
 Its limits, until the walks it learns from are retrained:
 
