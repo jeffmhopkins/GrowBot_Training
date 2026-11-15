@@ -1008,7 +1008,16 @@ def replay(policy_path: Path, seconds: float = 24.0, seed: int = 0) -> dict[str,
         env.reset(seed=seed + k, options=opts)
         env.max_steps = 10**9
         runner.reset()
-        script = Script(np.random.default_rng(seed + k), False, False) if steps is None else None
+        teachers = rollout.teachers
+        script = (
+            Script(
+                np.random.default_rng(seed + k),
+                "cmd_forward" in teachers["walk"].channels and teachers["walk"].gait is None,
+                "cmd_forward" in teachers["back"].channels and teachers["back"].gait is None,
+            )
+            if steps is None
+            else None
+        )
         pending = list(steps or ())
         forward, tilt = 0.0, 1.0
         shapes, snapshot = recorder(env)
@@ -1206,7 +1215,11 @@ def run_job(run: Path, config: Path) -> Path:
     print(text, flush=True)
     from growbot_train.replay import write_html
 
-    write_html(replay(path), run / "replay.html")
+    # The replay is for watching, not for passing: a verified master is kept without it.
+    try:
+        write_html(replay(path), run / "replay.html")
+    except Exception as exc:  # noqa: BLE001
+        print(f"replay not written: {exc!r}", flush=True)
     return path
 
 
