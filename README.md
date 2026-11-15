@@ -531,7 +531,8 @@ drive, then the student drives more and more while the teachers keep labelling, 
 learns to recover from its own mistakes. Minute-long episodes switch mode every 3-12 s,
 move the target and change the camera height. Bodies vary only as far as every teacher
 trained on: as built to the STL, as lift-fall-3 trained (`DEFAULT_BODY`, or
-`[master.body]` in `configs/master.toml`; Jeff, 2026-11-15: the robot is the STL). On
+`[master.body]` in `configs/master.toml`; Jeff, 2026-11-15: the robot is the STL;
+`distill --wide-bodies` uses look's ranges instead). On
 look's wider bodies lift-fall-3 walked backwards and fell in half its runs. Each mode falls by its own teacher's
 rule: lift and fall's gait rears up past look's back-fall line by design.
 
@@ -594,7 +595,7 @@ Its limits, until the walks it learns from are retrained:
 
 The current master is `policies/master-v1`, "Master v1" under Trained walks on the
 Body tab: the box's first master run (growbot_master v1), from the same teachers as
-master-2 with the hold below. Within 3% of its teachers on speed, 1.9-2.5 degrees off
+master-2 with the hold below. Within 3% of its teachers on speed, 1.9-4.2 degrees off
 after a turn (master-2 3.4-4.7), 2-5 cm of drift over the last 15 s of a look, no falls in
 45 runs and 1 in 208 switches (its teachers 1 in 190). master-2 stays in `policies/` but
 is no longer listed. The Body tab's look and spin buttons send speed 0, forward +1 and
@@ -615,8 +616,9 @@ back. `evaluate` reports both: `drift` (cm moved over the second half) and `net_
 (`growbot_master`, `configs/master.toml`, which names the teachers). It distils on every
 core, then evaluates; the Live card shows each round and the run's `eval.txt` ends with a
 one-line summary. The Launcher passes a GrowBot run only when its `export_verify.log`
-ends `EXPORT OK`: for the master that checks the file, read back, gives through the app
-runner's arithmetic what its layers give as the torch network. A master worth keeping is
+ends `EXPORT OK`: for the master, the file read back through the app runner's arithmetic
+must answer what the trained network answered on 256 of its training inputs
+(`export_probe.npz`). A master worth keeping is
 listed in `policies/index.toml` as "Master vN", N being its run's version, as every kept
 walk is named after its run.
 

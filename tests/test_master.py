@@ -335,10 +335,19 @@ def test_the_master_job_distils_scores_and_reports_progress(tmp_path, monkeypatc
     # JBrain's Launcher fails a GrowBot run whose export_verify.log doesn't end so.
     verify = (tmp_path / "run" / "export_verify.log").read_text().splitlines()
     assert verify[-1] == "EXPORT OK"
-    broken = json.loads(path.read_text())
-    broken["obs_size"] += 1
-    path.write_text(json.dumps(broken))
-    assert not master.verify_export(path, tmp_path / "v.log")
+    probe = tmp_path / "run" / "export_probe.npz"
+    good = json.loads(path.read_text())
+    for spoil in (
+        lambda p: p["layers"][0]["b"].__setitem__(0, p["layers"][0]["b"][0] + 0.5),
+        lambda p: p["mean"].__setitem__(0, p["mean"][0] + 10.0),
+        lambda p: p.__setitem__("obs_size", p["obs_size"] + 1),
+        lambda p: p["layers"][0].__setitem__("W", p["layers"][0]["W"][1:]),
+    ):
+        broken = json.loads(json.dumps(good))
+        spoil(broken)
+        path.write_text(json.dumps(broken))
+        assert not master.verify_export(path, probe, tmp_path / "v.log")
+        assert (tmp_path / "v.log").read_text().splitlines()[-1] == "EXPORT MISMATCH"
     progress = json.loads((tmp_path / "run" / "live" / "progress.json").read_text())
     assert progress["state"] == "finishing" and progress["summary"][0]["value"] == "2 of 2"
     tail = (tmp_path / "run" / "eval.txt").read_text().splitlines()[-1]
@@ -390,6 +399,10 @@ def test_a_master_config_can_pin_the_bodies_and_the_policy_keeps_them(tmp_path) 
     assert job["body"]["leg_length_scale"] == [1.0, 1.0]
     r = master.Rollout(master.DEFAULT_TEACHERS, job["body"])
     assert r.env.cfg.randomization.leg_length_scale == (1.0, 1.0)
+    for seed in range(5):
+        r.env.reset(seed=seed)
+        drawn = r.env._body_params
+        assert drawn["leg_scale"] == pytest.approx([1.0, 1.0]), drawn
     assert master.Rollout(master.DEFAULT_TEACHERS).env.cfg.randomization.leg_length_scale != (
         1.0,
         1.0,
@@ -422,3 +435,11 @@ def test_the_box_job_and_the_command_line_distil_the_same_master() -> None:
     job = master.load_job(master.Path("configs/master.toml"))
     assert {m: job[m] for m in master.MODES} == master.DEFAULT_TEACHERS
     assert job["body"] == master.DEFAULT_BODY
+
+
+def test_a_master_body_must_be_a_table(tmp_path) -> None:
+    cfg = tmp_path / "master.toml"
+    teachers = "\n".join(f'{m} = "{p}"' for m, p in master.DEFAULT_TEACHERS.items())
+    cfg.write_text(f"[master]\n{teachers}\nbody = 1\n")
+    with pytest.raises(ValueError, match="table"):
+        master.load_job(cfg)

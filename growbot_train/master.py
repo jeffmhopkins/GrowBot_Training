@@ -562,7 +562,16 @@ def fit(
         }
         for i, lin in enumerate(linears)
     ]
-    return {"mean": mean.tolist(), "std": std.tolist(), "layers": layers}, loss_v
+    # What the trained network itself answers on a spread of real inputs, so the exported
+    # file can be checked against it (verify_export) rather than against itself.
+    probe = obs[:: max(1, len(obs) // PROBE_SAMPLES)][:PROBE_SAMPLES]
+    with torch.no_grad():
+        probe_out = torch.tanh(net(torch.tensor((probe - mean) / std))).numpy()
+    student = {"mean": mean.tolist(), "std": std.tolist(), "layers": layers}
+    return {**student, "probe_obs": probe, "probe_out": probe_out}, loss_v
+
+
+PROBE_SAMPLES = 256
 
 
 def normaliser(obs: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -697,6 +706,7 @@ def distill(
         history.append(row)
         log(json.dumps(row))
     assert student is not None
+    np.savez(out / "export_probe.npz", obs=student["probe_obs"], out=student["probe_out"])
     policy = export_policy(student, teachers, teacher_paths)
     if body:
         policy["training"]["master"]["body"] = body
@@ -890,9 +900,18 @@ def load_job(path: Path) -> dict[str, Any]:
     for m in MODES:
         if not Path(job[m]).is_file():
             raise ValueError(f"{path}: the {m} teacher {job[m]} is not in the repo")
-    ranges = {k for k, v in vars(config_mod.RandomizationConfig()).items() if isinstance(v, tuple)}
-    for key, span in job.get("body", {}).items():
-        if key not in ranges or not isinstance(span, list) or len(span) != 2 or span[0] > span[1]:
+    body = job.get("body", {})
+    if not isinstance(body, dict):
+        raise ValueError(f"{path}: [master.body] must be a table of randomization ranges")
+    for key, span in body.items():
+        ok = (
+            key in DEFAULT_BODY
+            and isinstance(span, list)
+            and len(span) == 2
+            and all(isinstance(v, int | float) and not isinstance(v, bool) for v in span)
+            and span[0] <= span[1]
+        )
+        if not ok:
             raise ValueError(f"{path}: [master.body] {key} must be a randomization range")
     return job
 
@@ -965,38 +984,27 @@ class JobProgress:
         os.replace(tmp, self.path)
 
 
-def verify_export(path: Path, log: Path, samples: int = 256) -> bool:
+def verify_export(path: Path, probe: Path, log: Path) -> bool:
     """JBrain's Launcher passes a GrowBot run only when ``export_verify.log`` ends
-    ``EXPORT OK`` (as growbot_train.export writes for a PPO run). Here the check is that
-    the file, read back, gives through the app runner's arithmetic what the same layers
-    give as the torch network they were trained as."""
-    import torch
-
+    ``EXPORT OK`` (as growbot_train.export writes for a PPO run). Here: the file, read
+    back through the app runner's arithmetic, answers what the trained network answered
+    on the same inputs (``export_probe.npz``, written by ``distill``)."""
     policy = json.loads(path.read_text())
-    if policy["obs_size"] != len(policy["mean"]) or policy["obs_size"] != len(policy["std"]):
-        log.write_text(
-            f"policy: {path.name}\nobs_size does not match its normaliser\nEXPORT MISMATCH\n"
-        )
-        return False
-    rng = np.random.default_rng(0)
-    obs = np.asarray(policy["mean"]) + rng.normal(size=(samples, policy["obs_size"])) * np.asarray(
-        policy["std"]
-    )
-    x = torch.tensor((obs - np.asarray(policy["mean"])) / np.asarray(policy["std"]))
-    for layer in policy["layers"]:
-        f64 = torch.float64
-        x = x @ torch.tensor(layer["W"], dtype=f64) + torch.tensor(layer["b"], dtype=f64)
-        if layer["act"] == "tanh":
-            x = torch.tanh(x)
-    net = torch.tanh(x).numpy()
-    gap = float(np.max(np.abs(runner_forward(policy, obs) - net)))
-    ok = gap < EXPORT_TOLERANCE
-    lines = [
-        f"policy: {path.name}",
-        f"obs_size: {policy['obs_size']}",
-        f"max |json - network|: {gap:.3e} (tolerance {EXPORT_TOLERANCE:g})",
-        "EXPORT OK" if ok else "EXPORT MISMATCH",
-    ]
+    lines = [f"policy: {path.name}", f"obs_size: {policy.get('obs_size')}"]
+    want = FRAMES * len(STUDENT_CHANNELS)
+    try:
+        sizes = {policy["obs_size"], len(policy["mean"]), len(policy["std"])}
+        sizes.add(len(policy["layers"][0]["W"]))
+        if sizes != {want}:
+            raise ValueError(f"sizes {sorted(sizes)}, the student takes {want}")
+        data = np.load(probe)
+        gap = float(np.max(np.abs(runner_forward(policy, data["obs"]) - data["out"])))
+        ok = gap < EXPORT_TOLERANCE
+        lines.append(f"max |json - network|: {gap:.3e} (tolerance {EXPORT_TOLERANCE:g})")
+    except (KeyError, IndexError, TypeError, ValueError, OSError) as exc:
+        ok = False
+        lines.append(f"unreadable: {exc}")
+    lines.append("EXPORT OK" if ok else "EXPORT MISMATCH")
     log.write_text("\n".join(lines) + "\n")
     print("\n".join(lines), flush=True)
     return ok
@@ -1023,7 +1031,7 @@ def run_job(run: Path, config: Path) -> Path:
         log=log,
         body=job.get("body"),
     )
-    if not verify_export(path, run / "export_verify.log"):
+    if not verify_export(path, run / "export_probe.npz", run / "export_verify.log"):
         raise SystemExit("the exported master does not reproduce its network")
     report = evaluate(path)
     (run / "eval.json").write_text(json.dumps(report, indent=1))
@@ -1045,6 +1053,9 @@ def main(argv: list[str] | None = None) -> int:
     d.add_argument("--epochs", type=int, default=40)
     d.add_argument("--workers", type=int, default=4)
     d.add_argument("--seed", type=int, default=0)
+    d.add_argument(
+        "--wide-bodies", action="store_true", help="look's body ranges, not the STL build"
+    )
     e = sub.add_parser("evaluate", help="score the master against its teachers")
     e.add_argument("policy", type=Path)
     e.add_argument("--episodes", type=int, default=4)
@@ -1068,7 +1079,7 @@ def main(argv: list[str] | None = None) -> int:
             epochs=args.epochs,
             workers=args.workers,
             seed=args.seed,
-            body=DEFAULT_BODY,
+            body=None if args.wide_bodies else DEFAULT_BODY,
         )
         print(path)
         return 0

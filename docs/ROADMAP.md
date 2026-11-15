@@ -141,7 +141,7 @@ teachers, driving the same scripts, fall 3 times in 100. `policies/master-2` (lo
 lift-fall-2, nose-walk-1, backing only within 45 degrees) is within 4% of its teachers on
 speed and 0.7 degrees on aim, keeps the face in the camera's picture 97-100% of the time
 moving, and fell in none of 173 switches. `policies/master-v1`, the box's first master
-run, adds the hold: 1.9-2.5 degrees on aim after a turn, 2-5 cm of drift standing, 1 fall
+run, adds the hold: 1.9-4.2 degrees on aim after a turn, 2-5 cm of drift standing, 1 fall
 in 208 switches. The next distils from lift-fall-3 on the STL-pinned bodies. Still to come:
 - distilling from the residual-gait walks once they pass. The distillation takes them
   already: labels are their full leg angles, and backing is stop-or-go at full speed
