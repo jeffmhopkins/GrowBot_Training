@@ -365,6 +365,11 @@ forward teacher for now: on random bodies it ends about 17 degrees off the headi
 3.9 cm/s toward it, and turns a quarter in about 5 s, with 4 falls in 36 evaluations
 (half of them on half turns). Its 16M checkpoint (`policies/lift-fall-1-16m`,
 27 degrees, 5 falls) is kept beside it to show the rest of the run was worth it.
+The run with the heading gates (run 527daab9, from the lift-and-fall second slot)
+looked worse at 16M but finished at 50M better than lift-fall-1, and is kept as
+`policies/lift-fall-2`: about 10 degrees off, 4.1 cm/s toward the target, half a turn in
+about 14 s, 3 falls in 36. Short-legged bodies fall on every big turn, so falls are its
+main gap.
 
 ## The look policy
 
