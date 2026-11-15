@@ -140,6 +140,12 @@ A small controller between the tracker and the policy:
   not a walk away from them while it turns.
 - **Pitch:** the tracker's vertical error, integrated into `cmd_pitch`, so the camera
   keeps the face mid-frame.
+- **Hold:** once the camera has been within about 6 degrees of the person for a second
+  and the speed is 0, stop calling the policy and hold the servos at the average of the
+  last second of commands, so the legs stop fiddling and it stops creeping (Jeff,
+  2026-11-15). Let go past about 15 degrees, on any speed or camera-height change, or
+  when the person is lost. Built in the simulator harness (`follow.Hold`); the app does
+  the same around the master policy, which then never has to learn to stand dead still.
 
 ### 4. Voice
 

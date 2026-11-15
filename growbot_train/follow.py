@@ -20,6 +20,7 @@ import argparse
 import json
 import math
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -336,6 +337,58 @@ DEFAULT_SCRIPT: tuple[tuple[float, str], ...] = (
 )
 
 
+@dataclass
+class Hold:
+    """Stops calling the policy once the camera is on the person and the robot is asked to
+    stand: the servos hold the average of the last second of commands, so the legs stop
+    fiddling and the robot stops creeping (Jeff, 2026-11-15). Averaging over about one
+    gait cycle lands on the stance the policy was holding, where the last single command
+    would freeze a leg mid-swing. It lets go when the person moves past exit_deg, when the
+    robot is asked to walk, when the camera height is asked to move, or when the person
+    is lost (the search spin needs the policy). The gap between enter and exit keeps it
+    from flicking in and out."""
+
+    enter_deg: float = 6.0
+    exit_deg: float = 15.0
+    settle_s: float = 1.0
+    tilt_band: float = 0.15
+    window: int = round(1.0 / CONTROL_DT)
+    held: np.ndarray | None = None
+    _tilt: float = 0.0
+    _on_s: float = 0.0
+    _recent: deque[np.ndarray] = field(default_factory=deque)
+
+    def action(
+        self,
+        policy_action: Callable[[], np.ndarray],
+        bearing_deg: float,
+        standing: bool,
+        lost: bool,
+        tilt: float,
+    ) -> np.ndarray:
+        """This tick's action: the held pose, or the policy's."""
+        if self.held is not None and (
+            lost
+            or not standing
+            or abs(bearing_deg) > self.exit_deg
+            or abs(tilt - self._tilt) > self.tilt_band
+        ):
+            self.held = None
+            self._on_s = 0.0
+        if self.held is not None:
+            return self.held
+        a = policy_action()
+        self._recent.append(a)
+        while len(self._recent) > self.window:
+            self._recent.popleft()
+        on = standing and not lost and abs(bearing_deg) < self.enter_deg
+        self._on_s = self._on_s + CONTROL_DT if on else 0.0
+        if self._on_s >= self.settle_s and len(self._recent) == self.window:
+            self.held = np.mean(np.asarray(self._recent), axis=0)
+            self._tilt = tilt
+        return a
+
+
 def run(
     policy: JsonPolicy,
     seed: int,
@@ -343,8 +396,10 @@ def run(
     script: tuple[tuple[float, str], ...] = DEFAULT_SCRIPT,
     camera: CameraSpec | None = None,
     nominal: bool = False,
+    hold: bool = True,
 ) -> dict[str, Any]:
-    """One follow run on one skill. Returns its summary and a per-tick trace."""
+    """One follow run on one skill. Returns its summary and a per-tick trace. hold puts
+    the robot in Hold while it stands on target; False leaves the policy running."""
     env = env_for(policy)
     nose_first = env.cfg.task.facing == "nose"
     backs = nose_first and env.cfg.task.speed == "command"
@@ -363,6 +418,7 @@ def run(
     cam = Camera(camera or CameraSpec(), rng)
     tracker = Tracker()
     follower = Follower()
+    holder = Hold() if hold else None
     pending = sorted(script)
     trace: list[dict[str, float]] = []
     yaw_prev = env.yaw_deg()
@@ -393,7 +449,17 @@ def run(
         if env.cfg.task.tilt_command:
             env.tilt_cmd = env._fixed_tilt = tilt
             env._set_stance()
-        obs, _, term, _, info = env.step(policy.env_action(obs))
+        if holder is None:
+            act = policy.env_action(obs)
+        else:
+            act = holder.action(
+                lambda o=obs: policy.env_action(o),
+                bearing,
+                speed == 0.0 and fwd == 0.0,
+                tracker.lost,
+                tilt,
+            )
+        obs, _, term, _, info = env.step(act)
         trace.append(
             {
                 "t": t,
@@ -408,12 +474,58 @@ def run(
                 "cmd_tilt": tilt,
                 "stay": float(follower.stay),
                 "robot_speed": info["speed"],
+                "held": float(holder is not None and holder.held is not None),
             }
         )
         if term:
             fell = True
             break
     return {"summary": summarise(trace, fell, seconds), "trace": trace}
+
+
+def hold_check(
+    policy: JsonPolicy, seed: int, hold: bool, nominal: bool = False, hold_s: float = 20.0
+) -> dict[str, float] | None:
+    """Creep on target, with and without Hold: turn 60 degrees to a fixed target, settle,
+    then stand on it for hold_s, then turn 90 more (that the robot still turns from a held
+    pose). None when it never settled within 6 degrees."""
+    env = env_for(policy)
+    opts: dict[str, Any] = {"retarget": False, "tilt_cmd": 1.0, "target_error_deg": 60.0}
+    if nominal:
+        opts["nominal"] = True
+    obs, _ = env.reset(seed=seed, options=opts)
+
+    def err() -> float:
+        return abs(wrap_deg(env.target_deg - env.yaw_deg()))
+
+    holder = Hold()
+    for _ in range(round(40.0 / CONTROL_DT)):
+        obs, _, term, _, _ = env.step(
+            holder.action(lambda o=obs: policy.env_action(o), err(), True, False, 1.0)
+        )
+        if term:
+            return {"fell": 1.0}
+        if holder.held is not None:
+            break
+    else:
+        return None
+    pose = holder.held
+    p0, yaw0 = env.data.qpos[0:2].copy(), env.yaw_deg()
+    for _ in range(round(hold_s / CONTROL_DT)):
+        obs, _, term, _, _ = env.step(pose if hold else policy.env_action(obs))
+        if term:
+            return {"fell": 1.0}
+    out = {
+        "fell": 0.0,
+        "creep_cm_s": 100.0 * float(np.linalg.norm(env.data.qpos[0:2] - p0)) / hold_s,
+        "yaw_drift_deg": abs(wrap_deg(env.yaw_deg() - yaw0)),
+    }
+    env.target_deg = wrap_deg(env.target_deg + 90.0)
+    for _ in range(round(25.0 / CONTROL_DT)):
+        obs, _, term, _, _ = env.step(policy.env_action(obs))
+        if term:
+            return {**out, "fell": 1.0}
+    return {**out, "turn_err_deg": err()}
 
 
 def summarise(trace: list[dict[str, float]], fell: bool, seconds: float) -> dict[str, float]:
@@ -432,6 +544,7 @@ def summarise(trace: list[dict[str, float]], fell: bool, seconds: float) -> dict
         "aim_err_deg": float(np.abs(arr["bearing_true"]).mean()),
         "pitch_err_deg": float(np.abs(arr["pitch_true"]).mean()),
         "distance_err_m": float(gap[held].mean()) if held.any() else float("nan"),
+        "held_pct": 100.0 * float(arr["held"].mean()),
         "stay_speed_cm_s": 100.0 * float(arr["robot_speed"][stay].mean()) if stay.any() else 0.0,
         "completed": float(len(trace) * CONTROL_DT >= seconds - CONTROL_DT),
     }
@@ -444,9 +557,32 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--seeds", type=int, default=4, help="runs, each a new person and body")
     ap.add_argument("--nominal", action="store_true", help="the nominal body, no noise")
     ap.add_argument("--json", help="write the summaries (and traces) here")
+    ap.add_argument("--no-hold", action="store_true", help="keep the policy running on target")
+    ap.add_argument(
+        "--hold-check", action="store_true", help="creep on target with and without Hold"
+    )
     args = ap.parse_args(argv)
     policy = JsonPolicy(args.policy)
-    runs = [run(policy, s, args.seconds, nominal=args.nominal) for s in range(args.seeds)]
+    if args.hold_check:
+        for hold in (False, True):
+            rs = [hold_check(policy, s, hold, args.nominal) for s in range(args.seeds)]
+            done = [r for r in rs if r]
+            kept = [r for r in done if "creep_cm_s" in r]
+            m = {
+                k: float(np.nanmean([r.get(k, np.nan) for r in kept])) if kept else math.nan
+                for k in ("creep_cm_s", "yaw_drift_deg", "turn_err_deg")
+            }
+            print(
+                f"{'hold' if hold else 'policy'}: settled {len(done)}/{len(rs)}, "
+                f"falls {sum(r['fell'] for r in done):.0f}, creep {m['creep_cm_s']:.2f} cm/s, "
+                f"yaw drift {m['yaw_drift_deg']:.1f} deg, then a 90 degree turn ends "
+                f"{m['turn_err_deg']:.1f} deg off"
+            )
+        return 0
+    runs = [
+        run(policy, s, args.seconds, nominal=args.nominal, hold=not args.no_hold)
+        for s in range(args.seeds)
+    ]
     widest = max((r["summary"] for r in runs), key=len)
     keys = [k for k in widest if k != "completed"]
     print("seed  " + "  ".join(f"{k:>14}" for k in keys))
