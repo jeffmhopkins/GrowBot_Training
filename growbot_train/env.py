@@ -584,7 +584,10 @@ class GrowBotHeadingEnv(gym.Env):
         if self._gait is None:
             self._actuate(a * cfg.task.action_to_rad)
         else:
-            self._actuate(self.gait_rad() + a * cfg.task.residual_rad)
+            # Clipped before the servo model: the gait sits near the travel limit, and a
+            # correction past it would wind the modelled servo up beyond what it can reach.
+            legs = self.gait_rad() + a * cfg.task.residual_rad
+            self._actuate(np.clip(legs, -CTRL_LIMIT, CTRL_LIMIT))
         p0 = d.qpos[0:2].copy()
         # Headings before the step; the error is taken against the target after any
         # retarget below, so a retarget itself pays no turn reward.
