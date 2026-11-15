@@ -8,7 +8,9 @@ from growbot_train import follow
 from growbot_train.follow import Camera, CameraSpec, Follower, Person, Sighting, Tracker
 from growbot_train.policy import JsonPolicy
 
-LOOK = Path(__file__).parent.parent / "policies" / "look-v6" / "policy_look.json"
+POLICIES = Path(__file__).parent.parent / "policies"
+LOOK = POLICIES / "look-v6" / "policy_look.json"
+NOSE = next((POLICIES / "nose-walk-1").glob("policy_*.json"))
 
 
 def test_person_stays_in_the_room_and_walks_at_a_walking_pace() -> None:
@@ -114,11 +116,21 @@ def test_voice_steps_the_set_distance_within_its_limits() -> None:
         f.voice("dance")
 
 
-def test_lost_or_never_seen_spins_toward_the_last_sighting_and_stands() -> None:
+def test_lost_spins_the_way_they_went_and_keeps_spinning_that_way() -> None:
     f = Follower(search_deg=90.0)
     assert f.command(None, lost=True) == (90.0, 0.0, f.tilt)
-    yaw, speed, _ = f.command(Sighting(-20.0, 0.0, 1.0), lost=True)
-    assert yaw == -90.0 and speed == 0.0
+    f.command(Sighting(-20.0, 0.0, 1.0), lost=False)
+    # As the robot turns, the remembered bearing swings past zero; the spin must not
+    # flip with it, or it would stall facing the spot they left from.
+    for remembered in (-20.0, -5.0, 3.0, 40.0):
+        yaw, speed, _ = f.command(Sighting(remembered, 0.0, 1.0), lost=True)
+        assert yaw == -90.0 and speed == 0.0
+
+
+def test_the_camera_height_is_held_while_the_person_is_lost() -> None:
+    f = Follower(tilt=0.3)
+    f.command(Sighting(0.0, 30.0, 1.0), lost=True)
+    assert f.tilt == 0.3
 
 
 def test_the_true_sighting_of_a_face_dead_ahead_has_no_bearing() -> None:
@@ -130,6 +142,41 @@ def test_the_true_sighting_of_a_face_dead_ahead_has_no_bearing() -> None:
     cam, _ = follow.lens_pose(env)
     p.pos = cam[:2] + 1.5 * np.array([math.cos(yaw), math.sin(yaw)])
     assert follow.true_sighting(env, p).bearing_deg == pytest.approx(0.0, abs=1e-6)
+
+
+def _put_ahead_of_camera(env, p: Person, metres: float) -> None:
+    head = math.radians(follow.camera_heading_deg(env))
+    cam, _ = follow.lens_pose(env)
+    p.pos = cam[:2] + metres * np.array([math.cos(head), math.sin(head)])
+
+
+def test_nose_first_the_camera_looks_out_of_the_tail() -> None:
+    # The nose walk's heading is its nose's; the phone's camera faces the other way, and
+    # a person in front of the camera must read as dead ahead, not half a turn away.
+    env = follow.env_for(JsonPolicy(NOSE))
+    env.reset(seed=1, options={"retarget": False, "nominal": True})
+    assert follow.camera_heading_deg(env) == pytest.approx(follow.wrap_deg(env.yaw_deg() + 180.0))
+    p = Person(seed=0)
+    _put_ahead_of_camera(env, p, 1.5)
+    assert follow.true_sighting(env, p).bearing_deg == pytest.approx(0.0, abs=1e-6)
+
+
+def test_the_floor_distance_is_shorter_than_the_line_to_a_raised_face() -> None:
+    env = follow.env_for(JsonPolicy(LOOK))
+    env.reset(seed=1, options={"retarget": False, "nominal": True})
+    p = Person(seed=0)
+    _put_ahead_of_camera(env, p, 1.0)
+    assert follow.floor_distance_m(env, p) == pytest.approx(1.0, abs=1e-6)
+    assert follow.true_sighting(env, p).distance_m > 1.2
+
+
+def test_the_nose_walk_is_only_ever_asked_to_back_away() -> None:
+    out = follow.run(JsonPolicy(NOSE), seed=1, seconds=3.0, nominal=True)
+    # Its speed input is how fast to back away: a forward command must reach it as 0,
+    # and a backing one as its size, never with the sign flipped.
+    for r in out["trace"]:
+        assert r["skill_speed"] == pytest.approx(max(0.0, -r["cmd_speed"]))
+    assert np.isfinite(out["summary"]["distance_err_m"])
 
 
 def test_a_short_follow_run_on_look_scores_every_tick() -> None:

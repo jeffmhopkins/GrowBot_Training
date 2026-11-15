@@ -114,20 +114,38 @@ def lens_pose(env: GrowBotHeadingEnv) -> tuple[np.ndarray, np.ndarray]:
     return pos, axis
 
 
+def camera_heading_deg(env: GrowBotHeadingEnv) -> float:
+    """The compass direction the camera looks: the policy's heading for a camera-first
+    skill, and half a turn from it for a nose-first one, whose heading is its nose's."""
+    yaw = env.yaw_deg()
+    return yaw if env.cfg.task.facing == "camera" else wrap_deg(yaw + 180.0)
+
+
+def lens_elevation_deg(env: GrowBotHeadingEnv) -> float:
+    axis = env.lens_dir()
+    return math.degrees(math.asin(max(-1.0, min(1.0, float(axis[2])))))
+
+
 def true_sighting(env: GrowBotHeadingEnv, person: Person) -> Sighting:
     """Where the person's face really is from the lens, before any camera error.
 
-    The bearing is taken against the heading the policy is scored on (env.yaw_deg(), the
-    lens's compass direction), so a bearing of 0 is the policy's target; the pitch is the
-    face's elevation against the lens axis's elevation."""
-    cam, axis = lens_pose(env)
+    The bearing is taken against the camera's compass heading, so 0 is dead ahead in the
+    image; the pitch is the face's elevation against the lens axis's; the distance is the
+    straight line from lens to face, which is what eye spacing in the image measures."""
+    cam, _ = lens_pose(env)
     face = np.array([person.pos[0], person.pos[1], person.face_z])
     v = face - cam
     flat = math.hypot(v[0], v[1])
-    bearing = wrap_deg(math.degrees(math.atan2(v[1], v[0])) - env.yaw_deg())
+    bearing = wrap_deg(math.degrees(math.atan2(v[1], v[0])) - camera_heading_deg(env))
     face_el = math.degrees(math.atan2(v[2], flat))
-    axis_el = math.degrees(math.asin(max(-1.0, min(1.0, float(axis[2])))))
-    return Sighting(bearing, face_el - axis_el, float(np.linalg.norm(v)))
+    return Sighting(bearing, face_el - lens_elevation_deg(env), float(np.linalg.norm(v)))
+
+
+def floor_distance_m(env: GrowBotHeadingEnv, person: Person) -> float:
+    """How far the person stands from the robot along the floor: what the set distance
+    means, and what the run is scored on."""
+    cam, _ = lens_pose(env)
+    return float(np.hypot(*(person.pos - cam[:2])))
 
 
 class Camera:
@@ -218,8 +236,11 @@ class Follower:
     walk_within_deg: float = 30.0
     # Camera-height command per degree of pitch error per tick. Taller (+1) tips the
     # lens toward the horizon, so a face above the lens axis needs it lower.
-    pitch_gain: float = 0.02
+    # About 0.12 a second per degree: slow enough not to ring against the camera's
+    # latency and the stance's own lag.
+    pitch_gain: float = 0.005
     search_deg: float = 90.0  # the heading error sent while searching: a steady spin
+    search_sign: float = 1.0
     near_m: float = 0.5
     far_m: float = 2.5
     step_m: float = 0.25
@@ -242,16 +263,18 @@ class Follower:
             raise ValueError(f"unknown voice command {said!r}")
 
     def command(self, tracked: Sighting | None, lost: bool) -> tuple[float, float, float]:
+        # tracked.distance_m is along the floor here (run() converts the camera's).
         """(heading error deg, signed speed -1..1, camera height -1..1). Lost or never
         seen: speed 0, and spin toward where they were last seen."""
         if tracked is None:
             # Never seen: spin on the spot until they come into view.
-            return self.search_deg, 0.0, self.tilt
+            return self.search_sign * self.search_deg, 0.0, self.tilt
         bearing = tracked.bearing_deg
         if lost:
-            # Turn toward where they were last seen, at least a search spin's worth, so
-            # a person who left the frame on the left is looked for on the left.
-            return math.copysign(max(abs(bearing), self.search_deg), bearing), 0.0, self.tilt
+            # Spin the way they were last seen going, and keep spinning that way: chasing
+            # the remembered bearing would stall once the robot faced the spot they left.
+            return self.search_sign * self.search_deg, 0.0, self.tilt
+        self.search_sign = 1.0 if bearing >= 0 else -1.0
         self.tilt = float(np.clip(self.tilt - self.pitch_gain * tracked.pitch_deg, -1.0, 1.0))
         speed = 0.0
         err = tracked.distance_m - self.set_distance_m
@@ -273,17 +296,6 @@ DEFAULT_SCRIPT: tuple[tuple[float, str], ...] = (
 )
 
 
-def _mode_speed(policy_speed: str, speed: float) -> tuple[float | None, bool]:
-    """The speed the skill can take, and whether it can obey this command at all: look
-    only stands, the nose walk only backs (its input runs 0..1 nose first), a walk with a
-    speed input only goes forward, and a walk at its cap ignores speed altogether."""
-    if policy_speed == "still":
-        return None, speed == 0.0
-    if policy_speed == "cap":
-        return None, speed > 0.0
-    return speed, True
-
-
 def run(
     policy: JsonPolicy,
     seed: int,
@@ -296,7 +308,12 @@ def run(
     env = env_for(policy)
     nose_first = env.cfg.task.facing == "nose"
     backs = nose_first and env.cfg.task.speed == "command"
-    opts: dict[str, Any] = {"retarget": False, "speed_cmd": 0.0, "tilt_cmd": 1.0}
+    opts: dict[str, Any] = {
+        "retarget": False,
+        "speed_cmd": 0.0,
+        "tilt_cmd": 1.0,
+        "target_error_deg": 0.0,
+    }
     if nominal:
         opts["nominal"] = True
     obs, _ = env.reset(seed=seed, options=opts)
@@ -319,18 +336,23 @@ def run(
         yaw = env.yaw_deg()
         tracked = tracker.update(cam.frame(truth), wrap_deg(yaw - yaw_prev))
         yaw_prev = yaw
+        if tracked is not None:
+            # Eye spacing gives the straight line to the face; the phone knows its own
+            # pitch, so the floor distance follows from the face's elevation.
+            el = math.radians(lens_elevation_deg(env) + tracked.pitch_deg)
+            floor = tracked.distance_m * math.cos(el)
+            tracked = Sighting(tracked.bearing_deg, tracked.pitch_deg, floor)
         bearing, speed, tilt = follower.command(tracked, tracker.lost)
+        if not env.cfg.task.tilt_command:
+            follower.tilt = 1.0
         # The single-skill baseline: a command this skill can't carry out becomes the
         # nearest one it can (the nose walk stands for anything but backing, look for
         # anything but standing).
-        if backs:
-            fwd = max(0.0, -speed)
-        else:
-            fwd, _ = _mode_speed(env.cfg.task.speed, speed)
+        fwd = max(0.0, -speed) if backs else max(0.0, speed)
         env.target_deg = wrap_deg(env.yaw_deg() + bearing)
         env.heading_bias = 0.0
         if env.cfg.task.speed == "command":
-            env.speed_cmd = env._fixed_speed = 0.0 if fwd is None else float(fwd)
+            env.speed_cmd = env._fixed_speed = float(fwd)
         if env.cfg.task.tilt_command:
             env.tilt_cmd = env._fixed_tilt = tilt
             env._set_stance()
@@ -340,12 +362,13 @@ def run(
                 "t": t,
                 "bearing_true": truth.bearing_deg,
                 "pitch_true": truth.pitch_deg,
-                "distance": truth.distance_m,
+                "distance": floor_distance_m(env, person),
                 "set_distance": follower.set_distance_m,
                 "in_view": float(cam.in_view(truth)),
                 "lost": float(tracker.lost),
                 "cmd_yaw": bearing / 180.0,
                 "cmd_speed": speed,
+                "skill_speed": fwd,
                 "cmd_tilt": tilt,
                 "stay": float(follower.stay),
                 "robot_speed": info["speed"],

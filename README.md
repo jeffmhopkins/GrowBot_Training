@@ -120,8 +120,14 @@ into the heading, speed and camera-height inputs, with the voice script ("follow
 only ever gets what the camera saw; the person's true position only scores the run: how
 long they were in view, aim and pitch error, distance error, speed while told to stay,
 and falls. One skill at a time, the follower held to what that skill can do (look only
-turns and tilts, the nose walk only backs away), as the baseline the master policy has
-to beat. Distractor people and the replay page come next.
+turns and tilts, the nose walk only backs away, with its camera looking out of its tail
+so its heading is the person's turned half a turn), as the baseline the master policy
+has to beat. The set distance is along the floor; the camera's eye-spacing distance is
+the line to the face, so the follower converts it with the face's elevation. First
+baseline (nominal body, 3 seeds of 120 s, no falls): look-v6 keeps the person in view
+44% of the time, the nose walk 41%; a person walking at 0.3-0.7 m/s a metre or two away
+moves faster across the view than either skill turns. Distractor people and the replay
+page come next.
 
 Training progress: `.venv/bin/tensorboard --logdir runs` and open the page it prints.
 The `walk/` graphs are the useful ones: `v_along` (speed toward the target, should climb

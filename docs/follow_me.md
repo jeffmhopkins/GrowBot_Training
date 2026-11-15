@@ -1,6 +1,8 @@
 # Follow me: the plan
 
-Status: plan, not built. Last verified 2026-11-15.
+Status: the simulator harness (person, camera model, tracker, follower, voice script)
+is built for single skills (`growbot_train/follow.py`); distractors, the replay and the
+master are not. Last verified 2026-11-15.
 
 The end use for the GrowBot policies (Jeff, 2026-11-14): say "follow me" and the robot
 follows the person, keeping a set distance and keeping the phone's camera on them, and
