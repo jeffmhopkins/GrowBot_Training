@@ -30,10 +30,18 @@ from growbot_train import config as config_mod
 
 LIVE = "live"
 HISTORY_MAX = 400
-# The live replay is a quick look, not the full set: three walks of 24 s each (owner,
-# 2026-11-14: 12 s was too short to see a walk settle) cost a few seconds of training
-# per refresh.
-LIVE_SCENARIOS = ("Target ahead", "Target 90 degrees left", "Target turns every 6 s")
+# The live replay is every walk but the duplicate random-body ones, 24 s each (owner,
+# 2026-11-14: 12 s was too short to see a walk settle; 2026-11-15: three walks showed too
+# little of what it trains on). The pause it costs is timed in the run log.
+LIVE_SCENARIOS = (
+    "Target ahead",
+    "Target 90 degrees left",
+    "Target behind",
+    "Target turns every 6 s",
+    "Speed steps: full, half, stop, full",
+    "Like training: random body, targets and speeds",
+    "Like training: another random body",
+)
 LIVE_SECONDS = 24.0
 
 
@@ -138,7 +146,9 @@ class Live:
             path = self.folder / "policy_latest.json"
             _write(path, json.dumps(policy, separators=(",", ":")) + "\n")
             chosen = tuple(s for s in SCENARIOS if s[0] in LIVE_SCENARIOS)
+            t0 = time.monotonic()
             data = build(path, LIVE_SECONDS, 0, None, chosen, quiet=True)
+            print(f"live: replay at {steps} took {time.monotonic() - t0:.1f} s", flush=True)
             data["note"] = f"Checkpoint at {steps:,} steps, while training"
             data["live"] = True
             tmp = self.folder / ".replay.html.tmp"

@@ -38,7 +38,18 @@ SCENARIOS: tuple[tuple[str, float, float, bool], ...] = (
     ("Target turns every 6 s", 0.0, 6.0, True),
     ("Random body: target 90 right", -90.0, 0.0, False),
     ("Random body: target turns every 6 s", 0.0, 6.0, False),
+    ("Speed steps: full, half, stop, full", 0.0, 0.0, True),
+    ("Like training: random body, targets and speeds", 0.0, 0.0, False),
+    ("Like training: another random body", 0.0, 0.0, False),
 )
+# Walks that drive more than the target: the speed command stepped every 6 s (only for
+# a policy with a speed input), or the training draws themselves (first target, moves,
+# speeds) instead of a scripted target.
+SPEED_STEPS = {"Speed steps: full, half, stop, full": (1.0, 0.5, 0.0, 1.0)}
+LIKE_TRAINING = {
+    "Like training: random body, targets and speeds",
+    "Like training: another random body",
+}
 
 
 def _geoms(env: GrowBotHeadingEnv) -> list[int]:
@@ -62,11 +73,15 @@ def record(
     nominal: bool,
     turn_deg: float = 90.0,
     alternate: bool = False,
+    speeds: tuple[float, ...] = (),
+    like_training: bool = False,
 ) -> dict[str, Any]:
-    obs, _ = env.reset(
-        seed=seed,
-        options={"retarget": False, "target_error_deg": start_error, "nominal": nominal},
-    )
+    options: dict[str, Any] = {"retarget": like_training, "nominal": nominal}
+    if not like_training:
+        options["target_error_deg"] = start_error
+    if speeds:
+        options["speed_cmd"] = speeds[0]
+    obs, _ = env.reset(seed=seed, options=options)
     env.max_steps = 10**9  # a replay may run longer than a training episode
     m, d = env.model, env.data
     ids = _geoms(env)
@@ -107,7 +122,12 @@ def record(
     frames = [snapshot(None)]
     fell = False
     every = round(turn_every / CONTROL_DT) if turn_every else 0
+    step_every = round(6.0 / CONTROL_DT)
     for i in range(1, round(seconds / CONTROL_DT) + 1):
+        if speeds and i % step_every == 0:
+            # The env reads its pinned speed on its own redraws too, so pin both.
+            k = min(i // step_every, len(speeds) - 1)
+            env._fixed_speed = env.speed_cmd = speeds[k]
         if every and i % every == 0:
             # For a policy whose targets stay in front, left then right, so the target
             # stays within one turn of where it began: a one-way series ends up behind.
@@ -153,10 +173,17 @@ def build(
     policy = JsonPolicy(policy_path)
     env = env_for(policy, body)
     episodes = []
+    has_speed = env.cfg.task.speed == "command"
     for i, scen in enumerate(scenarios):
+        speeds = SPEED_STEPS.get(scen[0], ())
+        if speeds and not has_speed:
+            continue
+        like = scen[0] in LIKE_TRAINING
         title, err, turn, nominal, turn_deg = _within(scen, env.cfg)
         narrow = env.cfg.task.initial_error_deg < 180.0
-        ep = record(env, policy, seed + i, err, seconds, turn, nominal, turn_deg, narrow)
+        ep = record(
+            env, policy, seed + i, err, seconds, turn, nominal, turn_deg, narrow, speeds, like
+        )
         ep["title"] = title
         episodes.append(ep)
         if not quiet:
