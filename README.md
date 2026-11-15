@@ -483,7 +483,8 @@ gait clock per teacher at that teacher's rate (`cycle:look_sin` and so on; the a
 steps any declared clock). Each tick one teacher labels what the legs should do:
 
 - speed below 0: the nose walk, backing away nose first, whatever the heading;
-- speed above 0 and within 60 degrees (let go at 70): lift and fall;
+- speed above 0 and within 30 degrees (let go at 40): lift and fall (Jeff, 2026-11-15:
+  wider than that, stop, spin with look, walk again);
 - otherwise: look's spin, which also handles walking toward someone well off to the
   side or behind.
 
@@ -504,7 +505,8 @@ rule: lift and fall's gait rears up past look's back-fall line by design.
 `evaluate` drives the same robots once with the teachers (through the same mode rule)
 and once with the master, per mode and start. It then counts falls against mode
 switches in 20 minute-long runs of random commands, driven each way on the same scripts.
-The first master (`policies/master-1`, from look-v7, lift-fall-2 and nose-walk-1) is
+The first master (`policies/master-1`, from look-v7, lift-fall-2 and nose-walk-1, with
+the walk handing over at 60 degrees then) is
 within 5% of its teachers on speed while walking and backing. Standing to turn, it drifts
 less than look does (0.95 against 1.13 cm/s from +180). Its heading error is within 1.3
 degrees of theirs everywhere: the worst is backing from -45, 8.0 against 6.7. Its turn
