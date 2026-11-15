@@ -73,8 +73,9 @@ the exported JSON, the same file the phone would run.
 **In any browser, phone included: `replay.html`.** Every run writes one. It's a single
 file: open it and it plays up to nine walks in 3D (target ahead, to the side, behind, a
 target that keeps turning, two on randomly varied robots, the speed stepped full, half,
-stop, full for a job with a speed input, and two drawn just as training draws them: a
-random robot, first target, target moves and speeds). Each walk keeps to the job's own
+stop, full for a job with a speed input, and two drawn as training draws them at the end of its
+curriculum: a random robot, first target, target moves and speeds, so early in a run
+they are harder than what it is training on yet). Each walk keeps to the job's own
 range: a job trained within 60 degrees gets 60-degree starts and turns, and "behind"
 becomes 60 degrees right. Every command input is drawn as an arrow: the target direction in red (a full 3D arrow, tipped up to the camera aim
 asked for, when the job has a camera-height input), and on the floor in green the speed
@@ -626,7 +627,7 @@ Every run keeps a `live/` folder up to date, and the Launcher shows it on the jo
 | File | What | Updated |
 | --- | --- | --- |
 | `progress.json` | percent done, time left, speed toward the target, heading error, falls | after every batch of experience (a few seconds) |
-| `replay.html` | 3D replay of the network as it is now: seven 24-second walks (all but the duplicate random-robot ones; a few seconds' pause, logged), played in a loop; the open page reloads itself between walks, so it picks up the newest one on its own | every half million steps (`train.live_replay_every_steps`; a few minutes apart on the box) |
+| `replay.html` | 3D replay of the network as it is now: six or seven 24-second walks (seven with a speed input; all but the duplicate random-robot ones; a few seconds' pause, logged), played in a loop; the open page reloads itself between walks, so it picks up the newest one on its own | every half million steps (`train.live_replay_every_steps`; a few minutes apart on the box) |
 | `policy_latest.json` | that network as an app policy | with the replay |
 
 Its `state` goes from "training" to "finishing" while the run evaluates and draws the
