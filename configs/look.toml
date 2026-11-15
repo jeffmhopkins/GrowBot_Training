@@ -29,6 +29,7 @@ stance_tol_deg = 6.0    # how close to the taller stance counts (degrees)
 back_lean = 2.0         # as camera walk: penalty for leaning back past the stance + margin
 back_lean_margin_deg = 12.0  # how far past the stance before that penalty starts
 wobble = 0.05           # CHANGED: penalty for rocking, for a steady camera
+frame = 2.0             # CHANGED: keep the person's face in the phone's picture, and once stopped centre it (the aim averaged over a second): look's stop is where the follower needs the face dead ahead. v9 lands 7 degrees off centre on random bodies; this asks for tighter
 turn = 1.0              # CHANGED: pay per degree the heading error shrinks; turning is the whole job
 
 [task]

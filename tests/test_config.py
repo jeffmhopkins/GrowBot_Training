@@ -102,6 +102,7 @@ def test_look_differs_from_the_camera_walk_only_where_it_says() -> None:
     assert changed == {
         ("reward", "heading"),
         ("reward", "wobble"),
+        ("reward", "frame"),
         ("reward", "turn"),
         ("reward", "tilt"),
         ("task", "heading_from"),
