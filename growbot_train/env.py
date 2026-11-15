@@ -575,6 +575,7 @@ class GrowBotHeadingEnv(gym.Env):
         pushes = self.cfg.randomization.push_every_s
         self._next_push = self._u(pushes) if pushes[1] > 0 else 0.0
         self._err_obs = 0.0
+        self._img_x_avg = self.face_image_deg()[0]
         self._observe_heading(force=True)
         # "speed_cmd" pins the speed command for the whole episode (evaluation).
         self._fixed_speed = options.get("speed_cmd")
@@ -706,10 +707,16 @@ class GrowBotHeadingEnv(gym.Env):
             # Free-joint angular velocity is in the body frame: x is roll, y is pitch.
             terms["wobble"] = -r.wobble * float(d.qvel[3] ** 2 + d.qvel[4] ** 2)
         img_x, img_y, in_frame = self.face_image_deg()
+        # Aim is judged on the picture averaged over about a second, a few waddle steps
+        # (Jeff, 2026-11-15): a gait's periodic sway is fine while the average points at
+        # the face. The face being in the picture is judged every frame, since the
+        # tracker has to see it.
+        k_aim = min(1.0, CONTROL_DT / max(r.frame_avg_s, CONTROL_DT))
+        self._img_x_avg += k_aim * (float(np.clip(img_x, -90.0, 90.0)) - self._img_x_avg)
         if r.frame and in_frame:
             centre = 1.0
             if self.speed_cmd == 0.0:
-                centre = max(0.0, 1.0 - (img_x / (r.frame_hfov_deg / 2)) ** 2)
+                centre = max(0.0, 1.0 - (self._img_x_avg / (r.frame_hfov_deg / 2)) ** 2)
             terms["frame"] = r.frame * centre
         if r.stance:
             miss = math.degrees(math.acos(max(-1.0, min(1.0, tall_cos))))
@@ -755,6 +762,7 @@ class GrowBotHeadingEnv(gym.Env):
             "in_frame": in_frame,
             "image_x_deg": img_x,
             "image_y_deg": img_y,
+            "image_x_avg_deg": self._img_x_avg,
         }
         return self._obs(), reward, fell, truncated, info
 

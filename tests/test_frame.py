@@ -75,8 +75,9 @@ def test_frame_pays_in_frame_only_and_centres_only_when_standing() -> None:
     # Standing, 20 degrees across a 60-wide picture pays less than dead centre.
     env = _env(LOOK, frame=1.0, err=20.0)
     _, _, _, _, info = env.step(np.zeros(2))
-    x = info["image_x_deg"]
-    assert abs(x) > 10.0
+    assert abs(info["image_x_deg"]) > 10.0
+    x = info["image_x_avg_deg"]
+    assert x == pytest.approx(info["image_x_deg"], abs=2.0)
     assert info["terms"]["frame"] == pytest.approx(1.0 - (x / 30.0) ** 2)
     # Walking, anywhere in the picture pays in full.
     walk = _env(NOSE, frame=1.0, err=0.0)
@@ -90,3 +91,15 @@ def test_evaluate_reports_time_in_frame() -> None:
     env.max_steps = 50
     m = run_episode(env, LOOK, seed=0, options={"target_error_deg": 0.0, "nominal": True})
     assert 0.0 <= m["frame_pct"] <= 100.0 and m["img_x"] >= 0.0
+
+
+def test_a_stops_aim_is_averaged_so_a_periodic_sway_cancels() -> None:
+    env = _env(LOOK, frame=1.0, err=0.0)
+    swing = iter([20.0, -20.0] * 100)
+    env.face_image_deg = lambda: (next(swing), 0.0, True)
+    env._img_x_avg = 0.0
+    for _ in range(50):
+        _, _, _, _, info = env.step(np.zeros(2))
+    # Frame to frame it sits 20 degrees off (worth 0.56), but on average dead centre.
+    assert abs(info["image_x_avg_deg"]) < 2.0
+    assert info["terms"]["frame"] > 0.99

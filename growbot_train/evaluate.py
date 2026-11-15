@@ -15,7 +15,8 @@ on, task.initial_error_deg), and reports per case:
     frame%   share of time a virtual face in the person's direction (drawn per episode,
              0.7-2.5 m out, 1.1-1.65 m high) was in the phone camera's picture
     img_x    how far across the picture that face sat over the second half while in it,
-             degrees off centre (the picture is 60 wide): what a stop has to centre
+             averaged over a second so a gait's sway cancels: degrees off centre (the
+             picture is 60 wide), the aim a stop has to centre
     falls    episodes that ended in a fall
 
 A policy with a speed input also gets a speed-tracking table: what it walks at, target
@@ -95,7 +96,7 @@ def run_episode(
         errs.append(info["abs_err_deg"])
         over += info["speed"] > 1.1 * cap
         framed.append(info["in_frame"])
-        img_x.append(abs(info["image_x_deg"]) if info["in_frame"] else math.nan)
+        img_x.append(abs(info["image_x_avg_deg"]) if info["in_frame"] else math.nan)
         if np.isnan(turn_s) and info["abs_err_deg"] < 20:
             turn_s = env.step_index * CONTROL_DT
         fell = bool(term)
