@@ -527,7 +527,9 @@ Its limits, until the walks it learns from are retrained:
   with nothing new in the app runner. The app's clocks only run at a fixed rate, while
   such a teacher's clock runs at its speed. So the mode it teaches is stop-or-go at full
   speed, where the two clocks agree. Slower backing waits for a speed-scaled clock in
-  the runner.
+  the runner. A hand-over into such a mode picks the gait up at full swing,
+  wherever its clock is, which the teacher never trained on. The switch test counts the
+  falls that causes.
 
 It isn't listed in `policies/index.toml` yet: the Body tab's runner takes it, but
 nothing in the app sends a signed speed until the follower does.
