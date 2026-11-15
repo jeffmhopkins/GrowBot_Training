@@ -45,9 +45,10 @@ class RewardConfig:
     # warning that grows long before the point of no return. 0 turns it off.
     back_lean: float = 0.0
     back_lean_margin_deg: float = 12.0
-    # With task.speed "command" or "still", progress pays for matching the wanted
-    # velocity instead: weight * (|wanted| - miss) / cap, floored at -weight, where miss is
-    # how far the averaged velocity is from the wanted one (direction included), in m/s.
+    # With task.speed "command" (unless task.speed_reward is "progress") or "still",
+    # progress pays for matching the wanted velocity instead: weight * (|wanted| - miss)
+    # / cap, floored at -weight, where miss is how far the averaged velocity is from the
+    # wanted one (direction included), in m/s.
     # Standing still always scores exactly zero, as it does in "cap" mode: an earlier
     # form paid a third of the weight for standing still when told to walk.
     # During a stop (the command is exactly 0, and always in "still" mode) drift up to
@@ -129,6 +130,16 @@ class TaskConfig:
     speed_command_every_s: tuple[float, float] = (3.0, 8.0)
     speed_stop_prob: float = 0.3
     speed_back_min: float = -1.0
+    # Curriculum for the speed command: every command starts at full speed (no stops) and
+    # the spread widens to the above over this many steps. Scored on matching the command,
+    # a policy that can't walk yet is paid most for keeping still, so asked for slow
+    # walks and stops from the start it never learns to walk. 0 = full spread at once.
+    speed_ramp_steps: int = 0
+    # How a speed command is scored. "match": by how far the velocity is from the
+    # commanded one (backing away included). "progress": like the cap walk, paid for speed
+    # along the target up to the command and charged past it, so early flailing costs no
+    # more than standing still; forward commands only (speed_back_min >= 0).
+    speed_reward: str = "match"
     # A third input, cmd_pitch in [-1, 1], says how high to hold the camera end: -1 is
     # tilt_lift_deg[0] from the resting pitch (low, nearly flat: the camera looks almost
     # straight up), +1 is tilt_lift_deg[1] (standing tall). The stance bonus then pays for

@@ -69,8 +69,15 @@ def ramp_scale(cfg: config_mod.Config, steps: int) -> float:
     return min(1.0, r.ramp_from + (1.0 - r.ramp_from) * steps / r.ramp_steps)
 
 
+def cmd_scale(cfg: config_mod.Config, steps: int) -> float:
+    """The speed curriculum's share of the full command spread after `steps` (1 = full)."""
+    n = cfg.task.speed_ramp_steps
+    return 1.0 if n <= 0 else min(1.0, steps / n)
+
+
 class Curriculum(BaseCallback):
-    """Widens the randomisation as training goes (randomization.ramp_steps)."""
+    """Widens the randomisation (randomization.ramp_steps) and the speed commands
+    (task.speed_ramp_steps) as training goes."""
 
     def __init__(self, cfg: config_mod.Config) -> None:
         super().__init__()
@@ -80,6 +87,9 @@ class Curriculum(BaseCallback):
         k = ramp_scale(self.cfg, self.num_timesteps)
         self.training_env.set_attr("dr_scale", k)
         self.logger.record("walk/dr_scale", k)
+        c = cmd_scale(self.cfg, self.num_timesteps)
+        self.training_env.set_attr("cmd_scale", c)
+        self.logger.record("walk/cmd_scale", c)
 
     def _on_step(self) -> bool:
         return True
@@ -283,6 +293,7 @@ def main(argv: list[str] | None = None) -> int:
         # learn() resets the envs before the first rollout callback, so a resumed run
         # would spend its first episodes at full randomisation without this.
         vec.set_attr("dr_scale", ramp_scale(cfg, model.num_timesteps))
+        vec.set_attr("cmd_scale", cmd_scale(cfg, model.num_timesteps))
     else:
         vec = VecNormalize(vec, norm_obs=True, norm_reward=True, clip_obs=CLIP_OBS, gamma=t.gamma)
         model = PPO(
@@ -309,6 +320,7 @@ def main(argv: list[str] | None = None) -> int:
         reset = True
         # The clone samples the robots the curriculum starts on.
         vec.set_attr("dr_scale", ramp_scale(cfg, 0))
+        vec.set_attr("cmd_scale", cmd_scale(cfg, 0))
         if t.warm_gait:
             from growbot_train.gait import Keyframes, clone_gait
 

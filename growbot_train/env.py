@@ -176,6 +176,14 @@ class GrowBotHeadingEnv(gym.Env):
         self._lens = cfg.task.heading_from == "lens"
         if cfg.task.speed not in SPEED_MODES:
             raise ValueError(f"task.speed must be one of {SPEED_MODES}, not {cfg.task.speed!r}")
+        if cfg.task.speed_reward not in ("match", "progress"):
+            raise ValueError(
+                f'task.speed_reward must be "match" or "progress", not {cfg.task.speed_reward!r}'
+            )
+        if cfg.task.speed_reward == "progress" and cfg.task.speed_back_min < 0:
+            # It pays only for speed toward the target, so a back-away command would be
+            # charged for doing what it was told.
+            raise ValueError('task.speed_reward "progress" needs task.speed_back_min >= 0')
         self.channels = channels_for(cfg)
         self._torso = m.body("base_body").id
         self._legs = [m.body("right_leg").id, m.body("left_leg").id]
@@ -217,6 +225,8 @@ class GrowBotHeadingEnv(gym.Env):
         # (randomization.ramp_steps); 1 is the full ranges. It narrows how far off the
         # target starts and jumps too, so an early gait that only walks straight pays.
         self.dr_scale = 1.0
+        # The speed curriculum's share of the full command spread (task.speed_ramp_steps).
+        self.cmd_scale = 1.0
         # When set, scales the target ranges in place of dr_scale: a steered clone wants
         # targets all the way round while the bodies are still near the as-built one.
         self.target_scale: float | None = None
@@ -573,9 +583,21 @@ class GrowBotHeadingEnv(gym.Env):
         tr = math.radians(self.target_deg)
         v_along = float(self.vel_avg[0] * math.cos(tr) + self.vel_avg[1] * math.sin(tr))
         speed = float(np.linalg.norm(self.vel_avg))
+        speed_limit = cap
         if cfg.task.speed == "cap":
             progress = r.progress * min(v_along, cap) / cap
             speed_miss = abs(v_along - cap)
+        elif cfg.task.speed == "command" and cfg.task.speed_reward == "progress":
+            # Paid like the cap walk, up to the commanded speed, and charged for going
+            # faster than it: sideways flailing costs no more than standing still. Its
+            # speed_miss is along the target only, as in "cap" mode.
+            want_s = self.speed_cmd * cap
+            free = self._stop_drift_free() * cap
+            # A stop keeps the usual free drift band, backwards too, for turning on the spot.
+            along = v_along if want_s > 0 else min(0.0, v_along + free)
+            progress = r.progress * min(along, want_s) / cap
+            speed_miss = abs(v_along - want_s)
+            speed_limit = max(want_s, free)
         else:
             want = self.speed_cmd * cap * np.array([math.cos(tr), math.sin(tr)])
             miss = speed_miss = float(np.linalg.norm(self.vel_avg - want))
@@ -593,7 +615,7 @@ class GrowBotHeadingEnv(gym.Env):
                 if r.heading_width_deg > 0
                 else (1 + math.cos(math.radians(err_score))) / 2
             ),
-            "overspeed": -r.overspeed * (max(0.0, speed - cap) / cap) ** 2,
+            "overspeed": -r.overspeed * (max(0.0, speed - speed_limit) / cap) ** 2,
             "tilt": -r.tilt * (1 - tall_cos),
             "action_rate": -r.action_rate * float(np.sum((a - self.prev_action) ** 2)),
             "effort": -r.effort * float(np.sum(a**2)),
@@ -694,9 +716,11 @@ class GrowBotHeadingEnv(gym.Env):
             return 0.0
         if self._fixed_speed is not None:
             return float(self._fixed_speed)
-        if self.np_random.random() < task.speed_stop_prob:
+        k = min(1.0, self.cmd_scale)
+        if self.np_random.random() < task.speed_stop_prob * k:
             return 0.0
-        return self._u((task.speed_back_min, 1.0))
+        lo = task.speed_back_min if k >= 1.0 else 1.0 - k * (1.0 - task.speed_back_min)
+        return self._u((lo, 1.0))
 
     def _actuate(self, cmd_rad: np.ndarray) -> None:
         """The relay and servo between the phone's command and the joint: dropped
