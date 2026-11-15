@@ -477,13 +477,13 @@ v9 (run 32fae7c5, kept as `policies/look-v9`) is that run. It is the look teache
 - **Quarter turns:** mostly 7-9 s in the sweep (short legs from +90 still takes 18 s,
   v7 25), where v7 ranged 7-25.
 - **Half turns:** about 20 s on random bodies, the same as v7; 13-21 s in the sweep
-  (v7 18-29), but 17.6 s on the nominal body (v7 15.8). The goal set for look is a half
-  turn in about 12 s, within 15 degrees, under 1 cm/s of creep, and no sweep case
-  falling more than 1 run in 10.
-  Measured another way (24 held-out random bodies, 9 s spins from a standstill),
-  the open-loop spin averages only 11 degrees a second, and a CMA-ES search for a
-  faster spin that holds up there found none. So a 12 s half turn is out of reach on
-  these legs everywhere but near the as-built body.
+  (v7 18-29), but 17.6 s on the nominal body (v7 15.8). Measured another way (24
+  held-out random bodies, 9 s spins from a standstill), the open-loop spin averages
+  only 11 degrees a second, and a CMA-ES search for a faster spin that holds up there
+  found none. The servos stay stock, so about 20 s is the half turn these legs allow
+  and is the goal now; the earlier 12 s goal was reachable only near the as-built body.
+  The rest of the look goal: within 15 degrees, under 1 cm/s of creep, and no sweep
+  case falling more than 1 run in 10.
 - **Creep and falls:** it creeps 0.8 cm/s on target (v7 0.7), which Hold stops. 0 of 36
   randomised evaluations fell. One sweep case did: long legs from 180 degrees, 1 run in
   3, over that 1-in-10 limit. That case also ends 64 degrees off.
