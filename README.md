@@ -373,10 +373,13 @@ Two earlier runs from it froze, and the reason was measurable: played open loop 
 the full randomisation, the gait earns less than standing still, so PPO unlearns it in
 the first million steps. So this one starts on robots close to the as-built one
 (`randomization.ramp_steps`: every body, servo, friction and sensor-offset range, and
-how far off the target starts and jumps, begins at 15% of its width and widens to the
-full range over the first 25M steps, half of a full run). The body ranges stop at 35%
-(`randomization.ramp_to`) while the targets keep widening: the first run from it walked at
-3.8 cm/s near 30% and fell apart past about 45%. It walks at the cap with no speed input (the gait has one speed), and explores with
+how far off the target starts and jumps, begins at 35% of its width and widens over the
+first 25M steps, half of a full run). The body ranges stop at 60%
+(`randomization.ramp_to`) while the targets keep widening. The legs are pinned to the STL
+(Jeff's robot matches it) and only the weight and its balance point vary a little: the
+earlier runs randomised leg length too, and their falls (about 1 minute-long walk in 10)
+were mostly on bodies a few percent shorter in the leg. With the geometry pinned the old
+walk fell 2 times in 100 at 35% of the remaining ranges and 35 in 100 at full. It walks at the cap with no speed input (the gait has one speed), and explores with
 less noise (`train.log_std_init = -1.5`) so its timing survives the first updates. The
 speed cap is 5 cm/s, the stance bonus and lean-back penalty are off as the body bounces,
 and only going over onto the screen (past 88 degrees) or forwards ends an episode.
