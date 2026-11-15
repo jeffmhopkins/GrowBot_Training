@@ -87,7 +87,7 @@ heading_drift_deg_per_s = 0.25  # CHANGED: slower, so over the minute-long episo
 heading_refresh_ticks = [1, 6]
 push_every_s = [0.0, 0.0]   # a sudden shove this often (off until it can scoot)
 push_pitch_rad_s = 0.0      # how hard a shove spins it (pitch, rad/s)
-ramp_steps = 25000000      # CHANGED: widen what can't be measured (servos, floor, delays, trim) over half the run
+ramp_steps = 25000000      # CHANGED: widen the rest (servos, floor, delays, trim, weight, targets) over half the run
 ramp_from = 0.35            # CHANGED: from where the old walk already held (2 falls in 100 with the geometry pinned)
 ramp_to = 0.6               # CHANGED: with the geometry pinned the old walk held at 0.35 and fell 35 in 100 at full ranges; train in between
 
