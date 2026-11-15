@@ -1001,13 +1001,14 @@ def summarise(report: dict[str, Any]) -> str:
         for row in report[mode].values():
             t, m = row["teacher"], row["master"]
             if mode != "look" and t["speed"] > 0:
-                speed_gap = max(speed_gap, abs(m["speed"] - t["speed"]) / t["speed"])
+                # Only slower counts: faster than a teacher that stumbled is no gap.
+                speed_gap = max(speed_gap, (t["speed"] - m["speed"]) / t["speed"])
             aim_gap = max(aim_gap, m["err"] - t["err"])
             falls += int(m["falls"])
             runs += int(m["runs"])
     sw = report["switch"]["master"]
     return (
-        f"speed within {100 * speed_gap:.0f}% of the teachers, aim within {aim_gap:.1f} deg, "
+        f"speed at most {100 * speed_gap:.0f}% under the teachers, aim within {aim_gap:.1f} deg, "
         f"falls {falls}/{runs}, {sw['falls']} in {sw['switches']} switches"
     )
 

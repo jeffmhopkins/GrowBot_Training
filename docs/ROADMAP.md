@@ -142,7 +142,8 @@ lift-fall-2, nose-walk-1, backing only within 45 degrees) is within 4% of its te
 speed and 0.7 degrees on aim, keeps the face in the camera's picture 97-100% of the time
 moving, and fell in none of 173 switches. `policies/master-v1`, the box's first master
 run, adds the hold: 1.9-4.2 degrees on aim after a turn, 2-5 cm of drift standing, 1 fall
-in 208 switches. The next distils from lift-fall-3 on the STL-pinned bodies. Still to come:
+in 208 switches. `policies/master-v2` distils from lift-fall-3 on the STL-pinned bodies:
+5.5-5.8 cm/s walking and no falls in 181 switches. Still to come:
 - distilling from the residual-gait walks once they pass. The distillation takes them
   already: labels are their full leg angles, and backing is stop-or-go at full speed
   until the app runner has a speed-scaled clock;
