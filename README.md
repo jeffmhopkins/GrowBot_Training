@@ -382,7 +382,11 @@ spin it clones, so the old 6 to 14 s between targets often moved the target befo
 robot got there. The target now moves every 15 to 30 s, the camera height every 8 to 20 s, and
 an episode lasts a minute so it holds two to four targets. The gyro heading drift
 (`randomization.heading_drift_deg_per_s`) builds for the whole episode, so look's error
-at 30-60 s isn't comparable with the 30 s runs before. Unlike the camera walk it trains on
+at 30-60 s isn't comparable with the 30 s runs before.
+v6 (run 36d29750, kept as `policies/look-v6`) aimed within 16 degrees on random bodies
+but took 20 to 28 s for half a turn, against about 11 for the spin it cloned: the turn
+term pays a slow turn the same as a quick one. So look now also earns the arrive bonus
+(`reward.arrive = 30`), like the lift and fall. Unlike the camera walk it trains on
 the printed build with bare-print surfaces (see [Bodies](#bodies)), like the heading walk.
 It's the camera walk otherwise, and only the lines marked CHANGED differ from that file.
 From JBrain it's the "GrowBot look" job.

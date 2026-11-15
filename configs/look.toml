@@ -13,7 +13,7 @@ progress = 2.0          # here only a cost: drifting more than stop_drift_free x
 heading = 3.0           # CHANGED: facing the target is the whole job here...
 heading_width_deg = 40.0  # CHANGED: ...and it pays only near it (exp(-(error/40)^2)): sitting 60 degrees off earns a tenth, not the cosine's three quarters
 progress_width_deg = 0.0  # with > 0: progress pays only while pointing near the target (exp(-(error/width)^2))
-arrive = 0.0            # one-off bonus per target for reaching it quickly (0 = off)
+arrive = 30.0           # CHANGED: one-off bonus per target once it has held within 15 degrees for 1 s: 95% for turning at once, none after 20 s. v6 took 20-28 s for half a turn when its cloned spin manages about 11; the turn term pays slow turns the same as quick ones
 speed_cap_m_s = 0.03    # CHANGED: 3 cm/s. Look never walks, so the cap only sets how much drift a turn may have
 speed_window_s = 1.0    # speed is averaged over this long before the cap is checked
 overspeed = 4.0         # CHANGED: penalty for going faster than the cap (grows with the square)
