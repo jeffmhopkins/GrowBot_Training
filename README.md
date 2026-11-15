@@ -468,6 +468,20 @@ overspeed charge held v7 to about 9 degrees a second, where the open-loop spin i
 does 15 on random bodies (24 on the nominal one). The band is now 2.4 cm/s (0.8), and
 creep on target is left to the follower's Hold, which stops it outright (see
 [Following a person](#following-a-person)).
+
+v9 (run 32fae7c5, kept as `policies/look-v9`) is that run. It is the look teacher now:
+
+- **Aim:** 10.6 degrees off on random bodies, against v7's 11.5.
+- **Odd bodies:** the bodies v7 left 35-47 degrees off from a quarter turn
+  (short-legged, nose-heavy, mis-trimmed) now end 11-15 off.
+- **Quarter turns:** about 7-9 s in the sweep, against v7's 10-12.
+- **Half turns:** no faster, about 20 s on random bodies. The open-loop spin itself
+  averages only 11 degrees a second on fully random bodies: a CMA-ES search for a faster
+  one that holds up there found none. So the 12 s half turn is out of reach on these
+  legs everywhere but near the as-built body.
+- **Creep and falls:** it creeps 0.8 cm/s while turning, and 0 of 36 randomised
+  evaluations fell. One sweep case did: long legs from 180 degrees, 1 in 3, over the
+  1-in-10 bar, its only miss.
 Unlike the camera walk it trains on the printed build with bare-print surfaces (see
 [Bodies](#bodies)), like the heading walk.
 It's the camera walk otherwise, and only the lines marked CHANGED differ from that file.

@@ -63,3 +63,11 @@ job = "growbot_lift_fall_turns"
 file = "policies/lift-fall-2/policy_lift_fall.json"
 run = "527daab9"
 notes = "The forward teacher now: the turning-gated lift and fall at 50M. About 10 degrees off on random bodies and 4.1 cm/s toward the target; half a turn in about 14 s. 3 falls in 36 randomised evaluations, but short-legged and nose-heavy bodies fall on every big turn (50 sweep falls in 153, as many as lift-fall-1), so falls are its main gap. Trained with heading gates main has since dropped: its config is in its folder."
+
+[[policy]]
+slug = "look-v9"
+title = "Look v9: turn on the spot to face a target"
+job = "growbot_look"
+file = "policies/look-v9/policy_look.json"
+run = "32fae7c5"
+notes = "The look teacher now: 10.6 degrees off on random bodies (v7 11.5), and the odd bodies v7 left 35-47 degrees off now end 11-15 off. Quarter turns take 7-9 s, half turns about 20 s (no faster: the open-loop spin tops out near 11 degrees a second on fully random bodies). Creeps 0.8 cm/s while turning, which the follower's Hold stops on target. 0 falls in 36 randomised evaluations; 1 in 153 sweep ones (long legs, 180 degrees)."
