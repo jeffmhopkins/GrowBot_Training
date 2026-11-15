@@ -43,6 +43,7 @@ retarget_max_deg = 60.0         # CHANGED: ...by up to this much, for the same r
 gait_hz = 0.906             # CHANGED: the waddle's own rate
 residual_gait = "configs/gaits/nose_walk.json"  # CHANGED: the bench's low nose-first waddle (search.py n2: about 12 degrees nose-up, 3.1 cm/s with no falls on random robots) always runs; the policy adds corrections and steering. Cloned instead (a810ca07), PPO drifted off it to 1.3-1.8 cm/s by 15M
 residual_rad = 0.5          # the most the policy moves a leg off the gait (radians)
+residual_steer_deg = 20.0   # CHANGED: steering built into the base: one leg out by up to 0.5 rad as the observed error reaches 20 degrees (alone it holds 15-23 degrees off on random robots at 2.4-2.8 cm/s along; PPO from scratch, 7cf329f3, was still 47 off at 7.5M), so PPO refines it
 history_frames = 5          # how many past ticks of sensors the policy sees
 action_to_rad = 1.57        # CHANGED: the waddle uses the servos' whole range
 fall_tilt_deg = 55.0        # tipped this far from the starting stance = fallen (the app aborts at 55)

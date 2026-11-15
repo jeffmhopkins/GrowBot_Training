@@ -586,7 +586,7 @@ class GrowBotHeadingEnv(gym.Env):
         else:
             # Clipped before the servo model: the gait sits near the travel limit, and a
             # correction past it would wind the modelled servo up beyond what it can reach.
-            legs = self.gait_rad() + a * cfg.task.residual_rad
+            legs = self.gait_rad() + self.steer_rad() + a * cfg.task.residual_rad
             self._actuate(np.clip(legs, -CTRL_LIMIT, CTRL_LIMIT))
         p0 = d.qpos[0:2].copy()
         # Headings before the step; the error is taken against the target after any
@@ -793,6 +793,16 @@ class GrowBotHeadingEnv(gym.Env):
         assert self._gait is not None
         ease = min(1.0, self.step_index * CONTROL_DT)
         return ease * self._gait(self.cycles / self._gait.hz)
+
+    def steer_rad(self) -> np.ndarray:
+        """The residual gait's built-in steering: one leg out in proportion to the
+        heading error the policy sees (noise, drift and staleness included)."""
+        t = self.cfg.task
+        if not t.residual_steer_deg or self._gait is None or self.speed_cmd == 0.0:
+            # A stop stays still: turning on the spot is the look policy's.
+            return np.zeros(2)
+        u = float(np.clip(self._err_obs / t.residual_steer_deg, -1.0, 1.0))
+        return t.residual_steer_rad * np.array([max(u, 0.0), max(-u, 0.0)])
 
     def _actuate(self, cmd_rad: np.ndarray) -> None:
         """The relay and servo between the phone's command and the joint: dropped
