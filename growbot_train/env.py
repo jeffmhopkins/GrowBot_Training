@@ -366,6 +366,12 @@ class GrowBotHeadingEnv(gym.Env):
             return lo_hi
         return (nominal + (lo_hi[0] - nominal) * k, nominal + (lo_hi[1] - nominal) * k)
 
+    def _new_target(self, t: float) -> None:
+        # The arrive bonus counts from here, once per target.
+        self._target_t = t
+        self._held = 0
+        self._arrived = False
+
     def _body_k(self) -> float:
         # Capped at ramp_to while the targets keep widening with dr_scale: a body that
         # only walks near the as-built robot can still learn the big turns.
@@ -532,6 +538,7 @@ class GrowBotHeadingEnv(gym.Env):
         self.target_deg = wrap_deg(self.yaw_deg() + first_err)
         self.retarget = bool(options.get("retarget", True))
         self._next_retarget = self._u(self.cfg.task.retarget_every_s)
+        self._new_target(0.0)
         pushes = self.cfg.randomization.push_every_s
         self._next_push = self._u(pushes) if pushes[1] > 0 else 0.0
         self._err_obs = 0.0
@@ -572,6 +579,7 @@ class GrowBotHeadingEnv(gym.Env):
             # over the whole episode.
             self.anchor = d.qpos[0:2].copy()
             self._next_retarget = t + self._u(cfg.task.retarget_every_s)
+            self._new_target(t)
 
         if cfg.task.speed == "command" and t >= self._next_speed:
             self.speed_cmd = self._draw_speed()
@@ -617,6 +625,8 @@ class GrowBotHeadingEnv(gym.Env):
             progress = r.progress * max(-1.0, gain)
         err_score = self.scored_err_deg()
         err0 = self.scored_err_deg(yaw0, body0)
+        if r.progress_width_deg > 0 and progress > 0:
+            progress *= math.exp(-((err_score / r.progress_width_deg) ** 2))
         terms = {
             "progress": progress,
             "heading": r.heading
@@ -644,6 +654,12 @@ class GrowBotHeadingEnv(gym.Env):
                     # yet still slopes through a whole turn's worth of slow drift.
                     over = max(0.0, drift_m - r.anchor_free_m) / 0.15
                     terms["anchor"] = -r.anchor * min(1.0, over)
+        if r.arrive and not self._arrived:
+            self._held = self._held + 1 if err_score < r.arrive_within_deg else 0
+            if self._held * CONTROL_DT >= r.arrive_hold_s:
+                self._arrived = True
+                late = (t - self._target_t) / r.arrive_by_s
+                terms["arrive"] = r.arrive * max(0.0, 1.0 - late)
         if r.wobble:
             # Free-joint angular velocity is in the body frame: x is roll, y is pitch.
             terms["wobble"] = -r.wobble * float(d.qvel[3] ** 2 + d.qvel[4] ** 2)

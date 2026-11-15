@@ -28,6 +28,19 @@ class RewardConfig:
     # so facing it is worth far more than sitting 60 degrees off (the cosine pays 75% there).
     heading: float = 0.5
     heading_width_deg: float = 0.0
+    # With progress_width_deg > 0, progress earned while pointing off the target is cut by
+    # exp(-(error / width)^2). Speed along the target alone still pays 77% walking 40
+    # degrees off, too little to make a body that steers slowly finish its turns. A
+    # backward step is charged in full either way.
+    progress_width_deg: float = 0.0
+    # A one-off bonus each target, paid once the heading error has stayed under
+    # arrive_within_deg for arrive_hold_s: the full weight on the spot, shrinking to 0 by
+    # arrive_by_s after the target moved. The turn term pays the same for a slow turn as
+    # a quick one; this pays for quick. 0 = off.
+    arrive: float = 0.0
+    arrive_within_deg: float = 15.0
+    arrive_hold_s: float = 1.0
+    arrive_by_s: float = 20.0
     speed_cap_m_s: float = 0.03
     speed_window_s: float = 1.0
     overspeed: float = 4.0

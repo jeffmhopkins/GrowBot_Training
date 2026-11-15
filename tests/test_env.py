@@ -783,6 +783,49 @@ def test_the_sweep_tests_the_edges_training_saw() -> None:
     assert half["light"]["mass_scale"] == pytest.approx(1.0 + (lo - 1.0) * 0.5)
 
 
+def test_progress_width_pays_progress_only_near_the_target() -> None:
+    def paid(width: float, err: float) -> tuple[float, float]:
+        cfg = Config()
+        cfg.randomization.enabled = False
+        cfg.reward.progress_width_deg = width
+        env = GrowBotHeadingEnv(cfg)
+        env.reset(seed=0, options={"retarget": False, "target_error_deg": 0.0})
+        env.target_deg = env.yaw_deg() + err
+        # Moving straight along the target at the cap, whichever way the body points.
+        tr = math.radians(env.target_deg)
+        env.vel_avg = np.array([math.cos(tr), math.sin(tr)]) * cfg.reward.speed_cap_m_s
+        _, _, _, _, info = env.step(np.zeros(2))
+        return info["terms"]["progress"], env.scored_err_deg()
+
+    for err in (0.0, 40.0):
+        full, _ = paid(0.0, err)
+        gated, scored = paid(45.0, err)
+        assert full > 0
+        assert gated == pytest.approx(full * math.exp(-((scored / 45.0) ** 2)), rel=1e-6)
+    assert paid(45.0, 40.0)[0] < 0.6 * paid(0.0, 40.0)[0]
+
+
+def test_the_arrive_bonus_pays_once_per_target_and_less_when_late() -> None:
+    def bonus(steps_off: int) -> list[float]:
+        cfg = Config()
+        cfg.randomization.enabled = False
+        cfg.reward.arrive = 30.0
+        env = GrowBotHeadingEnv(cfg)
+        env.reset(seed=0, options={"retarget": False, "target_error_deg": 90.0})
+        paid = []
+        for i in range(steps_off + 100):
+            if i == steps_off:  # the target swings round to where it already points
+                env.target_deg = env.yaw_deg()
+            _, _, _, _, info = env.step(np.zeros(2))
+            paid.append(info["terms"].get("arrive", 0.0))
+        return [p for p in paid if p]
+
+    quick, slow = bonus(0), bonus(250)  # 0 s, and 10 s of the 20
+    assert len(quick) == len(slow) == 1
+    assert quick[0] == pytest.approx(30.0 * (1 - 1.0 / 20.0), rel=0.05)
+    assert slow[0] == pytest.approx(30.0 * (1 - 11.0 / 20.0), rel=0.05)
+
+
 def test_the_speed_curriculum_starts_every_command_at_full_speed() -> None:
     from growbot_train.train import cmd_scale
 
