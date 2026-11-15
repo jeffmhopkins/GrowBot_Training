@@ -313,3 +313,47 @@ def test_hold_stops_look_creeping_on_target_and_it_still_turns_after() -> None:
     assert free is not None and held is not None and held["fell"] == 0.0
     assert held["creep_cm_s"] < 0.1 < free["creep_cm_s"]
     assert held["turn_err_deg"] < 20.0
+
+
+def _seen(distance: float, bearing: float = 0.0) -> Sighting:
+    return Sighting(bearing_deg=bearing, pitch_deg=0.0, distance_m=distance)
+
+
+def test_the_follower_keeps_distance_on_the_average_not_each_waddle() -> None:
+    f = Follower(set_distance_m=1.0)
+    # Each waddle swings the camera's distance 0.3 m either side of a true 1.05 m.
+    speeds = []
+    for k in range(250):
+        swing = 0.3 if (k // 12) % 2 else -0.3
+        speeds.append(f.command(_seen(1.05 + swing), lost=False)[1])
+    assert f.distance == pytest.approx(1.05, abs=0.06)
+    assert speeds[-100:] == [0.0] * 100
+
+
+def test_a_walk_once_started_closes_the_gap_to_within_the_stop_band() -> None:
+    f = Follower(set_distance_m=1.0)
+    assert f.command(_seen(1.2), lost=False)[1] == 1.0
+    # Inside the 10 cm band but not yet within 5 cm: it keeps walking...
+    f.distance = 1.08
+    assert f.command(_seen(1.08), lost=False)[1] == 1.0
+    f.distance = 1.04
+    assert f.command(_seen(1.04), lost=False)[1] == 0.0
+    # ...but standing, the same 8 cm doesn't start a walk.
+    f.distance = 1.08
+    assert f.command(_seen(1.08), lost=False)[1] == 0.0
+
+
+def test_a_walk_lets_go_of_the_heading_only_ten_degrees_wider() -> None:
+    f = Follower(set_distance_m=1.0)
+    f.distance = 1.5
+    assert f.command(_seen(1.5, bearing=35.0), lost=False)[1] == 0.0
+    assert f.command(_seen(1.5, bearing=20.0), lost=False)[1] == 1.0
+    assert f.command(_seen(1.5, bearing=35.0), lost=False)[1] == 1.0
+    assert f.command(_seen(1.5, bearing=45.0), lost=False)[1] == 0.0
+
+
+def test_losing_the_person_forgets_their_distance() -> None:
+    f = Follower()
+    f.command(_seen(2.0), lost=False)
+    f.command(_seen(2.0), lost=True)
+    assert f.distance is None and not f.walking

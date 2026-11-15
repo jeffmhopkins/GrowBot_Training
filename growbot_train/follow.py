@@ -271,7 +271,16 @@ class Follower:
     """Turns the tracked person into the three commands (docs/follow_me.md, Follower)."""
 
     set_distance_m: float = 1.0
-    dead_band_m: float = 0.15
+    # Start walking up past this, then keep walking until within walk_stop_m: the spin's
+    # own drift (10-25 cm from a half turn) is taken back in one walk, not left in the band.
+    dead_band_m: float = 0.10
+    walk_stop_m: float = 0.05
+    # The camera's distance swings about 0.3 m with each waddle's pitch, so the follower
+    # acts on its average over about this long; acting on each frame chattered between
+    # walking and standing and never closed the gap (Jeff, 2026-11-15: "zero creep").
+    distance_avg_s: float = 1.5
+    distance: float | None = None
+    walking: bool = False
     back_ramp_m: float = 0.5
     walk_within_deg: float = 30.0
     # Camera-height command per degree of pitch error per tick. Taller (+1) tips the
@@ -309,6 +318,9 @@ class Follower:
         seen: speed 0, and spin toward the side they were last seen on. tracked.distance_m
         is along the floor (see floor_from_camera); fresh says this tick brought a new
         frame, the only time the camera height moves, so a held pitch isn't counted twice."""
+        if tracked is None or lost:
+            # A distance from before they were lost is stale by the time they're found.
+            self.distance, self.walking = None, False
         if tracked is None:
             # Never seen: spin on the spot until they come into view.
             return self.search_sign * self.search_deg, 0.0, self.tilt
@@ -320,10 +332,20 @@ class Follower:
         self.search_sign = 1.0 if bearing >= 0 else -1.0
         if fresh:
             self.tilt = float(np.clip(self.tilt - self.pitch_gain * tracked.pitch_deg, -1.0, 1.0))
+            a = min(1.0, CONTROL_DT / self.distance_avg_s)
+            d = tracked.distance_m
+            self.distance = d if self.distance is None else self.distance + a * (d - self.distance)
         speed = 0.0
-        err = tracked.distance_m - self.set_distance_m
+        err = (tracked.distance_m if self.distance is None else self.distance) - self.set_distance_m
+        # As the master's walk does, a walk lets go of the heading only 10 degrees wider.
+        within = self.walk_within_deg + (10.0 if self.walking else 0.0)
+        self.walking = (
+            not self.stay
+            and err > (self.walk_stop_m if self.walking else self.dead_band_m)
+            and abs(bearing) <= within
+        )
         if not self.stay:
-            if err > self.dead_band_m and abs(bearing) <= self.walk_within_deg:
+            if self.walking:
                 speed = 1.0
             elif err < -self.dead_band_m:
                 speed = -min(1.0, (-err - self.dead_band_m) / self.back_ramp_m)

@@ -885,6 +885,75 @@ def format_report(report: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+FOLLOW_BEARINGS = (90.0, -90.0, 135.0, 180.0)
+
+
+def follow_spin(
+    policy: dict[str, Any], bearing: float, seed: int, seconds: float = 40.0
+) -> dict[str, float]:
+    """The master under follow.py's camera, tracker and follower, a person standing 1 m off
+    at ``bearing`` from the camera: it spins to them (drifting as look's spin does), then
+    the follower's distance keeping walks it back. Seed 0 is the nominal body."""
+    from growbot_train import follow
+
+    meta = policy["training"]["master"]
+    rollout = Rollout(meta["teachers"], meta.get("body"))
+    runner = MasterRunner(policy, rollout.teachers)
+    env = rollout.env
+    opts: dict[str, Any] = {
+        "retarget": False,
+        "speed_cmd": 0.0,
+        "tilt_cmd": 1.0,
+        "target_error_deg": 0.0,
+    }
+    if seed == 0:
+        opts["nominal"] = True
+    env.reset(seed=seed, options=opts)
+    env.max_steps = round(seconds / CONTROL_DT) + 1
+    person = follow.Person(seed)
+    person._wait = math.inf
+    az = math.radians(follow.camera_heading_deg(env) + bearing)
+    person.pos = env.data.qpos[0:2] + np.array([math.cos(az), math.sin(az)])
+    person.face_z = 1.4
+    cam = follow.Camera(follow.CameraSpec(), np.random.default_rng(seed))
+    tracker, follower = follow.Tracker(), follow.Follower()
+    start = env.data.qpos[0:2].copy()
+    yaw_prev = env.yaw_deg()
+    mode = None
+    fell = False
+    walked = 0
+    for _ in range(round(seconds / CONTROL_DT)):
+        truth = follow.true_sighting(env, person)
+        seen = cam.frame(truth)
+        yaw = env.yaw_deg()
+        tracked = tracker.update(seen, wrap_deg(yaw - yaw_prev))
+        yaw_prev = yaw
+        if tracked is not None:
+            tracked = follow.floor_from_camera(env, tracked)
+        aim, speed, tilt = follower.command(tracked, tracker.lost, seen is not None)
+        env.target_deg = follow.skill_target_deg(env, aim)
+        env.heading_bias = 0.0
+        env.tilt_cmd = env._fixed_tilt = tilt
+        env._set_stance()
+        s = senses(env, float(np.sign(speed)), tilt)
+        mode = choose_mode(s.forward, s.err_body, mode)
+        rollout.judge_as(mode)
+        walked += speed > 0
+        _, _, term, _, _ = env.step(np.arctanh(runner.act(s)))
+        if term:
+            fell = True
+            break
+    truth = follow.true_sighting(env, person)
+    return {
+        "distance_m": follow.floor_distance_m(env, person),
+        "estimate_m": math.nan if follower.distance is None else follower.distance,
+        "net_cm": 100.0 * float(np.linalg.norm(env.data.qpos[0:2] - start)),
+        "aim_deg": abs(wrap_deg(truth.bearing_deg)),
+        "walked_s": walked * CONTROL_DT,
+        "fell": float(fell),
+    }
+
+
 JOB_KEYS = {*MODES, "episodes", "rounds", "epochs", "seed", "body"}
 
 
@@ -1061,12 +1130,27 @@ def main(argv: list[str] | None = None) -> int:
     e.add_argument("--episodes", type=int, default=4)
     e.add_argument("--switch-episodes", type=int, default=20)
     e.add_argument("--json", type=Path)
+    f = sub.add_parser("follow-spin", help="spin to a person 1 m off, then keep the distance")
+    f.add_argument("policy", type=Path)
+    f.add_argument("--seeds", type=int, default=3)
     j = sub.add_parser("job", help="what the box's master job runs: distil, then evaluate")
     j.add_argument("--out", type=Path, required=True)
     j.add_argument("--config", type=Path, required=True)
     args = ap.parse_args(argv)
     if args.cmd == "job":
         run_job(args.out, args.config)
+        return 0
+    if args.cmd == "follow-spin":
+        policy = json.loads(args.policy.read_text())
+        print("bearing  seed  distance  estimate  net_cm  aim  walked_s  fell")
+        for b in FOLLOW_BEARINGS:
+            for seed in range(args.seeds):
+                r = follow_spin(policy, b, seed)
+                print(
+                    f"{b:+7.0f}  {seed:4d}  {r['distance_m']:8.2f}  {r['estimate_m']:8.2f}  "
+                    f"{r['net_cm']:6.1f}  {r['aim_deg']:4.1f}  {r['walked_s']:8.1f}  "
+                    f"{r['fell']:.0f}"
+                )
         return 0
     if args.cmd == "distill":
         paths = {m: getattr(args, m) for m in MODES}

@@ -456,3 +456,10 @@ def test_a_master_body_must_be_a_table(tmp_path) -> None:
     cfg.write_text(f"[master]\n{teachers}\nbody = 1\n")
     with pytest.raises(ValueError, match="table"):
         master.load_job(cfg)
+
+
+def test_the_follow_spin_check_runs_the_master_under_the_follower() -> None:
+    policy = json.loads(master.Path("policies/master-v1/policy_master.json").read_text())
+    r = master.follow_spin(policy, 90.0, 0, seconds=12.0)
+    assert not r["fell"] and r["aim_deg"] < 15.0
+    assert 0.7 < r["distance_m"] < 1.4
