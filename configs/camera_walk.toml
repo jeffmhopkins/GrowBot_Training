@@ -16,6 +16,8 @@ name = "camera_walk"
 # cares more about that thing. See README "The reward" for what each one does.
 progress = 2.0          # walking along the target direction, full value at the speed cap
 heading = 0.5           # pointing at the target: full value dead on, zero facing away
+progress_width_deg = 0.0  # with > 0: progress pays only while pointing near the target (exp(-(error/width)^2))
+arrive = 0.0            # one-off bonus per target for reaching it quickly (0 = off)
 speed_cap_m_s = 0.01    # CHANGED: 1 cm/s. Tail first this body can only scoot (see README)
 speed_window_s = 1.0    # speed is averaged over this long before the cap is checked
 overspeed = 1.0         # CHANGED: penalty for going faster than the cap (grows with the square); gentler, as turning on the spot drifts past this low cap
