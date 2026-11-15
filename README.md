@@ -105,6 +105,34 @@ speed, how often it broke the speed cap, the heading error over the second half,
 long it took to turn onto the target, and falls. `--sweep` repeats it at the edges of the
 robot variations (lightest, heaviest, slipperiest and so on).
 
+### Following a person
+
+```bash
+.venv/bin/python -m growbot_train.follow policies/look-v6/policy_look.json --seconds 120
+```
+
+runs the follow-me loop of [docs/follow_me.md](docs/follow_me.md) on one skill: a
+person walks to random spots around the robot and sometimes sits, a phone camera model
+sees their face (field of view, jitter, dropouts that grow with distance, a drifting
+distance bias, 100-200 ms of latency), a tracker smooths it, and the follower turns it
+into the heading, speed and camera-height inputs, with the voice script ("follow me",
+"come closer", "go further back", "stay", "come") changing the set distance. The policy
+only ever gets what the camera saw; the person's true position only scores the run: how
+long they were in view, aim and pitch error, distance error, speed while told to stay,
+and falls. One skill at a time, the follower held to what that skill can do (look only
+turns and tilts, the nose walk only backs away, with its camera looking out of its tail
+so its heading is the person's turned half a turn), as the baseline the master policy
+has to beat. The set distance is along the floor; the camera's eye-spacing distance is
+the line to the face, so the follower converts it with the face's elevation. The field
+of view is tested where the face lands in the image, which matters because the lens
+looks 30-85 degrees above the horizon. Distance error is scored only while the distance
+is being held (not on "stay", not while searching). First baseline (nominal body, 3
+seeds of 120 s, no falls): look-v6 keeps the person in view 68% of the time with a mean
+aim error of 45 degrees; the nose walk 34%, mostly losing people off the sides of the
+image and, with no camera-height input, faces that come too close above it. A person walking at
+0.3-0.7 m/s a metre or two away crosses the view faster than either skill turns.
+Distractor people and the replay page come next.
+
 Training progress: `.venv/bin/tensorboard --logdir runs` and open the page it prints.
 The `walk/` graphs are the useful ones: `v_along` (speed toward the target, should climb
 to near the cap), `abs_err_deg` (should fall), `speed` (should stay under the cap) and
@@ -595,6 +623,7 @@ doing only if the CPU runs prove too slow.
 | `growbot_train/vec.py` | Several simulators per worker process (`train.envs_per_worker`) |
 | `growbot_train/export.py` | Trained network to the app's JSON, with a match check |
 | `growbot_train/evaluate.py` | Scores an exported JSON, optional robustness sweep |
+| `growbot_train/follow.py` | The follow-me harness: person, camera model, tracker, follower, voice script |
 | `growbot_train/replay.py` | Writes the browser 3D replay page (`replay_template.html`) |
 | `growbot_train/view.py` | Live MuJoCo viewer with a steerable target, or an mp4 |
 | `growbot_train/policy.py` | Runs an exported JSON with the app runner's arithmetic |
