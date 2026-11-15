@@ -49,8 +49,10 @@ def test_a_teacher_sees_the_frames_its_own_env_builds(mode: str) -> None:
 
 def test_only_the_speeds_sign_picks_the_waddle() -> None:
     for err in (0.0, 90.0, -170.0, 180.0):
-        assert master.choose_mode(-0.2, err) == "back"
         assert master.choose_mode(0.0, err) == "look"
+        assert master.choose_mode(1.0, err) != "back"
+    for err in (0.0, 44.0, -45.0):
+        assert master.choose_mode(-0.2, err) == "back"
     assert master.choose_mode(1.0, 29.0) == "walk"
     assert master.choose_mode(1.0, -31.0) == "look"
     assert master.choose_mode(1.0, 170.0) == "look"
@@ -60,6 +62,14 @@ def test_the_walk_lets_go_only_past_its_hysteresis() -> None:
     assert master.choose_mode(1.0, 35.0, "walk") == "walk"
     assert master.choose_mode(1.0, 35.0, "look") == "look"
     assert master.choose_mode(1.0, 45.0, "walk") == "look"
+
+
+def test_backing_wide_of_the_target_spins_with_look_first() -> None:
+    for err in (46.0, -90.0, 180.0):
+        assert master.choose_mode(-0.2, err) == "look"
+    assert master.choose_mode(-0.2, 50.0, "back") == "back"
+    assert master.choose_mode(-0.2, 50.0, "look") == "look"
+    assert master.choose_mode(-0.2, -56.0, "back") == "look"
 
 
 def test_teacher_actions_are_matched_in_radians() -> None:
