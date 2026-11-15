@@ -1,9 +1,11 @@
 # Follow me: the plan
 
 Status: the simulator harness (person, camera model, tracker, follower, voice script)
-is built for single skills (`growbot_train/follow.py`). The master is distilled
-(`growbot_train/master.py`, `policies/master-v2`) but not yet fine-tuned or run through
-the harness; distractors and the replay are not built. Last verified 2026-11-15.
+is built for single skills (`growbot_train/follow.py`) and for the master
+(`python -m growbot_train.master follow-me POLICY [--two]`), with one distractor. The
+master is distilled (`policies/master-v2`) but not fine-tuned; the replay with people in
+it is not built. Results are under "The final test, in the simulator". Last verified
+2026-11-15.
 
 The end use for the GrowBot policies (Jeff, 2026-11-14): say "follow me" and the robot
 follows the person, keeping a set distance and keeping the phone's camera on them, and
@@ -159,7 +161,13 @@ A small controller between the tracker and the policy:
   floor distance reads short (up to 15 cm) the truth ends up to 18 cm out, which no
   follower rule can see.
 - **Pitch:** the tracker's vertical error, integrated into `cmd_pitch`, so the camera
-  keeps the face mid-frame.
+  keeps the face mid-frame. Only look takes a camera height, so it moves only while
+  standing and within 20 degrees of the person: a walk's own stance pitches the lens
+  20-30 degrees, and integrating that drove the height to its limit in a second. A turn
+  wider than 20 degrees, or a search, is sent with the camera no lower than level (0),
+  and the height asked for comes back once it faces them: look barely turns with the
+  camera low (Master v2 and look-v9 managed 11-45 degrees of a 90-degree turn in 10 s at
+  -1, against 80-88 at 0).
 - **Hold:** once the camera has been within about 6 degrees of the person for a second
   and the speed is 0, stop calling the policy and hold the servos at the average of the
   last second of commands, so the legs stop fiddling and it stops creeping (Jeff,
@@ -224,6 +232,24 @@ It reports, over time and in summary:
     the viewer's 3D input-arrow style;
   - where the tracker believes the person is, drawn next to where they really are, so
     noise and lag are visible.
+
+**First results, Master v2** (`master follow-me`, 8 seeds of 120 s, seed 0 the
+nominal body; one distractor wandering the same room with `--two`; the track takes
+faces by the app's own rule, `growbot-follow.js` Track):
+
+- No falls, one person or two.
+- One person: in frame 9-61% of the time (median about 46%), lost about half of it;
+  0.35-0.75 m off the set distance on average. The person walks 0.3-0.7 m/s around a
+  0.7-2.5 m ring; the master walks 5.5 cm/s and spins about as fast as look-v9, so a
+  person crossing the room leaves the 60-degree frame. The master with its walk turned
+  off keeps them in frame about as long as look-v9 alone (59-72%): the walks cost frame
+  time, and buy distance (look alone is 0.8-1.1 m off).
+- Two people: it holds the wrong person 16-39% of the time. After the right person
+  leaves the frame, the app's rule takes any face within 130 degrees of where they
+  were and within half the distance, and the stranger is often that face. Tighter gates
+  trade it for losing the right person more (10 + 20 degrees a second: 8% wrong, 84%
+  lost). This needs who-is-who, not a gate: the speaker lock (P4) or a face's look.
+- On "stay": 0.6-2.1 cm/s of movement, which includes the turning to watch.
 
 It passes when the robot keeps the person in frame through the whole script, settles
 to the set distance after each command, holds still on "stay", never switches to a

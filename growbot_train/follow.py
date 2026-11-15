@@ -291,6 +291,11 @@ class Follower:
     # About 0.12 a second per degree: slow enough not to ring against the camera's
     # latency and the stance's own lag.
     pitch_gain: float = 0.005
+    # Look turns barely at all with the camera low (Master v2 and look-v9: 11-45 degrees of a
+    # 90-degree turn in 10 s at -1, 80-88 at 0), so a turn or a search is sent with the
+    # camera no lower than this; the height asked for comes back once it faces them.
+    turn_tilt_min: float = 0.0
+    turn_tilt_deg: float = 20.0
     search_deg: float = 90.0  # the heading error sent while searching: a steady spin
     search_sign: float = 1.0
     near_m: float = 0.5
@@ -324,17 +329,17 @@ class Follower:
         if tracked is None or lost:
             # A distance from before they were lost is stale by the time they're found.
             self.distance, self.frames, self.walking = None, 0, False
+        turning_tilt = max(self.tilt, self.turn_tilt_min)
         if tracked is None:
             # Never seen: spin on the spot until they come into view.
-            return self.search_sign * self.search_deg, 0.0, self.tilt
+            return self.search_sign * self.search_deg, 0.0, turning_tilt
         bearing = tracked.bearing_deg
         if lost:
             # Spin toward the side of the image they were last on, and keep spinning that
             # way: chasing the remembered bearing would stall facing the spot they left.
-            return self.search_sign * self.search_deg, 0.0, self.tilt
+            return self.search_sign * self.search_deg, 0.0, turning_tilt
         self.search_sign = 1.0 if bearing >= 0 else -1.0
         if fresh:
-            self.tilt = float(np.clip(self.tilt - self.pitch_gain * tracked.pitch_deg, -1.0, 1.0))
             self.frames += 1
             # A plain mean until it holds distance_avg_s of frames, then a moving one: an
             # early long frame weighs no more than any other.
@@ -359,6 +364,13 @@ class Follower:
                 speed = 1.0
             elif err < -self.back_band_m:
                 speed = -min(1.0, (-err - self.back_band_m) / self.back_ramp_m)
+        # Only look takes a camera height, so it is steered only while standing and roughly
+        # facing them: a walk's own stance pitches the lens 20-30 degrees, which read as the
+        # face far above and drove the height to its limit in a second.
+        if fresh and speed == 0.0 and abs(bearing) <= self.turn_tilt_deg:
+            self.tilt = float(np.clip(self.tilt - self.pitch_gain * tracked.pitch_deg, -1.0, 1.0))
+        if abs(bearing) > self.turn_tilt_deg:
+            return bearing, speed, turning_tilt
         return bearing, speed, self.tilt
 
 

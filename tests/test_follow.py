@@ -91,8 +91,8 @@ def test_a_far_person_behind_never_makes_it_back_up() -> None:
 def test_stay_stops_walking_but_keeps_turning_and_tilting() -> None:
     f = Follower(frames=50)
     f.voice("stay")
-    yaw, speed, tilt = f.command(Sighting(40.0, 10.0, 3.0), lost=False)
-    assert yaw == 40.0 and speed == 0.0 and tilt < 1.0
+    yaw, speed, tilt = f.command(Sighting(15.0, 10.0, 3.0), lost=False)
+    assert yaw == 15.0 and speed == 0.0 and tilt < 1.0
     f.voice("follow me")
     assert f.command(Sighting(0.0, 0.0, 3.0), lost=False)[1] == 1.0
 
@@ -375,3 +375,23 @@ def test_losing_the_person_forgets_their_distance() -> None:
     f.command(_seen(2.0), lost=False)
     f.command(_seen(2.0), lost=True)
     assert f.distance is None and not f.walking
+
+
+def test_the_camera_height_moves_only_while_standing_and_facing_them() -> None:
+    """Only look takes a camera height: a walk's stance pitches the lens, which must not read
+    as the face far above, and a wide bearing's pitch isn't the face's height."""
+    f = Follower(frames=50)
+    _, speed, tilt = f.command(Sighting(0.0, 40.0, 3.0), lost=False)
+    assert speed == 1.0 and tilt == 1.0
+    f = Follower(frames=50)
+    _, _, tilt = f.command(Sighting(25.0, 40.0, 1.0), lost=False)
+    assert tilt == 1.0
+
+
+def test_a_turn_or_a_search_is_sent_with_the_camera_no_lower_than_level() -> None:
+    """Look barely turns with the camera low, so a turn takes it to 0 and gives it back after."""
+    f = Follower(frames=50, tilt=-1.0)
+    assert f.command(Sighting(60.0, 0.0, 1.0), lost=False)[2] == 0.0
+    assert f.command(Sighting(60.0, 0.0, 1.0), lost=True)[2] == 0.0
+    assert f.command(None, lost=True)[2] == 0.0
+    assert f.command(Sighting(5.0, 0.0, 1.0), lost=False)[2] == -1.0
