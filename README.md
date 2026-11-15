@@ -478,8 +478,8 @@ v9 (run 32fae7c5, kept as `policies/look-v9`) is that run. It is the look teache
   v7 25), where v7 ranged 7-25.
 - **Half turns:** about 20 s on random bodies, the same as v7; 13-21 s in the sweep
   (v7 18-29), but 17.6 s on the nominal body (v7 15.8). The bar asks for about 12 s.
-  On a harder test than the figure above (24 held-out random bodies, minute-long
-  spins) the open-loop spin averages only 11 degrees a second, and a CMA-ES search for a
+  Measured another way (24 held-out random bodies, 9 s spins from a standstill),
+  the open-loop spin averages only 11 degrees a second, and a CMA-ES search for a
   faster spin that holds up there found none. So a 12 s half turn is out of reach on
   these legs everywhere but near the as-built body.
 - **Creep and falls:** it creeps 0.8 cm/s on target (v7 0.7), which Hold stops. 0 of 36
