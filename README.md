@@ -432,7 +432,7 @@ tighter speed band pays a slow turn (v5 learned exactly that), while the anchor 
 quick turn and a slow one alike for the same wander. v7 (run 200aa414, kept as
 `policies/look-v7`), trained before those two changes, ends 11.5 degrees off on average
 from every start, 180 included, takes about 20 s for half a turn and 10 s for a quarter,
-creeps 0.7 cm/s, and fell in none of its 36 randomised evaluations nor any of the 195 in
+creeps 0.7 cm/s, and fell in none of its 36 randomised evaluations nor any of the 189 in
 the sweep. In the follow-me test it keeps the person in view less than v6 does (56% vs
 68% on the nominal body), so the follow baseline uses both. Unlike the camera walk it trains on
 the printed build with bare-print surfaces (see [Bodies](#bodies)), like the heading walk.
