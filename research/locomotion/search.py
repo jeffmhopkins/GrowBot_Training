@@ -207,7 +207,16 @@ NOSE: list[Scenario] = [
              "As n1, never rearing past 45 degrees", direction=-1.0, max_pitch_deg=25.0,
              peak_pitch_deg=45.0),
 ]  # fmt: skip
-SCENARIOS += STOCK + FEET + VAULT + WADDLE + NOSE
+# Camera first again, searched over many more random robots (--train-domains 12): the w1
+# lift and fall walks 4.9 cm/s as built but 0.9 on random robots (2026-11-15), and every
+# speed-input policy cloned from it stalled there.
+CAMERA: list[Scenario] = [
+    Scenario("c1", {**F, "toe_tail": "pla", "toe_nose": "pla"},
+             "Camera first, robust, standing 40+ degrees", min_pitch_deg=40, rest_leg_rad=0.6),
+    Scenario("c2", {**F, "toe_tail": "pla", "toe_nose": "pla"},
+             "Camera first, robust, any height"),
+]  # fmt: skip
+SCENARIOS += STOCK + FEET + VAULT + WADDLE + NOSE + CAMERA
 BY_NAME = {s.name: s for s in SCENARIOS}
 
 # Filled in each worker by _init so every candidate reuses compiled models.
@@ -414,6 +423,7 @@ def main() -> None:
     p.add_argument("--vault", action="store_true", help="only the rocker-foot vault scenarios")
     p.add_argument("--waddle", action="store_true", help="only the tall waddle scenarios")
     p.add_argument("--nose", action="store_true", help="only the nose-first scenarios")
+    p.add_argument("--camera", action="store_true", help="only the robust camera-first ones")
     p.add_argument("--quick", action="store_true")
     args = p.parse_args()
     if args.quick:
@@ -427,6 +437,7 @@ def main() -> None:
         (args.vault, VAULT),
         (args.waddle, WADDLE),
         (args.nose, NOSE),
+        (args.camera, CAMERA),
     ):
         if flag:
             group = scens

@@ -104,6 +104,14 @@ class TaskConfig:
     retarget_every_s: tuple[float, float] = (6.0, 14.0)
     retarget_max_deg: float = 120.0
     gait_hz: float = 1.0
+    # A gait the robot always walks (a Keyframes JSON, repo-relative), the policy adding
+    # only a correction of up to residual_rad per leg: a robust open-loop gait stays in
+    # charge, so PPO can't unlearn it (the cloned nose walk drifted to half the gait's
+    # own speed). Its hz must equal gait_hz. The speed command sets the step rate (the
+    # clock runs at speed_cmd x gait_hz; a stop freezes it), the way the bench showed
+    # this gait's speed scales. Empty = off: the policy drives the legs on its own.
+    residual_gait: str = ""
+    residual_rad: float = 0.5
     history_frames: int = 5
     # action [-1, 1] -> servo angle in radians; 1.0 rad is about 57 degrees each way.
     action_to_rad: float = 1.0

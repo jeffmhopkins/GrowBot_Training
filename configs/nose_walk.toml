@@ -40,7 +40,9 @@ episode_seconds = 60.0      # CHANGED: a minute, so slow turns and speed changes
 initial_error_deg = 60.0    # CHANGED: first target up to 60 degrees off: wider turns are the look policy's spin, which the master hands them to (the nose walk only backs away from the camera)
 retarget_every_s = [10.0, 25.0]  # CHANGED: the target moves every 10-25 s, long enough for a slow turn to finish...
 retarget_max_deg = 60.0         # CHANGED: ...by up to this much, for the same reason
-gait_hz = 0.906             # CHANGED: the cloned waddle's own rate, so its rhythm lines up with the clock
+gait_hz = 0.906             # CHANGED: the waddle's own rate
+residual_gait = "configs/gaits/nose_walk.json"  # CHANGED: the bench's low nose-first waddle (search.py n2: about 12 degrees nose-up, 3.1 cm/s with no falls on random robots) always runs; the policy adds corrections and steering. Cloned instead (a810ca07), PPO drifted off it to 1.3-1.8 cm/s by 15M
+residual_rad = 0.5          # the most the policy moves a leg off the gait (radians)
 history_frames = 5          # how many past ticks of sensors the policy sees
 action_to_rad = 1.57        # CHANGED: the waddle uses the servos' whole range
 fall_tilt_deg = 55.0        # tipped this far from the starting stance = fallen (the app aborts at 55)
@@ -53,7 +55,7 @@ speed = "command"           # CHANGED: a speed input: 0 stop, up to +1 the cap, 
 speed_command_every_s = [6.0, 15.0]  # CHANGED: a new speed every 6-15 s, so it has time to reach one before the next...
 speed_stop_prob = 0.15             # CHANGED: ...3 in 20 of them a stop (the master policy spins and looks at 0)...
 speed_back_min = 0.0               # CHANGED: ...the rest anywhere from 0 to +1: it only walks nose first
-speed_ramp_steps = 8000000  # CHANGED: every command full speed at first, widening over the first 8M steps (it must learn to walk before it can learn to stop)
+speed_ramp_steps = 0       # every command from the start: the speed sets the waddle's step rate, so slow and stopped walks need no learning first
 speed_reward = "progress"  # CHANGED: paid like the heading walk up to the commanded speed, so flailing early costs no more than keeping still
 tilt_command = false        # a camera-height input: -1 low (camera looks almost straight up), +1 tall
 tilt_lift_deg = [-30.0, 6.0]       # what -1 and +1 mean, degrees from the resting pitch
@@ -89,13 +91,12 @@ heading_drift_deg_per_s = 0.2  # CHANGED: slower, so over the minute-long episod
 heading_refresh_ticks = [1, 6]
 push_every_s = [0.0, 0.0]   # a sudden shove this often (off here)
 push_pitch_rad_s = 0.0      # how hard a shove spins it (pitch, rad/s)
-ramp_steps = 20000000      # CHANGED: start near the as-built robot (the cloned gait is tuned there) and widen to the full ranges over the first 20M steps
+ramp_steps = 5000000       # CHANGED: the robots widen to the full ranges over the first 5M steps (the waddle walks on all of them, but the corrections are learned first where it walks best)
 ramp_from = 0.15
 ramp_to = 1.0               # where the body ranges stop widening (the targets still go to full)
 
 [train]
 total_steps = 30000000
-warm_gait = "configs/gaits/nose_walk.json"  # CHANGED: clone the bench's low nose-first waddle (search.py n2: about 12 degrees nose-up, never past 45) before PPO; Jeff, 2026-11-15: the upright nose walk wasn't making progress
 n_envs = 0                  # 0 = one simulator per CPU thread
 envs_per_worker = 4         # CHANGED: four simulators per worker process, so the cores stay busy (as the look)
 n_steps = 64                # CHANGED: a quarter of 256, so 4x the simulators keep the rollout the same size
@@ -106,7 +107,7 @@ gamma = 0.99
 gae_lambda = 0.95
 clip_range = 0.2
 ent_coef = 0.0
-log_std_init = -1.5         # CHANGED: less exploration noise, so the cloned gait's timing survives the first updates
+log_std_init = -1.5         # CHANGED: little exploration noise: the gait does the walking, so the corrections start small
 policy_layers = [128, 128]
 value_layers = [256, 256]
 checkpoint_every_steps = 2000000

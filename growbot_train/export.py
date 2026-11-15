@@ -95,6 +95,7 @@ def build_policy(model: PPO, norm: Any, cfg: config_mod.Config, name: str) -> di
                 "gait_sin": {"type": "sin", "frequency": cfg.task.gait_hz},
                 "gait_cos": {"type": "cos", "frequency": cfg.task.gait_hz},
             },
+            **_residual_spec(cfg),
             # The runner has no heading channel yet, so the heading error rides the
             # existing cmd_yaw input; this block tells the app what to put there.
             "cmd_yaw": {
@@ -217,3 +218,25 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+def _residual_spec(cfg: config_mod.Config) -> dict[str, Any]:
+    """A residual-gait policy's legs are the gait plus its output, on a clock that runs
+    at the speed command's size; the runner has to know both."""
+    if not cfg.task.residual_gait:
+        return {}
+    from growbot_train.gait import Keyframes
+
+    g = Keyframes.load_repo(cfg.task.residual_gait)
+    return {
+        "residual_gait": {
+            "hz": g.hz,
+            "keys_rad": g.keys.round(4).tolist(),
+            "residual_rad": cfg.task.residual_rad,
+            "meaning": (
+                "leg command (rad) = gait(phase) + output x residual_rad, eased in over "
+                "the first second; the gait_sin/cos phase advances at frequency x "
+                "|speed command| (a stop holds it), not at a fixed rate"
+            ),
+        }
+    }
