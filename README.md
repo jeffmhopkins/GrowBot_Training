@@ -34,8 +34,8 @@ standing still. `task.speed_ramp_steps` starts every command at full speed with 
 and widens the spread to the full range over the first 8M steps. Its evaluation adds a
 speed-tracking table, the speed it walks at for each commanded share of the cap. The first
 run walked 1.7 cm/s but held 34-50 degrees off and rarely came round from behind, so it now
-uses lift and fall's turning reward too (`progress_width_deg`, `heading_width_deg`,
-`turn`, `arrive`). See
+uses a turning reward: lift and fall's `turn` and `arrive`, plus progress and heading
+that count only near the target (`progress_width_deg`, `heading_width_deg`). See
 [The camera walk](#the-camera-walk) for why the camera walk exists and what it can and
 can't do with this body.
 

@@ -11,7 +11,7 @@ name = "nose_walk"  # CHANGED: the run's name
 # cares more about that thing. See README "The reward" for what each one does.
 progress = 2.0          # walking along the target direction, full value at the speed cap
 heading = 0.5           # pointing at the target: full value dead on, zero facing away
-heading_width_deg = 40.0  # CHANGED: ...and it pays only near it (exp(-(error/40)^2)), as for lift and fall
+heading_width_deg = 40.0  # CHANGED: ...and it pays only near it (exp(-(error/40)^2)), as for look
 progress_width_deg = 45.0  # CHANGED: progress counts only while pointing near the target: the first nose walk held 34-50 degrees off and rarely came round from behind
 arrive = 30.0           # CHANGED: one-off bonus per target that needs a turn, once it has held within 15 degrees for 1 s, less the longer it took (none after 20 s)
 speed_cap_m_s = 0.03    # "slow": 3 cm/s. Upstream's forward walk does about 3.6 cm/s
