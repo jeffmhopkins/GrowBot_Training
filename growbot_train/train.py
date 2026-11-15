@@ -87,6 +87,7 @@ class Curriculum(BaseCallback):
         k = ramp_scale(self.cfg, self.num_timesteps)
         self.training_env.set_attr("dr_scale", k)
         self.logger.record("walk/dr_scale", k)
+        self.logger.record("walk/body_scale", min(k, self.cfg.randomization.ramp_to))
         c = cmd_scale(self.cfg, self.num_timesteps)
         self.training_env.set_attr("cmd_scale", c)
         self.logger.record("walk/cmd_scale", c)

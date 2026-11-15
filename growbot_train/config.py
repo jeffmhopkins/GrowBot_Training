@@ -218,6 +218,11 @@ class RandomizationConfig:
     # 0 = full ranges from the start.
     ramp_steps: int = 0
     ramp_from: float = 0.15
+    # Where the body, servo, friction and sensor-offset ranges stop widening, as a share
+    # of their full width, in training and evaluation alike; the target ranges still
+    # widen to full. A gait that collapses on the wider robots holds the spread it
+    # learned on. 1 = the full ranges.
+    ramp_to: float = 1.0
 
 
 @dataclass

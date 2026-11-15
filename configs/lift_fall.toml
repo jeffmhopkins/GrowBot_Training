@@ -85,6 +85,7 @@ push_every_s = [0.0, 0.0]   # a sudden shove this often (off until it can scoot)
 push_pitch_rad_s = 0.0      # how hard a shove spins it (pitch, rad/s)
 ramp_steps = 25000000      # CHANGED: start near the as-built robot (the gait only works there open loop) and widen to the full ranges over half the run
 ramp_from = 0.15            # ...from 15% of each range
+ramp_to = 0.35              # CHANGED: but the body ranges stop at 35%: on the box the run walked at 3.8 cm/s near 0.3 and fell apart past about 0.45 (0.6 cm/s by 0.9); the targets still widen to full
 
 [train]
 total_steps = 50000000      # CHANGED: starts from a moving gait, so a shorter run

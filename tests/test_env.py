@@ -755,6 +755,34 @@ def test_the_curriculum_ramps_to_the_full_ranges() -> None:
     assert ramp_scale(cfg, 5000) == 1.0
 
 
+def test_ramp_to_holds_the_bodies_narrow_while_the_targets_widen() -> None:
+    cfg = Config()
+    cfg.randomization.ramp_to = 0.35
+    env = GrowBotHeadingEnv(cfg)
+    env.dr_scale = 1.0  # end of the ramp, and evaluation
+    assert env._body_k() == pytest.approx(0.35)
+    assert env._near((0.5, 1.5), 1.0) == pytest.approx((0.825, 1.175))
+    assert env._target_k() == 1.0
+    env.dr_scale = 0.2  # below the cap the ramp is unchanged
+    assert env._body_k() == pytest.approx(0.2)
+    for bad in (0.0, 0.1):  # out of range, and under ramp_from
+        cfg.randomization.ramp_to = bad
+        with pytest.raises(ValueError, match="ramp_to"):
+            GrowBotHeadingEnv(cfg)
+
+
+def test_the_sweep_tests_the_edges_training_saw() -> None:
+    from growbot_train.evaluate import sweep_cases
+
+    cfg = Config()
+    full = sweep_cases(cfg)
+    cfg.randomization.ramp_to = 0.5
+    half = sweep_cases(cfg)
+    lo = cfg.randomization.mass_scale[0]
+    assert full["light"]["mass_scale"] == pytest.approx(lo)
+    assert half["light"]["mass_scale"] == pytest.approx(1.0 + (lo - 1.0) * 0.5)
+
+
 def test_the_speed_curriculum_starts_every_command_at_full_speed() -> None:
     from growbot_train.train import cmd_scale
 

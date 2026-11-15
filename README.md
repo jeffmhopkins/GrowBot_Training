@@ -316,7 +316,9 @@ the full randomisation, the gait earns less than standing still, so PPO unlearns
 the first million steps. So this one starts on robots close to the as-built one
 (`randomization.ramp_steps`: every body, servo, friction and sensor-offset range, and
 how far off the target starts and jumps, begins at 15% of its width and widens to the
-full range over the first 25M steps, half of a full run), walks at the cap with no speed input (the gait has one speed), and explores with
+full range over the first 25M steps, half of a full run). The body ranges stop at 35%
+(`randomization.ramp_to`) while the targets keep widening: the first run from it walked at
+3.8 cm/s near 30% and fell apart past about 45%. It walks at the cap with no speed input (the gait has one speed), and explores with
 less noise (`train.log_std_init = -1.5`) so its timing survives the first updates. The
 speed cap is 5 cm/s, the stance bonus and lean-back penalty are off as the body bounces,
 and only going over onto the screen (past 88 degrees) or forwards ends an episode.
@@ -396,6 +398,9 @@ and friction from 0.2 to 2.2 (0.5 to 1.6x a floor's own with per-surface materia
 heading) and a random refresh rate (like a camera target). `ramp_steps` turns on a
 curriculum: every body, servo, friction and sensor-offset range starts at `ramp_from` of
 its width around the as-built robot and widens to the full range over that many steps.
+`ramp_to` stops the body ranges at that share of their width, in training and evaluation
+alike (the `--sweep` edges too), while the target ranges still widen to full. A run
+resumed from before `ramp_to` existed keeps its saved settings, so it has no cap.
 The sensor noise, the heading's refresh rate and the choice of floor stay at full
 strength throughout. The ramp counts absolute steps, so a run cut shorter than
 `ramp_steps` ends before reaching the full ranges. All of it is under
