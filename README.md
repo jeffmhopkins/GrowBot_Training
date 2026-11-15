@@ -393,7 +393,8 @@ heading) and a random refresh rate (like a camera target). `ramp_steps` turns on
 curriculum: every body, servo, friction and sensor-offset range starts at `ramp_from` of
 its width around the as-built robot and widens to the full range over that many steps.
 `ramp_to` stops the body ranges at that share of their width, in training and evaluation
-alike, while the target ranges still widen to full.
+alike (the `--sweep` edges too), while the target ranges still widen to full. A run
+resumed from before `ramp_to` existed keeps its saved settings, so it has no cap.
 The sensor noise, the heading's refresh rate and the choice of floor stay at full
 strength throughout. The ramp counts absolute steps, so a run cut shorter than
 `ramp_steps` ends before reaching the full ranges. All of it is under

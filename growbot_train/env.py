@@ -186,6 +186,8 @@ class GrowBotHeadingEnv(gym.Env):
             raise ValueError('task.speed_reward "progress" needs task.speed_back_min >= 0')
         if not 0.0 < cfg.randomization.ramp_to <= 1.0:
             raise ValueError("randomization.ramp_to must be in (0, 1]")
+        if cfg.randomization.ramp_to < cfg.randomization.ramp_from:
+            raise ValueError("randomization.ramp_to must be at least ramp_from")
         self.channels = channels_for(cfg)
         self._torso = m.body("base_body").id
         self._legs = [m.body("right_leg").id, m.body("left_leg").id]
@@ -357,7 +359,8 @@ class GrowBotHeadingEnv(gym.Env):
             m.geom_friction[:, 0] = params["friction"]
 
     def _near(self, lo_hi: tuple[float, float], nominal: float) -> tuple[float, float]:
-        """A range drawn in toward the as-built value by the curriculum (dr_scale)."""
+        """A range drawn in toward the as-built value by the curriculum (dr_scale, capped
+        at ramp_to)."""
         k = self._body_k()
         if k >= 1.0:
             return lo_hi

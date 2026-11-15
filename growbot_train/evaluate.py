@@ -17,7 +17,8 @@ A policy with a speed input also gets a speed-tracking table: what it walks at, 
 dead ahead, for commands of 0, 1/3, 2/3 and all of the cap.
 
 ``--sweep`` repeats it with one body parameter pinned at a time to the edge of its
-training range, the robustness check upstream runs before shipping a policy.
+training range (drawn in by randomization.ramp_to), the robustness check upstream runs
+before shipping a policy.
 """
 
 from __future__ import annotations
@@ -133,27 +134,37 @@ def speed_tracking(
 
 def sweep_cases(cfg: config_mod.Config) -> dict[str, dict[str, Any]]:
     r = cfg.randomization
+    k = min(1.0, r.ramp_to)
+
+    # Each edge drawn in toward the as-built value as far as training's were (ramp_to).
+    def lo(rng: tuple[float, float], nominal: float = 1.0) -> float:
+        return nominal + (rng[0] - nominal) * k
+
+    def hi(rng: tuple[float, float], nominal: float = 1.0) -> float:
+        return nominal + (rng[1] - nominal) * k
+
     floors = {f: {"floor": f} for f in cfg.task.floors} if cfg.task.surfaces else {}
     # With surfaces, the floor's slickness is drawn from its own range: test its edges.
-    lo, hi = r.floor_friction_scale if cfg.task.surfaces else r.friction
+    fr = r.floor_friction_scale if cfg.task.surfaces else r.friction
     key = "floor_scale" if cfg.task.surfaces else "friction"
+    fr_mid = 1.0 if cfg.task.surfaces else sum(r.friction) / 2
     return {
         **floors,
-        "light": {"mass_scale": r.mass_scale[0]},
-        "heavy": {"mass_scale": r.mass_scale[1]},
-        "short_legs": {"leg_scale": [r.leg_length_scale[0]] * 2},
-        "long_legs": {"leg_scale": [r.leg_length_scale[1]] * 2},
-        "weak_servos": {"gain": r.servo_gain_scale[0]},
-        "strong_servos": {"gain": r.servo_gain_scale[1]},
-        "slippery": {key: lo},
-        "grippy": {key: hi},
-        "slow_relay": {"delay_s": r.relay_delay_s[1]},
-        "slow_sensors": {"sensor_delay_s": r.sensor_delay_s[1]},
-        "weak_torque": {"torque_scale": r.servo_torque_scale[0]},
-        "narrow_feet": {"foot_width": r.foot_width_scale[0]},
-        "mis_trimmed": {"trim": np.array([r.trim_err_rad, -r.trim_err_rad])},
-        "nose_heavy": {"com": np.array([r.com_x_m[1], 0.0, 0.0])},
-        "tail_heavy": {"com": np.array([r.com_x_m[0], 0.0, 0.0])},
+        "light": {"mass_scale": lo(r.mass_scale)},
+        "heavy": {"mass_scale": hi(r.mass_scale)},
+        "short_legs": {"leg_scale": [lo(r.leg_length_scale)] * 2},
+        "long_legs": {"leg_scale": [hi(r.leg_length_scale)] * 2},
+        "weak_servos": {"gain": lo(r.servo_gain_scale)},
+        "strong_servos": {"gain": hi(r.servo_gain_scale)},
+        "slippery": {key: lo(fr, fr_mid)},
+        "grippy": {key: hi(fr, fr_mid)},
+        "slow_relay": {"delay_s": hi(r.relay_delay_s, 0.04)},
+        "slow_sensors": {"sensor_delay_s": hi(r.sensor_delay_s, 0.0)},
+        "weak_torque": {"torque_scale": lo(r.servo_torque_scale)},
+        "narrow_feet": {"foot_width": lo(r.foot_width_scale)},
+        "mis_trimmed": {"trim": np.array([r.trim_err_rad * k, -r.trim_err_rad * k])},
+        "nose_heavy": {"com": np.array([hi(r.com_x_m, 0.0), 0.0, 0.0])},
+        "tail_heavy": {"com": np.array([lo(r.com_x_m, 0.0), 0.0, 0.0])},
     }
 
 
