@@ -22,7 +22,7 @@ There are five walks, each a config file:
 | [`nose_walk.toml`](configs/nose_walk.toml) | nose first, at a commanded speed (from a stop up to 3 cm/s) | as the heading walk | standing |
 | [`camera_walk.toml`](configs/camera_walk.toml) | **tail first, toward what the phone's camera sees** | a few degrees taller, to lift the camera's view | standing (folded starts and shoves come back once it can scoot) |
 | [`lift_fall.toml`](configs/lift_fall.toml) | tail first by lifting the body and letting it fall | tall, bouncing (about 55 to 64 degrees as built) | standing |
-| [`lift_fall_speed.toml`](configs/lift_fall_speed.toml) | as lift and fall, at a commanded speed (from a stop up to 7 cm/s), steering within 60 degrees: the master policy's forward walk (wider turns are the look policy's spin) | as lift and fall | standing |
+| [`lift_fall_speed.toml`](configs/lift_fall_speed.toml) | as lift and fall, at a commanded speed (from a stop up to 4 cm/s, its honest top), steering within 60 degrees: the master policy's forward walk (wider turns are the look policy's spin) | as lift and fall | standing |
 
 The nose walk is the heading walk with a speed input: the master policy's way of backing
 away from the camera. Scored on matching the command, a policy that can't walk yet earns

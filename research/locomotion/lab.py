@@ -53,6 +53,10 @@ class Scenario:
     swing_rad: float = 1.5
     # Camera height: the average pitch (degrees nose-up) the gait must hold, 0 for none.
     min_pitch_deg: float = 0.0
+    # The other way: the average pitch it must stay under (a low waddle), 0 for none.
+    max_pitch_deg: float = 0.0
+    # Which way counts as forward: +1 tail (camera) first, -1 nose first.
+    direction: float = 1.0
     # Leg angle (radians) held while it is set down, and the gait eases in from. Long
     # rocker legs at 0 tip it onto its nose; tucked they let it sit on its tail.
     rest_leg_rad: float = 0.0
@@ -464,16 +468,22 @@ class KeyframeGait:
 FALL_COST = 0.3
 
 
-def score(results: list[dict[str, float]], min_pitch_deg: float = 0.0) -> float:
-    """What the search climbs: forward speed, a little drift cost (a policy steers that
-    out, but a gait that mostly spins is not a walk), and falling is ruinous. With a
-    camera height to hold, each degree the average pitch falls short costs 0.1 cm/s."""
+def score(
+    results: list[dict[str, float]],
+    min_pitch_deg: float = 0.0,
+    max_pitch_deg: float = 0.0,
+    direction: float = 1.0,
+) -> float:
+    """What the search climbs: speed the scenario's way, a little drift cost (a policy
+    steers that out, but a gait that mostly spins is not a walk), and falling is ruinous.
+    With a height to hold, each degree the average pitch is past it costs 0.1 cm/s."""
     s = [
-        r["v_fwd"]
+        direction * r["v_fwd"]
         - 0.3 * abs(r["v_side"])
         - 0.0002 * abs(r["yaw_deg_s"])
         - r["fell"] * FALL_COST
         - 0.001 * max(0.0, min_pitch_deg - r["mean_pitch"])
+        - 0.001 * (max(0.0, r["mean_pitch"] - max_pitch_deg) if max_pitch_deg else 0.0)
         for r in results
     ]
     return float(np.mean(s))

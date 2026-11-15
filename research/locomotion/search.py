@@ -197,7 +197,14 @@ WADDLE: list[Scenario] = [
              "Tall waddle, dipped feet, no height floor (just stood up to start)",
              rest_leg_rad=0.6),
 ]  # fmt: skip
-SCENARIOS += STOCK + FEET + VAULT + WADDLE
+# Jeff (2026-11-15): backing away from the camera is the nose-first low waddle, the body
+# dropped lower than its resting stance (about 35-40 degrees nose-up as set down) to do it,
+# like the very first policy. Stock bare legs, the servos' whole swing.
+NOSE: list[Scenario] = [
+    Scenario("n1", {**F, "toe_tail": "pla", "toe_nose": "pla"},
+             "Nose-first low waddle, stock bare feet", direction=-1.0, max_pitch_deg=25.0),
+]  # fmt: skip
+SCENARIOS += STOCK + FEET + VAULT + WADDLE + NOSE
 BY_NAME = {s.name: s for s in SCENARIOS}
 
 # Filled in each worker by _init so every candidate reuses compiled models.
@@ -218,7 +225,8 @@ def _eval(x: np.ndarray) -> float:
     per: dict[str, list[dict]] = {}
     for b in _BENCHES:
         per.setdefault(b.dom.floor, []).append(b.run(gait, _SECONDS))
-    s = [score(rs, _BENCHES[0].scen.min_pitch_deg) for rs in per.values()]
+    sc = _BENCHES[0].scen
+    s = [score(rs, sc.min_pitch_deg, sc.max_pitch_deg, sc.direction) for rs in per.values()]
     return 0.5 * float(np.mean(s)) + 0.5 * min(s)
 
 
@@ -299,9 +307,10 @@ def cma(f, x0: np.ndarray, sigma: float, pop: int, gens: int, pool: Pool, log=No
     return best_x, best_f
 
 
-def _stats(rs: list[dict]) -> dict:
+def _stats(rs: list[dict], direction: float = 1.0) -> dict:
+    """Speeds along the scenario's own forward, so p10 is the slow tail either way."""
     rs = [r for r in rs if not r.get("bad_start")]
-    v = np.array([r["v_fwd"] for r in rs]) * 100
+    v = np.array([r["v_fwd"] for r in rs]) * 100 * direction
     return {
         "mean_cm_s": float(v.mean()),
         "p10_cm_s": float(np.percentile(v, 10)),
@@ -353,9 +362,12 @@ def run_scenario(scen: Scenario, args) -> dict:
         "train_score": best_f,
         "nominal": {"hard": nominal[0], "carpet": nominal[1]},
         "test": {
-            "all": _stats(test),
+            "all": _stats(test, scen.direction),
             **{
-                f: _stats([r for r, d in zip(test, test_doms, strict=True) if d.floor == f])
+                f: _stats(
+                    [r for r, d in zip(test, test_doms, strict=True) if d.floor == f],
+                    scen.direction,
+                )
                 for f in ("hard", "carpet")
             },
         },  # fmt: skip
@@ -395,6 +407,7 @@ def main() -> None:
     p.add_argument("--feet", action="store_true", help="only the reprinted-foot scenarios")
     p.add_argument("--vault", action="store_true", help="only the rocker-foot vault scenarios")
     p.add_argument("--waddle", action="store_true", help="only the tall waddle scenarios")
+    p.add_argument("--nose", action="store_true", help="only the nose-first scenarios")
     p.add_argument("--quick", action="store_true")
     args = p.parse_args()
     if args.quick:
@@ -407,6 +420,7 @@ def main() -> None:
         (args.feet, FEET),
         (args.vault, VAULT),
         (args.waddle, WADDLE),
+        (args.nose, NOSE),
     ):
         if flag:
             group = scens
