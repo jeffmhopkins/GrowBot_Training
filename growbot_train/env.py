@@ -798,8 +798,9 @@ class GrowBotHeadingEnv(gym.Env):
         """The residual gait's built-in steering: one leg out in proportion to the
         heading error the policy sees (noise, drift and staleness included)."""
         t = self.cfg.task
-        if not t.residual_steer_deg or self._gait is None or self.speed_cmd == 0.0:
-            # A stop stays still: turning on the spot is the look policy's.
+        if not t.residual_steer_deg or self._gait is None or self.speed_cmd <= 0.0:
+            # A stop stays still: turning on the spot is the look policy's. Backing up
+            # would turn the other way, and no residual config backs up yet.
             return np.zeros(2)
         u = float(np.clip(self._err_obs / t.residual_steer_deg, -1.0, 1.0))
         return t.residual_steer_rad * np.array([max(u, 0.0), max(-u, 0.0)])

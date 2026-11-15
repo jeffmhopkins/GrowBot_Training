@@ -69,8 +69,10 @@ def _residual_spec(cfg: config_mod.Config) -> dict[str, Any]:
                 "leg command (rad) = gait(phase) + output x residual_rad, eased in over "
                 "the first second; the gait_sin/cos phase advances at frequency x "
                 "|speed command| (a stop holds it), not at a fixed rate. With steer_deg "
-                "> 0, plus steer_rad x clip(heading error deg / steer_deg, -1, 1) on the "
-                "right leg when positive, its negative on the left when negative"
+                "not 0 and a forward speed command, plus u = clip(heading error deg / "
+                "steer_deg, -1, 1): steer_rad x u on the right leg when u > 0, steer_rad "
+                "x -u on the left when u < 0, at full strength from the first tick; none "
+                "at a stop"
             ),
         }
     }
