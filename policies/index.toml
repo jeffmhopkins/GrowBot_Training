@@ -31,3 +31,19 @@ job = "growbot_nose_walk"
 file = "policies/nose-walk-1/policy_nose_walk.json"
 run = "6e69e32c"
 notes = "Stand-in for the phone app's backing mode: walks nose first (away from the camera) at a commanded speed, though slower than asked (1.9 cm/s when asked 3, 0.5 when asked to stop). Holds a heading within about 90 degrees but rarely turns from dead behind; no falls in its 36 randomised evaluations, 2 in 60 on the odd bodies (slow relay, nose-heavy), and short-legged or nose-heavy bodies fail to turn from 90 degrees."
+
+[[policy]]
+slug = "lift-fall-1"
+title = "Lift and fall 1: walk tall toward a heading"
+job = "growbot_lift_fall"
+file = "policies/lift-fall-1/policy_lift_fall.json"
+run = "ca607df3"
+notes = "The forward teacher for now: walks tall, camera first, at its 5 cm/s cap (no speed input). About 17 degrees off on random bodies and 4 cm/s toward the target; a quarter turn takes about 5 s. 4 falls in 36 randomised evaluations, half of them on half turns."
+
+[[policy]]
+slug = "lift-fall-1-16m"
+title = "Lift and fall 1 at 16M steps"
+job = "growbot_lift_fall"
+file = "policies/lift-fall-1-16m/policy_lift_fall.json"
+run = "ca607df3"
+notes = "The same run's 16M checkpoint, kept for comparison: about 27 degrees off and 5 falls in 36. The final policy (lift-fall-1) beats it."
