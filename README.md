@@ -531,7 +531,7 @@ trained on (lift-fall-2 saw 35% of the ranges). Each mode falls by its own teach
 rule: lift and fall's gait rears up past look's back-fall line by design.
 
 ```bash
-.venv/bin/python -m growbot_train.master distill --out runs/master    # about 10 minutes on 4 cores
+.venv/bin/python -m growbot_train.master distill --out runs/master    # about 20 minutes on 4 cores
 .venv/bin/python -m growbot_train.master evaluate runs/master/policy_master.json
 ```
 
@@ -557,11 +557,11 @@ it matches its teachers:
 - **Speed:** within 4% of the teachers walking and backing, from every start (backing from +35 at
   2.50 against 2.55 cm/s, the walk from +25 at 4.86 against 5.00).
 - **Aim:** within 0.7 degrees of theirs everywhere, and better than master-1 at the
-  stop: 3.4-4.7 degrees after a turn (look-v9), 6-7 backing (master-1 6-8).
+  stop: 3.4-4.7 degrees after a turn (look-v9), 5.9-7.1 backing (master-1 6.1-8.0).
 - **Turns:** within 0.6 s of the teachers.
 - **Camera picture:** the face stays in the picture 97-100% of the time walking and
-  backing, and as much as the teachers during turns (60-85%, the turn itself); it
-  sits 2.5-5 degrees off centre once settled.
+  backing, and within 3 points of the teachers during turns (60-85%, the turn itself);
+  it sits 2.5-5.1 degrees off centre once settled.
 - **Falls:** none in its 45 per-mode runs, and none in 173 mode switches (its teachers fell
   once in 188).
 
