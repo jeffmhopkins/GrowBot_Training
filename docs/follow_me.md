@@ -26,11 +26,12 @@ One exported policy with one input set, so the app never swaps files mid-walk:
 | `cmd_forward` | signed speed, -1..+1 of one shared cap |
 | `cmd_pitch` | camera height: -1 low (the camera looks almost straight up) .. +1 tall (toward the horizon) |
 
-What it does with them. **The sign of `cmd_forward` alone picks the mode, never the
-heading** (Jeff, 2026-11-15): a person behind it is a spin to face them (speed 0, or
-turning while it walks forward), never a reason to back up; a negative speed backs away
-nose first whatever the heading, with the camera still facing the person.
+**The sign of `cmd_forward` alone picks the mode, never the heading** (Jeff,
+2026-11-15): a person behind it calls for a spin to face them (speed 0, or turning while
+it walks forward), never for backing up; a negative speed backs away nose first whatever
+the heading, with the camera still facing the person.
 
+What it does with them:
 
 - **Speed above 0:** walk tall, camera first, toward the heading. Teacher: lift and
   fall (`configs/lift_fall.toml`).
@@ -132,7 +133,9 @@ A small controller between the tracker and the policy:
 - **Speed:** from the distance error against the set distance, with a dead band. Too
   far walks forward, too close backs away, and within the band it's 0, so it stops and
   just turns. Backing ramps with the error. Forward is stop-or-go at full speed until a
-forward teacher learns slower speeds (see the gaps above).
+  forward teacher learns slower speeds (see the gaps above). Forward waits until the
+  heading error is small (about 30 degrees), so a person far behind gets a spin first,
+  not a walk away from them while it turns.
 - **Pitch:** the tracker's vertical error, integrated into `cmd_pitch`, so the camera
   keeps the face mid-frame.
 
