@@ -531,7 +531,7 @@ trained on (lift-fall-2 saw 35% of the ranges). Each mode falls by its own teach
 rule: lift and fall's gait rears up past look's back-fall line by design.
 
 ```bash
-.venv/bin/python -m growbot_train.master distill --out runs/master    # about 10 minutes on 4 cores
+.venv/bin/python -m growbot_train.master distill --out runs/master    # about 20 minutes on 4 cores
 .venv/bin/python -m growbot_train.master evaluate runs/master/policy_master.json
 ```
 
@@ -548,6 +548,26 @@ on a half turn (14.4 s against 15.6). It fell 3 times in 114 mode switches, agai
 bar of under 1 in 50. Its teachers, driving the same scripts, fell 3 times in 100. In
 the per-mode runs only lift-fall-2's walk falls, master or teacher, so the master gets
 better as the teachers do.
+
+The current master is `policies/master-2`: look-v9, lift-fall-2 and nose-walk-1, with
+backing handed to look past 45 degrees and twice the episodes per round (128). Two runs
+at 64 episodes each fell once in five walking from +25 and walked about 20% slower there; at 128
+it matches its teachers:
+
+- **Speed:** within 4% of the teachers walking and backing, from every start (backing from +35 at
+  2.50 against 2.55 cm/s, the walk from +25 at 4.86 against 5.00).
+- **Aim:** within 0.7 degrees of theirs everywhere, and better than master-1 at the
+  stop: 3.4-4.7 degrees after a turn (look-v9), 5.9-7.1 backing (master-1 6.1-8.0).
+- **Turns:** within 0.6 s of the teachers.
+- **Camera picture:** the face stays in the picture 97-100% of the time walking and
+  backing, and within 3 points of the teachers during turns (60-85%, the turn itself);
+  it sits 2.5-5.1 degrees off centre once settled.
+- **Falls:** none in its 45 per-mode runs, and none in 173 mode switches (its teachers fell
+  once in 188).
+
+The 22.5M nose walk (7f4fe43d), tried as the backing teacher, kept the body on course
+but swung the camera about 35 degrees a step and lost the face (19% in the picture for a
+seated face at 2 m), so nose-walk-1 stays.
 
 Its limits, until the walks it learns from are retrained:
 
