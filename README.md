@@ -218,7 +218,7 @@ Every tick the reward is the sum of these terms. All the weights live in
 | progress | `progress = 2.0` | Moving in the target direction. Full value at the speed cap, a fraction below it, nothing extra above it, negative when moving away. |
 | heading | `heading = 0.5` | Pointing the nose at the target. Full value dead on, half at 90 degrees off, zero facing away. With `heading_width_deg` > 0 (look: 40) it is exp(-(error/width)^2) instead, paying only near the target. |
 | progress_width_deg | `progress_width_deg = 0.0` | With > 0, progress (paid or charged) is scaled by exp(-(error/width)^2), so it counts only while pointing near the target. Speed along the target alone pays 77% walking 40 degrees off. Tried on lift and fall and taken back off after 16M steps, where that gait, which turns by arcing, had stopped turning (from a 90-degree start, 58 degrees off, against 26-30 without it); the same run recovered by 50M and is kept as `policies/lift-fall-2`, so whether the gates go back on is open. |
-| arrive | `arrive = 0.0` (lift and fall and look: 30) | A one-off bonus each target that starts at least `arrive_within_deg` (15 degrees) off, once the error has stayed under it for `arrive_hold_s` (1 s): weight times (1 minus the time since the target moved over `arrive_by_s`, 20 s), so 95% for turning at once and nothing after 20 s (look: held 2 s, paying until 30 s). Discounting already favours a quick turn a little; this pays for arriving and settling. |
+| arrive | `arrive = 0.0` (lift and fall: 30) | A one-off bonus each target that starts at least `arrive_within_deg` (15 degrees) off, once the error has stayed under it for `arrive_hold_s` (1 s): weight times (1 minus the time since the target moved over `arrive_by_s`, 20 s), so 95% for turning at once and nothing after 20 s. Discounting already favours a quick turn a little; this pays for arriving and settling. |
 | overspeed | `overspeed = 4.0` | Going faster than `speed_cap_m_s` (3 cm/s; camera walk 1 cm/s with `overspeed = 1.0`). Grows with the square of the excess, so a little over is mild and a lot over is harsh. |
 | tilt | `tilt = 1.0` | Leaning away from how it stood at the start. (This body naturally rests nose-up at about 34 degrees, so "upright" means its own starting stance, the same reference the app's tip check uses.) |
 | fall | `fall = 10.0` | A one-off penalty when it tips more than `fall_tilt_deg` (55 degrees) from its stance. The episode ends there, so it also loses all the reward it would have earned. |
@@ -450,18 +450,20 @@ at 30-60 s isn't comparable with the 30 s runs before.
 v6 (run 36d29750, kept as `policies/look-v6`) evaluated at 16 degrees of heading error
 averaged over its starts (7 to 10 from most starts, 27 and 34 from +90 and 180 degrees),
 but took 20 to 28 s for half a turn, against about 11 for the spin it cloned, and crept
-1 to 2 cm/s. So look now also earns the arrive bonus (`reward.arrive = 30`, held 2 s,
-paying until 30 s), so a quick turn that settles pays more. The creep is charged by
-distance per turn instead of speed: the anchor charges up to 1.0 a tick (was 0.4) while
-the free speed band stays at 1.5 cm/s. This body drifts more the faster it turns, so a
-tighter speed band pays a slow turn (v5 learned exactly that), while the anchor charges a
-quick turn and a slow one alike for the same wander. v7 (run 200aa414, kept as
-`policies/look-v7`), trained before those two changes, ends 11.5 degrees off on average
-from every start, 180 included, takes about 20 s for half a turn and 10 s for a quarter,
-creeps 0.7 cm/s, and fell in none of its 36 randomised evaluations and none of the 153
-in the sweep, though short-legged, nose-heavy and mis-trimmed bodies end 35-47 degrees
-off from a quarter turn. In the follow-me test it keeps the person in view less than v6
-(56% vs 68% on the nominal body), so the follow baseline uses both.
+1 to 2 cm/s. v7 (run 200aa414, kept as `policies/look-v7`) ends 11.5 degrees off on
+average from every start, 180 included, takes about 20 s for half a turn and 10 s for a
+quarter, creeps 0.7 cm/s, and fell in none of its 36 randomised evaluations and none of
+the 153 in the sweep, though short-legged, nose-heavy and mis-trimmed bodies end 35-47
+degrees off from a quarter turn. In the follow-me test it keeps the person in view less
+than v6 (56% vs 68% on the nominal body), so the follow baseline uses both. v8 (run
+e71638c2) added an arrive bonus (`reward.arrive = 30`) and a firmer anchor (1.0), and
+came out worse: 15 degrees off, worst from +90 on odd bodies, and no faster. So both
+went back to v7's, and the next run goes after turn speed instead. This body drifts more
+the faster it spins, and at a free band of 1.5 cm/s (`stop_drift_free = 0.5`) the squared
+overspeed charge held v7 to about 9 degrees a second, where the open-loop spin it clones
+does 15 on random bodies (24 on the nominal one). The band is now 2.4 cm/s (0.8), and
+creep on target is left to the follower's Hold, which stops it outright (see
+[Following a person](#following-a-person)).
 Unlike the camera walk it trains on the printed build with bare-print surfaces (see
 [Bodies](#bodies)), like the heading walk.
 It's the camera walk otherwise, and only the lines marked CHANGED differ from that file.
