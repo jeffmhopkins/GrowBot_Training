@@ -89,3 +89,10 @@ notes = """Trains the stand-in-place look (configs/look.toml): it never walks, o
 on the spot to face a heading and holds a camera height, trained for a steady view. The \
 camera walk at speed 0 does the same job; run this one if that wobbles. Downloads and the \
 Live card work as for the heading walk."""
+
+[[job]]
+name = "growbot_master"
+title = "GrowBot master (turn, walk and back up, all in one)"
+config = "configs/master.toml"
+est_hours = "1-2 h"
+notes = """Trains no new skill: distils the kept look, walk and back-up policies (configs/master.toml) into the one master policy the app runs, five rounds of 128 minute-long runs, then scores it against them per mode and over mode switches. The Live card shows each round; the download is the master policy and its scores (no 3D replay: it has no single task to replay). Add it from Trained walks on the Body tab once done."""

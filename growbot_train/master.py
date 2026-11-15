@@ -23,7 +23,11 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import sys
+import time
+import tomllib
+from collections import deque
 from dataclasses import dataclass, field
 from multiprocessing import get_context
 from pathlib import Path
@@ -45,6 +49,18 @@ WALK_HYST_DEG = 10.0  # leave the walk only past 40 degrees, so the switch doesn
 # first, as the walk does past WALK_DEG.
 BACK_DEG = 45.0
 BACK_HYST_DEG = 10.0
+# Standing on target, look's legs keep fiddling and the body creeps about 1.3 cm/s (look-v9
+# from +90, nominal body). So once it has settled there the label is to freeze the legs
+# where they were on average over the last second (follow.Hold's rule, here trained into
+# the master so the phone needs nothing new). Driven by the teachers from 90 and 180
+# degrees off, that cut the creep over the last 15 s of a 30 s look from 7-22 cm to 0-5 cm
+# (Jeff, 2026-11-15: "zero creep"). Settled is judged on the heading the student itself
+# sees, averaged over that second, so a gait's sway doesn't keep it out.
+HOLD_ENTER_DEG = 6.0
+HOLD_SPREAD_DEG = 20.0  # ...and never further off than this within it
+HOLD_EXIT_DEG = 15.0
+HOLD_TILT_BAND = 0.15  # a camera-height ask this big lets go, so look can move the stance
+HOLD_WINDOW = 25  # ticks: one second
 ACTION_TO_RAD = CTRL_LIMIT  # the student may reach every teacher's swing
 FRAMES = 5
 SQUASH = 0.9993  # tanh(ACTION_LIMIT): the furthest a squashed action reaches
@@ -224,6 +240,64 @@ def choose_mode(forward: float, err_body: float, current: str | None = None) -> 
     return "look"
 
 
+@dataclass
+class Hold:
+    """Freezes the legs once the robot stands settled on target (see HOLD_ENTER_DEG)."""
+
+    errs: deque[float] = field(default_factory=lambda: deque(maxlen=HOLD_WINDOW))
+    legs: deque[np.ndarray] = field(default_factory=lambda: deque(maxlen=HOLD_WINDOW))
+    tilts: deque[float] = field(default_factory=lambda: deque(maxlen=HOLD_WINDOW))
+    held: np.ndarray | None = None
+    tilt: float = 0.0
+
+    def reset(self) -> None:
+        self.errs.clear()
+        self.legs.clear()
+        self.tilts.clear()
+        self.held = None
+
+    def legs_rad(self, s: Senses, mode: str, look_rad: np.ndarray) -> np.ndarray:
+        """This tick's leg label: the active teacher's own (look_rad), or the held stance."""
+        self.errs.append(s.err_lens)
+        standing = mode == "look" and s.forward == 0.0
+        if self.held is not None:
+            if (
+                standing
+                and abs(s.err_lens) <= HOLD_EXIT_DEG
+                and abs(s.tilt - self.tilt) <= HOLD_TILT_BAND
+            ):
+                return self.held
+            self.held = None
+            self.legs.clear()
+        if not standing:
+            self.legs.clear()
+            return look_rad
+        # A camera-height ask restarts the second, so a hold never freezes look half-way
+        # from the old stance to the new one.
+        if self.tilts and s.tilt != self.tilts[-1]:
+            self.legs.clear()
+        self.tilts.append(s.tilt)
+        self.legs.append(look_rad)
+        if (
+            len(self.legs) == HOLD_WINDOW
+            and len(self.errs) == HOLD_WINDOW
+            and abs(float(np.mean(self.errs))) < HOLD_ENTER_DEG
+            and max(abs(e) for e in self.errs) < HOLD_SPREAD_DEG
+        ):
+            self.held = np.mean(self.legs, axis=0)
+            self.tilt = s.tilt
+        return look_rad
+
+    @property
+    def holding(self) -> bool:
+        return self.held is not None
+
+
+def label_rad(teachers: dict[str, Teacher], mode: str, s: Senses, hold: Hold) -> np.ndarray:
+    """The legs the active teacher asks for this tick, look's frozen once settled."""
+    return hold.legs_rad(s, mode, teachers[mode].act_rad())
+
+
 def to_student(rad: np.ndarray) -> np.ndarray:
     """A teacher's leg angles as the student's squashed action: matched in radians."""
     return np.clip(np.asarray(rad) / ACTION_TO_RAD, -SQUASH, SQUASH)
@@ -307,6 +381,7 @@ class Rollout:
         # that a teacher's labels are guesses (lift-fall-2 saw 35% of the ranges).
         self.env.dr_scale = min(t.ramp_to for t in self.teachers.values())
         self.clocks = student_clocks(self.teachers)
+        self.hold = Hold()
 
     def judge_as(self, mode: str) -> None:
         """Fall by the active teacher's rule: lift and fall's gait rears up past look's
@@ -344,10 +419,11 @@ class Rollout:
         )
         for t in teachers.values():
             t.reset()
+        self.hold.reset()
         hist = np.zeros((FRAMES, len(STUDENT_CHANNELS)))
         obs, labels, modes = [], [], []
         mode = None
-        switches = 0
+        switches = held = 0
         fell = False
         for i in range(n):
             script.tick(env, i * CONTROL_DT)
@@ -360,12 +436,12 @@ class Rollout:
             switches += mode is not None and new != mode
             mode = new
             self.judge_as(mode)
-            teacher = teachers[mode]
-            label = to_student(teacher.act_rad())
+            label = to_student(label_rad(teachers, mode, s, self.hold))
             x = hist.reshape(-1).copy()
             obs.append(x)
             labels.append(label)
             modes.append(MODES.index(mode))
+            held += self.hold.holding
             if student is None or coin.random() < beta:
                 drive = label
             else:
@@ -380,6 +456,7 @@ class Rollout:
             "modes": np.asarray(modes, dtype=np.int8),
             "fell": fell,
             "switches": switches,
+            "held": held,
         }
 
 
@@ -580,6 +657,7 @@ def distill(
         lab_all += [e["labels"] for e in eps if len(e["labels"])]
         falls = sum(e["fell"] for e in eps)
         switches = sum(e["switches"] for e in eps)
+        held = sum(e["held"] for e in eps) / max(1, sum(len(e["obs"]) for e in eps))
         obs = np.concatenate(obs_all)
         labels = np.concatenate(lab_all)
         if norm is None:
@@ -592,6 +670,7 @@ def distill(
             "falls": int(falls),
             "episodes": episodes,
             "switches": int(switches),
+            "held_pct": round(100.0 * held, 1),
             "loss": loss,
         }
         history.append(row)
@@ -659,10 +738,12 @@ def drive(
     env._set_stance()
     for t in teachers.values():
         t.reset()
+    rollout.hold.reset()
     if master is not None:
         master.reset()
     mode = None
     along, errs, speed = [], [], []
+    pos = [env.data.qpos[0:2].copy()]
     framed, img_x = [], []
     turn_s = float("nan")
     fell = False
@@ -673,7 +754,7 @@ def drive(
         mode = choose_mode(forward, s.err_body, mode)
         rollout.judge_as(mode)
         if master is None:
-            a = to_student(teachers[mode].act_rad())
+            a = to_student(label_rad(teachers, mode, s, rollout.hold))
         else:
             a = master.act(s)
         _, _, term, _, info = env.step(np.arctanh(a))
@@ -682,6 +763,7 @@ def drive(
         along.append(info["v_along"])
         speed.append(info["speed"])
         errs.append(err)
+        pos.append(env.data.qpos[0:2].copy())
         framed.append(info["in_frame"])
         img_x.append(abs(info["image_x_avg_deg"]) if info["in_frame"] else math.nan)
         if math.isnan(turn_s) and err < 15:
@@ -697,6 +779,9 @@ def drive(
         "turn_s": turn_s,
         "frame_pct": 100.0 * float(np.mean(framed)),
         "img_x": float(np.nanmean(img_x[half:])) if any(framed[half:]) else math.nan,
+        # Standing on target over the second half, any movement is creep.
+        "drift_cm": 100.0 * float(np.linalg.norm(pos[-1] - pos[1 + half])),
+        "net_cm": 100.0 * float(np.linalg.norm(pos[-1] - pos[0])),
         "fell": float(fell),
     }
 
@@ -748,14 +833,15 @@ def format_report(report: dict[str, Any]) -> str:
     lines = []
     for mode in MODES:
         lines.append(f"-- {mode}")
-        lines.append(" start  who       toward   speed    err  turn_s  frame%  img_x  falls")
+        lines.append(" start  who       toward   speed    err  turn_s  frame%  img_x  drift  falls")
         for start, row in report[mode].items():
             for who in ("teacher", "master"):
                 r = row[who]
                 lines.append(
                     f"{start:>6}  {who:<8} {r['toward']:7.4f} {r['speed']:7.4f} "
                     f"{r['err']:6.1f} {r['turn_s']:7.2f}  {r['frame_pct']:6.1f} "
-                    f"{r['img_x']:6.1f}  {r['falls']}/{r['runs']}"
+                    f"{r['img_x']:6.1f} {r.get('drift_cm', math.nan):6.1f}  "
+                    f"{r['falls']}/{r['runs']}"
                 )
     for who in ("teacher", "master"):
         sw = report["switch"][who]
@@ -764,6 +850,120 @@ def format_report(report: dict[str, Any]) -> str:
             f"switches over {sw['episodes']} minute-long runs"
         )
     return "\n".join(lines)
+
+
+JOB_KEYS = {*MODES, "episodes", "rounds", "epochs", "seed"}
+
+
+def load_job(path: Path) -> dict[str, Any]:
+    """A master job config (configs/master.toml): its ``[master]`` table, checked."""
+    with open(path, "rb") as fh:
+        data = tomllib.load(fh)
+    if set(data) != {"master"}:
+        raise ValueError(f"{path}: a master config holds one [master] table")
+    job = data["master"]
+    if not set(job) <= JOB_KEYS or not set(MODES) <= set(job):
+        raise ValueError(f"{path}: [master] takes {sorted(JOB_KEYS)}, a teacher per mode")
+    for m in MODES:
+        if not Path(job[m]).is_file():
+            raise ValueError(f"{path}: the {m} teacher {job[m]} is not in the repo")
+    return job
+
+
+def is_job(path: Path) -> bool:
+    try:
+        with open(path, "rb") as fh:
+            return "master" in tomllib.load(fh)
+    except (OSError, tomllib.TOMLDecodeError):
+        return False
+
+
+def summarise(report: dict[str, Any]) -> str:
+    """One line for the Jobs card: the master's worst gaps to its teachers, and falls."""
+    speed_gap = aim_gap = 0.0
+    falls = runs = 0
+    for mode in MODES:
+        for row in report[mode].values():
+            t, m = row["teacher"], row["master"]
+            if mode != "look" and t["speed"] > 0:
+                speed_gap = max(speed_gap, abs(m["speed"] - t["speed"]) / t["speed"])
+            aim_gap = max(aim_gap, m["err"] - t["err"])
+            falls += int(m["falls"])
+            runs += int(m["runs"])
+    sw = report["switch"]["master"]
+    return (
+        f"speed within {100 * speed_gap:.0f}% of the teachers, aim within {aim_gap:.1f} deg, "
+        f"falls {falls}/{runs}, {sw['falls']} in {sw['switches']} switches"
+    )
+
+
+class JobProgress:
+    """The run's live/progress.json, in the shape JBrain's Launcher reads (growbot_train.live)."""
+
+    def __init__(self, run: Path, rounds: int) -> None:
+        self.path = run / "live" / "progress.json"
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.rounds = rounds
+        self.t0 = time.time()
+        self.done = 0
+        self.summary: list[dict[str, str]] = []
+        self.write("training")
+
+    def round_done(self, row: dict[str, Any]) -> None:
+        self.done += 1
+        self.summary = [
+            {"label": "Round", "value": f"{self.done} of {self.rounds}"},
+            {"label": "Teacher driving", "value": f"{100 * row['beta']:.0f}% of the time"},
+            {"label": "Falls", "value": f"{row['falls']} in {row['episodes']} minute-long runs"},
+            {"label": "Held still", "value": f"{row['held_pct']:.0f}% of the time"},
+        ]
+        self.write("training" if self.done < self.rounds else "finishing")
+
+    def write(self, state: str) -> None:
+        elapsed = time.time() - self.t0
+        per = elapsed / self.done if self.done else None
+        doc = {
+            "title": "Distilling the master policy",
+            "state": state,
+            # The evaluation after the last round takes about as long as two rounds.
+            "percent": round(100 * self.done / (self.rounds + 2), 1),
+            "eta_s": round(per * (self.rounds + 2 - self.done)) if per else None,
+            "elapsed_s": round(elapsed),
+            "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "summary": self.summary,
+            "history": [],
+        }
+        tmp = self.path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(doc, indent=1) + "\n")
+        os.replace(tmp, self.path)
+
+
+def run_job(run: Path, config: Path) -> Path:
+    """The box's Jobs entry: distil on every core, then score it, into one run folder."""
+    job = load_job(config)
+    rounds = tuple(float(b) for b in job.get("rounds", (1.0, 0.5, 0.25, 0.0, 0.0)))
+    progress = JobProgress(run, len(rounds))
+
+    def log(row_json: str) -> None:
+        print(row_json, flush=True)
+        progress.round_done(json.loads(row_json))
+
+    path = distill(
+        run,
+        {m: job[m] for m in MODES},
+        rounds,
+        int(job.get("episodes", 128)),
+        epochs=int(job.get("epochs", 40)),
+        workers=len(os.sched_getaffinity(0)),
+        seed=int(job.get("seed", 0)),
+        log=log,
+    )
+    report = evaluate(path)
+    (run / "eval.json").write_text(json.dumps(report, indent=1))
+    text = format_report(report) + f"\neval summary: {summarise(report)}\n"
+    (run / "eval.txt").write_text(text)
+    print(text, flush=True)
+    return path
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -783,7 +983,13 @@ def main(argv: list[str] | None = None) -> int:
     e.add_argument("--episodes", type=int, default=4)
     e.add_argument("--switch-episodes", type=int, default=20)
     e.add_argument("--json", type=Path)
+    j = sub.add_parser("job", help="what the box's master job runs: distil, then evaluate")
+    j.add_argument("--out", type=Path, required=True)
+    j.add_argument("--config", type=Path, required=True)
     args = ap.parse_args(argv)
+    if args.cmd == "job":
+        run_job(args.out, args.config)
+        return 0
     if args.cmd == "distill":
         paths = {m: getattr(args, m) for m in MODES}
         rounds = tuple(float(b) for b in args.rounds.split(","))

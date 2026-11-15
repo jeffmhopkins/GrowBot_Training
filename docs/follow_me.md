@@ -152,8 +152,10 @@ A small controller between the tracker and the policy:
   and the speed is 0, stop calling the policy and hold the servos at the average of the
   last second of commands, so the legs stop fiddling and it stops creeping (Jeff,
   2026-11-15). Let go past about 15 degrees, on any speed, on a camera-height change of
-  more than about 0.15, or when the person is lost. Built in the simulator harness (`follow.Hold`); the app does
-  the same around the master policy, which then never has to learn to stand dead still.
+  more than about 0.15, or when the person is lost. Built in the simulator harness
+  (`follow.Hold`). The master now learns the same hold (`master.Hold`, README "The master
+  policy"), so the app needs nothing new for it; the turn's own 10-25 cm of drift is left
+  to the follower's distance keeping.
 
 ### 4. Voice
 

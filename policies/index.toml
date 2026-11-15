@@ -74,7 +74,7 @@ notes = "The look teacher now: 10.6 degrees off on random bodies (v7 11.5), and 
 
 [[policy]]
 slug = "master-2"
-title = "Master: turn, walk and back up, all in one"
+title = "Master 2: turn, walk and back up, all in one"
 job = "growbot_master"
 file = "policies/master-2/policy_master.json"
 notes = "The one policy the follower will run, distilled from look-v9, lift-fall-2 and nose-walk-1. Speed 0 turns on the spot to face the target; forward walks camera first (only within 30 degrees, it turns first otherwise); back backs away nose first (within 45 degrees). Within 4% of those teachers on speed, 0.7 degrees on aim, no falls in 173 mode switches, and the face stays in the camera's picture 97-100% of the time while moving."

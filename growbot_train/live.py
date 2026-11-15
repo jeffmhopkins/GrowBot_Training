@@ -257,7 +257,8 @@ def finish(run: Path) -> None:
     tail = [line for line in _lines(run / "eval.txt") if line.startswith("eval summary:")]
     if tail:
         summary.append({"label": "Final evaluation", "value": tail[-1][len("eval summary: ") :]})
-    summary.append({"label": "Replay", "value": "final policy"})
+    if (run / "replay.html").exists():
+        summary.append({"label": "Replay", "value": "final policy"})
     doc.update(state="done", percent=100, eta_s=None, updated_at=_now(), summary=summary)
     _write(progress, json.dumps(doc, indent=1) + "\n")
 

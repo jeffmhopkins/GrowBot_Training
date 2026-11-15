@@ -586,8 +586,26 @@ Its limits, until the walks it learns from are retrained:
   wherever its clock is, which the teacher never trained on. The switch test counts the
   falls that causes.
 
-master-2 is listed in `policies/index.toml` as "Master", so the Body tab offers it:
-its look and spin buttons send speed 0, forward +1 and back -1, which is each mode.
+master-2 is listed in `policies/index.toml` as "Master 2", so the Body tab offers it
+under Trained walks: its look and spin buttons send speed 0, forward +1 and back -1,
+which is each mode.
+
+**Standing dead still.** Standing on target, look's legs keep fiddling and the body
+creeps about 1.3 cm/s. So the master's labels hold still once it has settled
+(`master.Hold`): when the speed is 0 and the heading the student sees has averaged within
+6 degrees over the last second (never past 20 within it), the label is the legs' average
+over that second, frozen. It lets go past 15 degrees, on any speed, or on a camera-height
+ask of more than 0.15. Driven by the teachers from 90 and 180 degrees off, that cut the
+creep over the last 15 s of a 30 s look from 7-22 cm to 0-5 cm, with the aim 2-8 degrees
+off. The turn itself still moves it 10-25 cm, which the follower's distance keeping takes
+back. `evaluate` reports both: `drift` (cm moved over the second half) and `net_cm`
+(start to end); each round's log gives `held_pct`, the share of ticks held.
+
+**On the box.** The Jobs list has "GrowBot master (turn, walk and back up, all in one)"
+(`growbot_master`, `configs/master.toml`, which names the teachers). It distils on every
+core, then evaluates; the Live card shows each round and the run's `eval.txt` ends with a
+one-line summary. Once done, its policy can be added from Trained walks on the Body tab,
+and a master worth keeping is listed in `policies/index.toml` as "Master N".
 
 ## Training on a different robot every time (randomisation)
 
