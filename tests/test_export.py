@@ -159,3 +159,12 @@ def test_replay_scenarios_stay_within_the_training_targets() -> None:
     assert got["Target behind"][:2] == ("Target 60 degrees right", -60.0)
     wide = SimpleNamespace(task=SimpleNamespace(initial_error_deg=180.0, retarget_max_deg=120.0))
     assert all(_within(s, wide)[:4] == s for s in SCENARIOS)
+
+
+def test_every_live_walk_is_a_replay_scenario() -> None:
+    from growbot_train.live import LIVE_SCENARIOS
+    from growbot_train.replay import LIKE_TRAINING, SCENARIOS, SPEED_STEPS
+
+    titles = {s[0] for s in SCENARIOS}
+    assert set(LIVE_SCENARIOS) <= titles
+    assert set(SPEED_STEPS) <= titles and LIKE_TRAINING <= titles
