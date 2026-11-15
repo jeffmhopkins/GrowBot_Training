@@ -805,25 +805,42 @@ def test_progress_width_pays_progress_only_near_the_target() -> None:
     assert paid(45.0, 40.0)[0] < 0.6 * paid(0.0, 40.0)[0]
 
 
-def test_the_arrive_bonus_pays_once_per_target_and_less_when_late() -> None:
-    def bonus(steps_off: int) -> list[float]:
-        cfg = Config()
-        cfg.randomization.enabled = False
-        cfg.reward.arrive = 30.0
-        env = GrowBotHeadingEnv(cfg)
-        env.reset(seed=0, options={"retarget": False, "target_error_deg": 90.0})
-        paid = []
-        for i in range(steps_off + 100):
-            if i == steps_off:  # the target swings round to where it already points
-                env.target_deg = env.yaw_deg()
-            _, _, _, _, info = env.step(np.zeros(2))
-            paid.append(info["terms"].get("arrive", 0.0))
-        return [p for p in paid if p]
+def test_the_arrive_bonus_pays_once_per_turn_and_less_when_late() -> None:
+    cfg = Config()
+    cfg.randomization.enabled = False
+    cfg.reward.arrive = 30.0
+    cfg.task.retarget_max_deg = 0.0  # a retarget re-arms the bonus without moving
+    env = GrowBotHeadingEnv(cfg)
+    env.reset(seed=0, options={"target_error_deg": 0.0})
+    assert env._arrived  # already pointing at it: nothing to earn
+    env._next_retarget = 1e9
+    paid = []
+    for i in range(600):
+        if i == 50:  # a target that needs a turn, then it swings round to the robot
+            env.target_deg = env.yaw_deg() + 90.0
+            env._next_retarget = i * 0.04
+        if i == 300:
+            env.target_deg = env.yaw_deg()
+        _, _, _, _, info = env.step(np.zeros(2))
+        if i == 50:
+            env._next_retarget = 1e9
+        paid.append((i, info["terms"].get("arrive", 0.0)))
+    hits = [(i, p) for i, p in paid if p]
+    assert len(hits) == 1
+    # Late by the 10 s it waited plus the 1 s hold, counted from the retarget at tick 51.
+    assert hits[0][1] == pytest.approx(30.0 * (1 - 11.0 / 20.0), rel=0.05)
 
-    quick, slow = bonus(0), bonus(250)  # 0 s, and 10 s of the 20
-    assert len(quick) == len(slow) == 1
-    assert quick[0] == pytest.approx(30.0 * (1 - 1.0 / 20.0), rel=0.05)
-    assert slow[0] == pytest.approx(30.0 * (1 - 11.0 / 20.0), rel=0.05)
+
+def test_a_progress_gate_charges_walking_away_less_when_pointed_away() -> None:
+    cfg = Config()
+    cfg.randomization.enabled = False
+    cfg.reward.progress_width_deg = 45.0
+    env = GrowBotHeadingEnv(cfg)
+    env.reset(seed=0, options={"retarget": False, "target_error_deg": 180.0})
+    tr = math.radians(env.target_deg)
+    env.vel_avg = -np.array([math.cos(tr), math.sin(tr)]) * cfg.reward.speed_cap_m_s
+    _, _, _, _, info = env.step(np.zeros(2))
+    assert -0.01 < info["terms"]["progress"] <= 0.0
 
 
 def test_the_speed_curriculum_starts_every_command_at_full_speed() -> None:

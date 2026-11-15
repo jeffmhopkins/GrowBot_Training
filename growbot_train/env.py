@@ -184,6 +184,10 @@ class GrowBotHeadingEnv(gym.Env):
             # It pays only for speed toward the target, so a back-away command would be
             # charged for doing what it was told.
             raise ValueError('task.speed_reward "progress" needs task.speed_back_min >= 0')
+        if cfg.reward.arrive and cfg.reward.arrive_by_s <= cfg.reward.arrive_hold_s:
+            raise ValueError("reward.arrive_by_s must be longer than reward.arrive_hold_s")
+        if cfg.reward.progress_width_deg < 0:
+            raise ValueError("reward.progress_width_deg must be 0 (off) or more")
         if not 0.0 < cfg.randomization.ramp_to <= 1.0:
             raise ValueError("randomization.ramp_to must be in (0, 1]")
         if cfg.randomization.ramp_to < cfg.randomization.ramp_from:
@@ -367,10 +371,11 @@ class GrowBotHeadingEnv(gym.Env):
         return (nominal + (lo_hi[0] - nominal) * k, nominal + (lo_hi[1] - nominal) * k)
 
     def _new_target(self, t: float) -> None:
-        # The arrive bonus counts from here, once per target.
+        # The arrive bonus counts from here, once per target, and only for a target that
+        # needs a turn: one it already points at would pay for doing nothing.
         self._target_t = t
         self._held = 0
-        self._arrived = False
+        self._arrived = self.scored_err_deg() < self.cfg.reward.arrive_within_deg
 
     def _body_k(self) -> float:
         # Capped at ramp_to while the targets keep widening with dr_scale: a body that
@@ -625,7 +630,9 @@ class GrowBotHeadingEnv(gym.Env):
             progress = r.progress * max(-1.0, gain)
         err_score = self.scored_err_deg()
         err0 = self.scored_err_deg(yaw0, body0)
-        if r.progress_width_deg > 0 and progress > 0:
+        if r.progress_width_deg > 0:
+            # Both ways: a walk pointed well off the target earns little and costs little,
+            # so arcing round from behind still nets more than standing still.
             progress *= math.exp(-((err_score / r.progress_width_deg) ** 2))
         terms = {
             "progress": progress,
