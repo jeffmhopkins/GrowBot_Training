@@ -330,7 +330,11 @@ def test_the_master_job_distils_scores_and_reports_progress(tmp_path, monkeypatc
     report["switch"] = {"teacher": sw, "master": sw}
     monkeypatch.setattr(master, "evaluate", lambda _path: report)
     monkeypatch.setattr(master, "distill", _tiny_distill(master.distill))
+    real_replay = master.replay
+    monkeypatch.setattr(master, "replay", lambda p: real_replay(p, seconds=0.2))
     path = master.run_job(tmp_path / "run", cfg)
+    # The Live card's replay, as every other GrowBot job has.
+    assert "Back away nose first" in (tmp_path / "run" / "replay.html").read_text()
     assert path.name == "policy_master.json"
     # JBrain's Launcher fails a GrowBot run whose export_verify.log doesn't end so.
     verify = (tmp_path / "run" / "export_verify.log").read_text().splitlines()
@@ -464,3 +468,14 @@ def test_the_follow_spin_check_runs_the_master_under_the_follower() -> None:
     # The spin drifts it away, the follower walks it back.
     assert not r["fell"] and r["aim_deg"] < 15.0 and r["walked_s"] > 0.5
     assert abs(r["estimate_m"] - 1.0) < 0.1
+
+
+def test_the_replay_drives_every_preset_with_its_commands() -> None:
+    data = master.replay(master.Path("policies/master-v2/policy_master.json"), seconds=2.0)
+    titles = [e["title"] for e in data["episodes"]]
+    assert titles == [t for t, _, _ in master.REPLAY_SCENARIOS]
+    assert data["inputs"] == {"speed": True, "camera_height": True, "camera_first": True}
+    back = data["episodes"][titles.index("Back away nose first")]
+    # Frame layout (replay.recorder): index 5 is the signed speed command.
+    assert back["frames"][-1][5] == -1.0 and not back["fell"]
+    assert all(len(e["frames"]) > 40 for e in data["episodes"])

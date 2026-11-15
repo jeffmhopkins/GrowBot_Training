@@ -954,6 +954,102 @@ def follow_spin(
     }
 
 
+# The 3D replay's walks (title, nominal body, command steps). Each step is (seconds in,
+# speed: 0 turns on the spot, + walks camera first, - backs away nose first; target turn
+# in degrees from where it was; camera height). None: the training script's random
+# commands instead.
+REPLAY_SCENARIOS: tuple[
+    tuple[str, bool, tuple[tuple[float, float, float, float], ...] | None], ...
+] = (
+    ("Turn to face a target 90 degrees left", True, ((0.0, 0.0, 90.0, 1.0),)),
+    ("Turn to face a target behind", True, ((0.0, 0.0, 180.0, 1.0),)),
+    ("Walk camera first to a target 25 degrees right", True, ((0.0, 1.0, -25.0, 1.0),)),
+    ("Back away nose first", True, ((0.0, -1.0, 0.0, 1.0),)),
+    (
+        "Camera height: tall, low, tall, standing",
+        True,
+        ((0.0, 0.0, 0.0, 1.0), (6.0, 0.0, 0.0, -1.0), (14.0, 0.0, 0.0, 1.0)),
+    ),
+    (
+        "Turn, walk, stop, back away, turn",
+        True,
+        (
+            (0.0, 0.0, 90.0, 1.0),
+            (8.0, 1.0, 0.0, 1.0),
+            (14.0, 0.0, 0.0, 1.0),
+            (17.0, -1.0, 0.0, 1.0),
+            (21.0, 0.0, -90.0, 1.0),
+        ),
+    ),
+    ("Like training: random body and commands", False, None),
+    ("Like training: another random body", False, None),
+)
+
+
+def replay(policy_path: Path, seconds: float = 24.0, seed: int = 0) -> dict[str, Any]:
+    """The master driving REPLAY_SCENARIOS, as growbot_train.replay's page plays it."""
+    from growbot_train.replay import recorder
+
+    policy = json.loads(Path(policy_path).read_text())
+    meta = policy["training"]["master"]
+    rollout = Rollout(meta["teachers"], meta.get("body"))
+    runner = MasterRunner(policy, rollout.teachers)
+    env = rollout.env
+    episodes = []
+    for k, (title, nominal, steps) in enumerate(REPLAY_SCENARIOS):
+        opts: dict[str, Any] = {
+            "retarget": False,
+            "speed_cmd": 0.0,
+            "tilt_cmd": 1.0,
+            "target_error_deg": 0.0,
+        }
+        if nominal:
+            opts["nominal"] = True
+        env.reset(seed=seed + k, options=opts)
+        env.max_steps = 10**9
+        runner.reset()
+        script = Script(np.random.default_rng(seed + k), False, False) if steps is None else None
+        pending = list(steps or ())
+        forward, tilt = 0.0, 1.0
+        shapes, snapshot = recorder(env)
+        frames = [snapshot(None)]
+        mode = None
+        fell = False
+        for i in range(round(seconds / CONTROL_DT)):
+            t = i * CONTROL_DT
+            if script is not None:
+                script.tick(env, t)
+                forward, tilt = script.forward, script.tilt
+            while pending and pending[0][0] <= t:
+                _, forward, turn, tilt = pending.pop(0)
+                if turn:
+                    env.target_deg = wrap_deg(env.target_deg + turn)
+                    env._observe_heading(force=True)
+                env.tilt_cmd = env._fixed_tilt = tilt
+                env._set_stance()
+            # The page draws the speed arrow from the env's command.
+            env.speed_cmd = forward
+            s = senses(env, forward, tilt)
+            mode = choose_mode(forward, s.err_body, mode)
+            rollout.judge_as(mode)
+            _, _, term, _, info = env.step(np.arctanh(runner.act(s)))
+            frames.append(snapshot(info))
+            if term:
+                fell = True
+                break
+        episodes.append({"title": title, "shapes": shapes, "frames": frames, "fell": fell})
+    return {
+        "policy": Path(policy_path).name,
+        "body": env.cfg.task.body,
+        "dt": CONTROL_DT,
+        "speed_cap_cm_s": round(
+            rollout.teachers["walk"].data["training"]["speed_cap_m_s"] * 100, 2
+        ),
+        "inputs": {"speed": True, "camera_height": True, "camera_first": True},
+        "episodes": episodes,
+    }
+
+
 JOB_KEYS = {*MODES, "episodes", "rounds", "epochs", "seed", "body"}
 
 
@@ -1108,6 +1204,9 @@ def run_job(run: Path, config: Path) -> Path:
     text = format_report(report) + f"\neval summary: {summarise(report)}\n"
     (run / "eval.txt").write_text(text)
     print(text, flush=True)
+    from growbot_train.replay import write_html
+
+    write_html(replay(path), run / "replay.html")
     return path
 
 
@@ -1131,6 +1230,9 @@ def main(argv: list[str] | None = None) -> int:
     e.add_argument("--episodes", type=int, default=4)
     e.add_argument("--switch-episodes", type=int, default=20)
     e.add_argument("--json", type=Path)
+    r = sub.add_parser("replay", help="write the 3D replay page (replay.html beside the policy)")
+    r.add_argument("policy", type=Path)
+    r.add_argument("--seconds", type=float, default=24.0)
     f = sub.add_parser("follow-spin", help="spin to a person 1 m off, then keep the distance")
     f.add_argument("policy", type=Path)
     f.add_argument("--seeds", type=int, default=3)
@@ -1140,6 +1242,13 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     if args.cmd == "job":
         run_job(args.out, args.config)
+        return 0
+    if args.cmd == "replay":
+        from growbot_train.replay import write_html
+
+        out = args.policy.with_name("replay.html")
+        write_html(replay(args.policy, args.seconds), out)
+        print(f"wrote {out}")
         return 0
     if args.cmd == "follow-spin":
         policy = json.loads(args.policy.read_text())

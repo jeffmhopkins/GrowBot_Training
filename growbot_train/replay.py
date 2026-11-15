@@ -16,6 +16,7 @@ import argparse
 import json
 import math
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -83,6 +84,35 @@ def record(
         options["speed_cmd"] = speeds[0]
     obs, _ = env.reset(seed=seed, options=options)
     env.max_steps = 10**9  # a replay may run longer than a training episode
+    shapes, snapshot = recorder(env)
+    frames = [snapshot(None)]
+    fell = False
+    every = round(turn_every / CONTROL_DT) if turn_every else 0
+    step_every = round(6.0 / CONTROL_DT)
+    for i in range(1, round(seconds / CONTROL_DT) + 1):
+        if speeds and i % step_every == 0:
+            # The env reads its pinned speed on its own redraws too, so pin both.
+            k = min(i // step_every, len(speeds) - 1)
+            env._fixed_speed = env.speed_cmd = speeds[k]
+        if every and i % every == 0:
+            # For a policy whose targets stay in front, left then right, so the target
+            # stays within one turn of where it began: a one-way series ends up behind.
+            sign = -1.0 if alternate and (i // every) % 2 == 0 else 1.0
+            env.target_deg = wrap_deg(env.target_deg + sign * turn_deg)
+        obs, _, term, _, info = env.step(policy.env_action(obs))
+        frames.append(snapshot(info))
+        if term:
+            fell = True
+            break
+    return {"shapes": shapes, "frames": frames, "fell": fell}
+
+
+def recorder(
+    env: GrowBotHeadingEnv,
+) -> tuple[list[dict[str, Any]], Callable[[dict[str, Any] | None], list[Any]]]:
+    """The robot's drawn parts, and a function giving one tick's frame: where each part
+    is, the commands, and what the robot did with them. Shared with the master's replay
+    (growbot_train.master), which drives the env itself."""
     m, d = env.model, env.data
     ids = _geoms(env)
     shapes = [
@@ -119,26 +149,7 @@ def record(
             vec(env.vel_avg, 100),
         ]
 
-    frames = [snapshot(None)]
-    fell = False
-    every = round(turn_every / CONTROL_DT) if turn_every else 0
-    step_every = round(6.0 / CONTROL_DT)
-    for i in range(1, round(seconds / CONTROL_DT) + 1):
-        if speeds and i % step_every == 0:
-            # The env reads its pinned speed on its own redraws too, so pin both.
-            k = min(i // step_every, len(speeds) - 1)
-            env._fixed_speed = env.speed_cmd = speeds[k]
-        if every and i % every == 0:
-            # For a policy whose targets stay in front, left then right, so the target
-            # stays within one turn of where it began: a one-way series ends up behind.
-            sign = -1.0 if alternate and (i // every) % 2 == 0 else 1.0
-            env.target_deg = wrap_deg(env.target_deg + sign * turn_deg)
-        obs, _, term, _, info = env.step(policy.env_action(obs))
-        frames.append(snapshot(info))
-        if term:
-            fell = True
-            break
-    return {"shapes": shapes, "frames": frames, "fell": fell}
+    return shapes, snapshot
 
 
 def _within(
