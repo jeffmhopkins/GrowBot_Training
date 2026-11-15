@@ -33,6 +33,7 @@ import numpy as np
 from growbot_train import config as config_mod
 from growbot_train.env import CONTROL_DT, CTRL_LIMIT, GrowBotHeadingEnv, wrap_deg
 from growbot_train.export import FORMAT, LENS_BLEND
+from growbot_train.gait import Keyframes
 from growbot_train.policy import runner_forward
 
 MODES = ("look", "walk", "back")
@@ -75,7 +76,14 @@ class Teacher:
     lens: bool
     back_fall_deg: float
     ramp_to: float
+    # A residual-gait teacher (the nose walk since #59) outputs a correction on top of a
+    # gait and a steering rule; its leg angles are base + output x residual_rad.
+    gait: Keyframes | None = None
+    residual_rad: float = 0.0
+    steer_deg: float = 0.0
+    steer_rad: float = 0.0
     hist: np.ndarray = field(default_factory=lambda: np.zeros(0))
+    base: np.ndarray = field(default_factory=lambda: np.zeros(2))
 
     @classmethod
     def load(cls, mode: str, path: str | Path) -> Teacher:
@@ -96,18 +104,46 @@ class Teacher:
             back_fall_deg=float(task.get("back_fall_pitch_deg", 0.0)),
             ramp_to=1.0 if ramp_to is None else float(ramp_to),
         )
+        res = spec.get("residual_gait")
+        if res:
+            t.gait = Keyframes(res["hz"], res["keys_rad"])
+            t.residual_rad = float(res["residual_rad"])
+            t.steer_deg = float(res.get("steer_deg", 0.0))
+            t.steer_rad = float(res.get("steer_rad", 0.0))
         t.reset()
         return t
 
     def reset(self) -> None:
         self.hist = np.zeros((self.frames, len(self.channels)))
+        self.base = np.zeros(2)
 
-    def push(self, frame: np.ndarray) -> None:
-        self.hist = np.concatenate([frame[None], self.hist[:-1]])
+    def base_rad(self, s: Senses) -> np.ndarray:
+        """A residual teacher's gait and steering this tick, as its env builds them. Its
+        clock is the shared step count: backing is only ever asked at full speed, where
+        its own clock runs at exactly that rate (a slower ask needs a speed-scaled clock
+        in the app runner, which it doesn't have)."""
+        if self.gait is None:
+            return np.zeros(2)
+        ease = min(1.0, s.step_index * CONTROL_DT)
+        base = ease * self.gait(s.step_index * CONTROL_DT)
+        if self.steer_deg and self.mode != "look" and s.forward != 0.0:
+            err = s.err_lens if self.lens else s.err_body
+            u = float(np.clip(err / self.steer_deg, -1.0, 1.0))
+            base = base + self.steer_rad * np.array([max(u, 0.0), max(-u, 0.0)])
+        return base
 
-    def act(self) -> np.ndarray:
-        """Its leg commands, squashed, in its own units (1 = its action_to_rad)."""
-        return runner_forward(self.data, self.hist.reshape(-1))
+    def observe(self, s: Senses) -> None:
+        """Push this tick's frame (its last action read against last tick's base, as
+        its env does) and set this tick's base."""
+        self.hist = np.concatenate([teacher_frame(self, s)[None], self.hist[:-1]])
+        self.base = self.base_rad(s)
+
+    def act_rad(self) -> np.ndarray:
+        """Its leg commands in radians."""
+        out = runner_forward(self.data, self.hist.reshape(-1))
+        if self.gait is None:
+            return out * self.a2r
+        return np.clip(self.base + out * self.residual_rad, -CTRL_LIMIT, CTRL_LIMIT)
 
 
 @dataclass
@@ -158,7 +194,12 @@ def teacher_frame(t: Teacher, s: Senses) -> np.ndarray:
     fwd = abs(s.forward) if t.mode != "look" else 0.0
     shown = Senses(**{**s.__dict__, "forward": fwd})
     clocks = {"gait_sin": t.hz, "gait_cos": t.hz}
-    return build_frame(t.channels, shown, t.a2r, t.lens, clocks)
+    if t.gait is None:
+        return build_frame(t.channels, shown, t.a2r, t.lens, clocks)
+    # Its last action is the correction that, on last tick's base, gives the legs sent;
+    # none on the first tick, as its env starts (the legs are the settled stance then).
+    shown.prev_rad = np.zeros(2) if s.step_index == 0 else s.prev_rad - t.base
+    return build_frame(t.channels, shown, t.residual_rad, t.lens, clocks)
 
 
 def student_clocks(teachers: dict[str, Teacher]) -> dict[str, float]:
@@ -175,9 +216,9 @@ def choose_mode(forward: float, err_body: float, current: str | None = None) -> 
     return "look"
 
 
-def to_student(action: np.ndarray, a2r: float) -> np.ndarray:
-    """A teacher's squashed action in the student's units: matched in radians."""
-    return np.clip(np.asarray(action) * a2r / ACTION_TO_RAD, -SQUASH, SQUASH)
+def to_student(rad: np.ndarray) -> np.ndarray:
+    """A teacher's leg angles as the student's squashed action: matched in radians."""
+    return np.clip(np.asarray(rad) / ACTION_TO_RAD, -SQUASH, SQUASH)
 
 
 def student_env(look: Teacher) -> GrowBotHeadingEnv:
@@ -288,8 +329,10 @@ class Rollout:
         env.max_steps = n + 1
         script = Script(
             rng,
-            walk_speeds="cmd_forward" in teachers["walk"].channels,
-            back_speeds="cmd_forward" in teachers["back"].channels,
+            walk_speeds="cmd_forward" in teachers["walk"].channels
+            and teachers["walk"].gait is None,
+            back_speeds="cmd_forward" in teachers["back"].channels
+            and teachers["back"].gait is None,
         )
         for t in teachers.values():
             t.reset()
@@ -302,7 +345,7 @@ class Rollout:
             script.tick(env, i * CONTROL_DT)
             s = senses(env, script.forward, script.tilt)
             for t in teachers.values():
-                t.push(teacher_frame(t, s))
+                t.observe(s)
             frame = build_frame(STUDENT_CHANNELS, s, ACTION_TO_RAD, True, self.clocks)
             hist = np.concatenate([frame[None], hist[:-1]])
             new = choose_mode(script.forward, s.err_body, mode)
@@ -310,7 +353,7 @@ class Rollout:
             mode = new
             self.judge_as(mode)
             teacher = teachers[mode]
-            label = to_student(teacher.act(), teacher.a2r)
+            label = to_student(teacher.act_rad())
             x = hist.reshape(-1).copy()
             obs.append(x)
             labels.append(label)
@@ -611,11 +654,11 @@ def drive(
     for _ in range(n):
         s = senses(env, forward, 1.0)
         for t in teachers.values():
-            t.push(teacher_frame(t, s))
+            t.observe(s)
         mode = choose_mode(forward, s.err_body, mode)
         rollout.judge_as(mode)
         if master is None:
-            a = to_student(teachers[mode].act(), teachers[mode].a2r)
+            a = to_student(teachers[mode].act_rad())
         else:
             a = master.act(s)
         _, _, term, _, info = env.step(np.arctanh(a))

@@ -521,6 +521,15 @@ Its limits, until the walks it learns from are retrained:
   but the master is untested there.
 - **Forward speed:** lift-fall-2 has one speed, so forward is stop-or-go. Anything above
   0 means full speed, as the follower already treats it.
+- **Residual-gait teachers** (the nose walk since it walks on a gait, with the policy
+  correcting): the student is labelled with the teacher's whole leg angles (gait,
+  steering rule and correction). It still outputs plain angles, so the phone runs it
+  with nothing new in the app runner. The app's clocks only run at a fixed rate, while
+  such a teacher's clock runs at its speed. So the mode it teaches is stop-or-go at full
+  speed, where the two clocks agree. Slower backing waits for a speed-scaled clock in
+  the runner. A hand-over into such a mode picks the gait up at full swing,
+  wherever its clock is, which the teacher never trained on. The switch test counts the
+  falls that causes.
 
 It isn't listed in `policies/index.toml` yet: the Body tab's runner takes it, but
 nothing in the app sends a signed speed until the follower does.

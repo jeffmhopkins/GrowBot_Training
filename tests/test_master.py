@@ -10,8 +10,11 @@ import math
 import numpy as np
 import pytest
 
+from growbot_train import config as config_mod
 from growbot_train import master
+from growbot_train.env import GrowBotHeadingEnv, channels_for
 from growbot_train.evaluate import env_for
+from growbot_train.export import _residual_spec
 from growbot_train.policy import JsonPolicy, runner_forward
 
 
@@ -60,10 +63,57 @@ def test_the_walk_lets_go_only_past_its_hysteresis() -> None:
 
 
 def test_teacher_actions_are_matched_in_radians() -> None:
-    a = np.array([0.5, -0.25])
-    out = master.to_student(a, 1.0)
-    assert np.allclose(out * master.ACTION_TO_RAD, a * 1.0)
-    assert np.all(np.abs(master.to_student(np.array([1.0, -1.0]), 1.57)) <= master.SQUASH)
+    rad = np.array([0.5, -0.25])
+    assert np.allclose(master.to_student(rad) * master.ACTION_TO_RAD, rad)
+    assert np.all(np.abs(master.to_student(np.array([1.57, -1.57]))) <= master.SQUASH)
+
+
+def test_a_residual_teacher_sees_its_frames_and_sends_its_legs(tmp_path) -> None:
+    # A stand-in for the residual nose walk: its config, small random weights.
+    cfg = config_mod.load("configs/nose_walk.toml")
+    assert cfg.task.residual_gait and cfg.task.residual_steer_deg
+    env = GrowBotHeadingEnv(cfg)
+    channels = channels_for(cfg)
+    n = cfg.task.history_frames * len(channels)
+    rng = np.random.default_rng(0)
+    policy = {
+        "obs_spec": {
+            "segments": [{"channels": list(channels), "frames": cfg.task.history_frames}],
+            "cycles": {"gait_sin": {"type": "sin", "frequency": cfg.task.gait_hz}},
+            "action_to_rad": cfg.task.action_to_rad,
+            **_residual_spec(cfg),
+        },
+        "mean": [0.0] * n,
+        "std": [1.0] * n,
+        "layers": [{"W": (rng.normal(0, 0.3, (n, 2))).tolist(), "b": [0.0, 0.0]}],
+        "training": {"config": cfg.to_dict()},
+    }
+    path = tmp_path / "residual.json"
+    path.write_text(json.dumps(policy))
+    teacher = master.Teacher.load("back", path)
+    assert teacher.gait is not None
+    env.reset(
+        seed=4,
+        options={"retarget": False, "speed_cmd": 1.0, "target_error_deg": 35.0},
+    )
+    for _ in range(40):
+        s = master.Senses(
+            acc=env.hist[0][0:3],
+            gyro=env.hist[0][3:6],
+            prev_rad=env.prev_action * cfg.task.residual_rad + teacher.base,
+            err_lens=env._err_obs,
+            err_body=env._err_obs,
+            forward=-1.0,
+            tilt=1.0,
+            step_index=env.step_index,
+        )
+        teacher.observe(s)
+        assert np.allclose(teacher.hist[0], env.hist[0], atol=1e-12)
+        out = runner_forward(teacher.data, teacher.hist.reshape(-1))
+        want = env.gait_rad() + env.steer_rad() + out * cfg.task.residual_rad
+        assert np.allclose(teacher.act_rad(), np.clip(want, -1.57, 1.57), atol=1e-12)
+        _, _, term, _, _ = env.step(np.arctanh(out))
+        assert not term
 
 
 def test_the_rollout_judges_falls_by_the_active_teachers_rule() -> None:
@@ -149,3 +199,46 @@ def test_teacher_and_master_get_the_same_script() -> None:
         targets.append(seen)
     n = min(len(targets[0]), len(targets[1]))
     assert n > 0 and targets[0][:n] == targets[1][:n]
+
+
+def _stand_in_residual(tmp_path, scale: float = 0.3):
+    cfg = config_mod.load("configs/nose_walk.toml")
+    channels = channels_for(cfg)
+    n = cfg.task.history_frames * len(channels)
+    rng = np.random.default_rng(0)
+    policy = {
+        "obs_spec": {
+            "segments": [{"channels": list(channels), "frames": cfg.task.history_frames}],
+            "cycles": {"gait_sin": {"type": "sin", "frequency": cfg.task.gait_hz}},
+            "action_to_rad": cfg.task.action_to_rad,
+            **_residual_spec(cfg),
+        },
+        "mean": [0.0] * n,
+        "std": [1.0] * n,
+        "layers": [{"W": (rng.normal(0, scale, (n, 2))).tolist(), "b": [0.0, 0.0]}],
+        "training": {"config": cfg.to_dict()},
+    }
+    path = tmp_path / "residual.json"
+    path.write_text(json.dumps(policy))
+    return cfg, path, channels
+
+
+def test_a_residual_teacher_reads_back_its_own_correction_in_the_student_env(
+    tmp_path,
+) -> None:
+    # The real path: senses() from the student env, legs sent through to_student. The
+    # teacher must see its own last correction (none on the first tick).
+    cfg, path, channels = _stand_in_residual(tmp_path, scale=0.05)
+    teachers = dict(master.DEFAULT_TEACHERS)
+    teachers["back"] = str(path)
+    r = master.Rollout(teachers)
+    env, teacher = r.env, r.teachers["back"]
+    env.reset(seed=2, options={"retarget": False, "speed_cmd": 0.0, "target_error_deg": 20.0})
+    teacher.reset()
+    i0 = channels.index("prev_action_0")
+    last = np.zeros(2)
+    for _ in range(30):
+        teacher.observe(master.senses(env, -1.0, 1.0))
+        assert np.allclose(teacher.hist[0][i0 : i0 + 2], last, atol=1e-6)
+        last = runner_forward(teacher.data, teacher.hist.reshape(-1))
+        env.step(np.arctanh(master.to_student(teacher.act_rad())))
