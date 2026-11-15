@@ -386,7 +386,10 @@ at 30-60 s isn't comparable with the 30 s runs before.
 v6 (run 36d29750, kept as `policies/look-v6`) aimed within 16 degrees on random bodies
 but took 20 to 28 s for half a turn, against about 11 for the spin it cloned: the turn
 term pays a slow turn the same as a quick one. So look now also earns the arrive bonus
-(`reward.arrive = 30`), like the lift and fall. Unlike the camera walk it trains on
+(`reward.arrive = 30`), like the lift and fall. It also crept 1 to 2 cm/s, and Jeff's bar
+is under 1, so the free drift is now 1 cm/s (`reward.stop_drift_free = 0.33`) and the
+anchor charges up to 1.0 a tick (`reward.anchor = 1.0`, was 0.4). On its own a stiffer
+creep charge only made v5 turn less; the arrive bonus is what pays it to keep turning. Unlike the camera walk it trains on
 the printed build with bare-print surfaces (see [Bodies](#bodies)), like the heading walk.
 It's the camera walk otherwise, and only the lines marked CHANGED differ from that file.
 From JBrain it's the "GrowBot look" job.
