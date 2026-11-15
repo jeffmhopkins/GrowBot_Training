@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 from growbot_train.config import Config
@@ -132,3 +133,15 @@ def test_commanded_runs_show_speed_miss_and_the_commanded_height(tmp_path: Path)
     assert "Toward target" not in labels
     assert labels["Off commanded speed"].startswith("0.4 cm/s")
     assert labels["Standing taller"] == "-2.0° (aim -3°)"
+
+
+def test_the_cpu_meter_counts_the_run_and_its_trainer() -> None:
+    from growbot_train.live import CpuMeter
+
+    meter = CpuMeter()
+    end = time.monotonic() + 0.5
+    while time.monotonic() < end:  # keep this process busy for a moment
+        pass
+    got = meter.read()
+    assert 0.2 < got["trainer_cpu"] <= 1.5
+    assert got["cpu_cores"] >= got["trainer_cpu"] * 0.9
