@@ -10,8 +10,8 @@ name = "lift_fall"
 # cares more about that thing. See README "The reward" for what each one does.
 progress = 2.0          # walking along the target direction, full value at the speed cap
 heading = 0.5           # pointing at the target: full value dead on, zero facing away
-heading_width_deg = 40.0  # CHANGED: ...and it pays only near it (exp(-(error/40)^2)), so 30 degrees off earns 57%, not the cosine's 93%
-progress_width_deg = 45.0  # CHANGED: progress pays only while pointing near the target: at full speed 40 degrees off it earns 35% of the on-target pay, not 77%. The first capped run turned partway and then walked straight 40 degrees off
+heading_width_deg = 0.0  # cosine heading pay: a narrow one (40) left the gait, which turns by arcing, no pay for the arc
+progress_width_deg = 0.0  # off: gated progress (45) stopped the arcing turns this gait turns by; at 16M the gated run ended 58 degrees off from a 90-degree start, the ungated one 26-30
 arrive = 30.0           # CHANGED: one-off bonus per target that needs a turn, once it has held within 15 degrees for 1 s: 95% if it turns at once, none if it takes 20 s, so a quick turn pays more than a slow one
 speed_cap_m_s = 0.05    # CHANGED: 5 cm/s, what the lift and fall does on the as-built robot
 speed_window_s = 1.0    # speed is averaged over this long before the cap is checked

@@ -34,8 +34,8 @@ standing still. `task.speed_ramp_steps` starts every command at full speed with 
 and widens the spread to the full range over the first 8M steps. Its evaluation adds a
 speed-tracking table, the speed it walks at for each commanded share of the cap. The first
 run walked 1.7 cm/s but held 34-50 degrees off and rarely came round from behind, so it now
-uses lift and fall's turning reward too (`progress_width_deg`, `heading_width_deg`,
-`turn`, `arrive`). See
+uses a turning reward: lift and fall's `turn` and `arrive`, plus progress and heading
+that count only near the target (`progress_width_deg`, `heading_width_deg`). See
 [The camera walk](#the-camera-walk) for why the camera walk exists and what it can and
 can't do with this body.
 
@@ -170,8 +170,8 @@ Every tick the reward is the sum of these terms. All the weights live in
 | Term | Weight | What it pays for or punishes |
 | --- | --- | --- |
 | progress | `progress = 2.0` | Moving in the target direction. Full value at the speed cap, a fraction below it, nothing extra above it, negative when moving away. |
-| heading | `heading = 0.5` | Pointing the nose at the target. Full value dead on, half at 90 degrees off, zero facing away. With `heading_width_deg` > 0 (look and lift and fall: 40) it is exp(-(error/width)^2) instead, paying only near the target. |
-| progress_width_deg | `progress_width_deg = 0.0` (lift and fall: 45) | With > 0, progress (paid or charged) is scaled by exp(-(error/width)^2), so it counts only while pointing near the target. Speed along the target alone pays 77% walking 40 degrees off; the first capped lift and fall run turned partway and then walked straight that far off. |
+| heading | `heading = 0.5` | Pointing the nose at the target. Full value dead on, half at 90 degrees off, zero facing away. With `heading_width_deg` > 0 (look, nose walk: 40) it is exp(-(error/width)^2) instead, paying only near the target. |
+| progress_width_deg | `progress_width_deg = 0.0` (nose walk: 45) | With > 0, progress (paid or charged) is scaled by exp(-(error/width)^2), so it counts only while pointing near the target. Speed along the target alone pays 77% walking 40 degrees off. Tried on lift and fall and taken back off: that gait turns by arcing, and with no pay for the arc it stopped turning (from a 90-degree start, 58 degrees off at 16M steps, against 26-30 without it). |
 | arrive | `arrive = 0.0` (lift and fall and look: 30) | A one-off bonus each target that starts at least `arrive_within_deg` (15 degrees) off, once the error has stayed under it for `arrive_hold_s` (1 s): weight times (1 minus the time since the target moved over `arrive_by_s`, 20 s), so 95% for turning at once and nothing after 20 s (look: held 2 s, paying until 30 s). Discounting already favours a quick turn a little; this pays for arriving and settling. |
 | overspeed | `overspeed = 4.0` | Going faster than `speed_cap_m_s` (3 cm/s; camera walk 1 cm/s with `overspeed = 1.0`). Grows with the square of the excess, so a little over is mild and a lot over is harsh. |
 | tilt | `tilt = 1.0` | Leaning away from how it stood at the start. (This body naturally rests nose-up at about 34 degrees, so "upright" means its own starting stance, the same reference the app's tip check uses.) |
