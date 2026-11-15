@@ -1,0 +1,4 @@
+policy: policy_lift_fall.json
+obs_size: 55
+max |json - network|: 4.320e-07 (tolerance 1e-05)
+EXPORT OK
