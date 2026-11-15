@@ -246,12 +246,14 @@ class Hold:
 
     errs: deque[float] = field(default_factory=lambda: deque(maxlen=HOLD_WINDOW))
     legs: deque[np.ndarray] = field(default_factory=lambda: deque(maxlen=HOLD_WINDOW))
+    tilts: deque[float] = field(default_factory=lambda: deque(maxlen=HOLD_WINDOW))
     held: np.ndarray | None = None
     tilt: float = 0.0
 
     def reset(self) -> None:
         self.errs.clear()
         self.legs.clear()
+        self.tilts.clear()
         self.held = None
 
     def legs_rad(self, s: Senses, mode: str, look_rad: np.ndarray) -> np.ndarray:
@@ -270,6 +272,11 @@ class Hold:
         if not standing:
             self.legs.clear()
             return look_rad
+        # A camera-height ask restarts the second, so a hold never freezes look half-way
+        # from the old stance to the new one.
+        if self.tilts and s.tilt != self.tilts[-1]:
+            self.legs.clear()
+        self.tilts.append(s.tilt)
         self.legs.append(look_rad)
         if (
             len(self.legs) == HOLD_WINDOW

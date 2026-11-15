@@ -353,3 +353,26 @@ def test_a_master_config_must_name_a_teacher_per_mode(tmp_path) -> None:
     cfg.write_text('[master]\nlook = "policies/look-v9/policy_look.json"\n')
     with pytest.raises(ValueError, match="teacher per mode"):
         master.load_job(cfg)
+
+
+def test_a_camera_height_ask_restarts_the_settling_second() -> None:
+    hold = master.Hold()
+    w = master.HOLD_WINDOW
+    own = np.array([0.1, 0.1])
+    for _ in range(w - 1):
+        hold.legs_rad(_senses(0.0), "look", own)
+    # Look is still moving to the new stance: the hold waits a full second past the ask.
+    for _ in range(w - 1):
+        hold.legs_rad(_senses(0.0, tilt=1.05), "look", own)
+    assert not hold.holding
+    hold.legs_rad(_senses(0.0, tilt=1.05), "look", own)
+    assert hold.holding
+
+
+def test_teacher_driven_look_settles_after_a_turn_and_the_episode_counts_it() -> None:
+    r = master.Rollout(master.DEFAULT_TEACHERS)
+    d = master.drive(r, None, 0, 0.0, 90.0, 20.0, nominal=True)
+    assert not d["fell"] and d["drift_cm"] < 1.0
+    ep = r.episode(0, 60.0, None, beta=1.0)
+    assert 0 < ep["held"] < len(ep["obs"])
+    assert r.episode(0, 60.0, None, beta=1.0)["held"] == ep["held"]

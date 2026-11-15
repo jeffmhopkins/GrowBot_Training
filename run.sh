@@ -14,7 +14,13 @@ PY=.venv/bin/python
 
 # Any step failing leaves the live folder saying so, not "training" forever.
 trap 'rc=$?; [ "$rc" -eq 0 ] || "$PY" -m growbot_train.live failed "$RUN" || true' EXIT
-if [ "${1:-}" = "--config" ] && "$PY" -c 'import sys; from growbot_train.master import is_job; sys.exit(not is_job(sys.argv[1]))' "${2:-}"; then
+# Asked in an assignment, so a broken import stops the run here (set -e) rather than
+# reading as "not a master config".
+MASTER=0
+if [ "${1:-}" = "--config" ]; then
+  MASTER=$("$PY" -c 'import sys; from growbot_train.master import is_job; print(int(is_job(sys.argv[1])))' "${2:-}")
+fi
+if [ "$MASTER" = 1 ]; then
   # A master config distils the trained skills into one policy instead of training.
   "$PY" -m growbot_train.master job --out "$RUN" --config "$2"
 else
