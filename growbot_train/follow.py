@@ -296,6 +296,8 @@ class Follower:
     # camera no lower than this; the height asked for comes back once it faces them.
     turn_tilt_min: float = 0.0
     turn_tilt_deg: float = 20.0
+    face_tilt_deg: float = 15.0  # and the height asked for comes back only within this
+    facing: bool = True
     search_deg: float = 90.0  # the heading error sent while searching: a steady spin
     search_sign: float = 1.0
     near_m: float = 0.5
@@ -367,11 +369,12 @@ class Follower:
         # Only look takes a camera height, so it is steered only while standing and roughly
         # facing them: a walk's own stance pitches the lens 20-30 degrees, which read as the
         # face far above and drove the height to its limit in a second.
-        if fresh and speed == 0.0 and abs(bearing) <= self.turn_tilt_deg:
+        # The gap between letting go and coming back keeps noise at the limit from flipping
+        # the height between the one asked for and level every tick.
+        self.facing = abs(bearing) <= (self.turn_tilt_deg if self.facing else self.face_tilt_deg)
+        if fresh and speed == 0.0 and self.facing:
             self.tilt = float(np.clip(self.tilt - self.pitch_gain * tracked.pitch_deg, -1.0, 1.0))
-        if abs(bearing) > self.turn_tilt_deg:
-            return bearing, speed, turning_tilt
-        return bearing, speed, self.tilt
+        return bearing, speed, self.tilt if self.facing else turning_tilt
 
 
 DEFAULT_SCRIPT: tuple[tuple[float, str], ...] = (

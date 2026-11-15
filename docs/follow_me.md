@@ -162,7 +162,8 @@ A small controller between the tracker and the policy:
   follower rule can see.
 - **Pitch:** the tracker's vertical error, integrated into `cmd_pitch`, so the camera
   keeps the face mid-frame. Only look takes a camera height, so it moves only while
-  standing and within 20 degrees of the person: a walk's own stance pitches the lens
+  standing and within 20 degrees of the person (coming back within 15), since a walk's
+  own stance pitches the lens
   20-30 degrees, and integrating that drove the height to its limit in a second. A turn
   wider than 20 degrees, or a search, is sent with the camera no lower than level (0),
   and the height asked for comes back once it faces them: look barely turns with the
@@ -238,18 +239,21 @@ nominal body; one distractor wandering the same room with `--two`; the track tak
 faces by the app's own rule, `growbot-follow.js` Track):
 
 - No falls, one person or two.
-- One person: in frame 9-61% of the time (median about 46%), lost about half of it;
-  0.35-0.75 m off the set distance on average. The person walks 0.3-0.7 m/s around a
+- One person: in frame 10-52% of the time (median about 42%), lost about 60% of it;
+  0.31-0.69 m off the set distance on average. The person walks 0.3-0.7 m/s around a
   0.7-2.5 m ring; the master walks 5.5 cm/s and spins about as fast as look-v9, so a
-  person crossing the room leaves the 60-degree frame. The master with its walk turned
-  off keeps them in frame about as long as look-v9 alone (59-72%): the walks cost frame
-  time, and buy distance (look alone is 0.8-1.1 m off).
-- Two people: it holds the wrong person 16-39% of the time. After the right person
-  leaves the frame, the app's rule takes any face within 130 degrees of where they
-  were and within half the distance, and the stranger is often that face. Tighter gates
-  trade it for losing the right person more (10 + 20 degrees a second: 8% wrong, 84%
-  lost). This needs who-is-who, not a gate: the speaker lock (P4) or a face's look.
-- On "stay": 0.6-2.1 cm/s of movement, which includes the turning to watch.
+  person crossing the room leaves the 60-degree frame. For comparison, look-v9 alone
+  (`follow.run`, the same 8 seeds) keeps them in frame 46-76% and is 0.51-1.05 m off,
+  with one fall; a one-off run of the master with its walk switched off kept them in
+  frame about as long as look-v9. So the walks cost frame time and buy distance.
+- Two people: it holds the wrong person 9-40% of the time. The app's rule takes any face
+  within 130 degrees of where the person was and within half their distance, so after
+  they leave the frame the stranger is often that face; the first lock also takes the
+  nearest face, which may be the stranger. One-off runs with tighter gates traded it for
+  losing the right person more (10 + 20 degrees a second: about 8% wrong, 84% lost).
+  This needs who-is-who, not a gate: the speaker lock (P4) or a face's look.
+- On "stay": 0.7-2.0 cm/s of movement, which includes the turning to watch.
+- Backing is sent at 0.3-1 and walking at 1, the speeds the master trained on.
 
 It passes when the robot keeps the person in frame through the whole script, settles
 to the set distance after each command, holds still on "stay", never switches to a

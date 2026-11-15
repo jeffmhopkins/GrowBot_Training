@@ -1052,7 +1052,9 @@ def follow_me(
         env.heading_bias = 0.0
         env.tilt_cmd = env._fixed_tilt = tilt
         env._set_stance()
-        s = senses(env, speed, tilt)
+        # The master backed only at 0.3-1 in training (Script), and walked only at 1.
+        fwd = 1.0 if speed > 0 else min(speed, -0.3) if speed < 0 else 0.0
+        s = senses(env, fwd, tilt)
         new = choose_mode(s.forward, s.err_body, mode)
         switches += mode is not None and new != mode
         mode = new
