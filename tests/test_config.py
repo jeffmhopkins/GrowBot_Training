@@ -121,6 +121,8 @@ def test_look_differs_from_the_camera_walk_only_where_it_says() -> None:
         ("reward", "stop_drift_free"),
         ("task", "gait_hz"),
         ("task", "retarget_every_s"),
+        ("task", "episode_seconds"),
+        ("task", "tilt_command_every_s"),
         ("task", "speed"),
         ("train", "total_steps"),
         ("train", "envs_per_worker"),

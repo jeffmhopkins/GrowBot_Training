@@ -370,7 +370,10 @@ rate minus net travel: on the nominal body it spins about 24 degrees a second
 travelling 0.4 cm/s (the first spin: 12 and 2.0), and on held-out random bodies at half
 the randomisation 17 and 1.1 (the first: 11 and 1.8). Its legs swing up to 1.25 rad,
 so `task.action_to_rad` is 1.45, and the band is back at 1.5 cm/s. A rubber tail pad
-cut the first spin's travel by a third in the simulator, but the new spin needs none. It keeps the camera height input. Unlike the camera walk it trains on
+cut the first spin's travel by a third in the simulator, but the new spin needs none. It keeps the camera height input. At those turn rates half a turn takes 11 to 16
+seconds, so the old 6 to 14 s between targets often moved the target before the robot
+got there. The target now moves every 15 to 30 s, the camera height every 8 to 20 s, and
+an episode lasts a minute so it still holds several targets. Unlike the camera walk it trains on
 the printed build with bare-print surfaces (see [Bodies](#bodies)), like the heading walk.
 It's the camera walk otherwise, and only the lines marked CHANGED differ from that file.
 From JBrain it's the "GrowBot look" job.
