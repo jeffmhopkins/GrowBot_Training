@@ -133,10 +133,10 @@ The gaps it has to bridge are listed in [follow_me.md](follow_me.md#1-one-master
 
 **Where it stands (2026-11-15):** the distillation runs locally in about 10 minutes
 (`growbot_train/master.py`, see the README's "The master policy"). `policies/master-1`
-(look-v7, lift-fall-2, nose-walk-1) is within 5% of its teachers per mode, but it falls
-3 times in 108 switches, about as often as its teachers do through the same scripts.
-That is mostly lift-fall-2 tipping on turns, so it waits on the walks, not on the
-distillation. Still to come:
+(look-v7, lift-fall-2, nose-walk-1) is within 5% of its teachers on speed per mode and
+within about a second and 1.3 degrees on turns and aim. It falls 3 times in 108
+switches; its teachers, driving the same scripts, fall 3 times in 100. Its per-mode runs fall only in lift-fall-2's walk, so it waits on
+the walks, not on the distillation. Still to come:
 - a residual-gait teacher (the new nose walk), labelled with its full leg angles, with
   a nose clock that runs at its speed;
 - the PPO fine-tune.

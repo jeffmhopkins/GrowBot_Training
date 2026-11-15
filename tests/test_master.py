@@ -118,3 +118,12 @@ def test_each_clock_runs_at_its_teachers_rate() -> None:
     frame = master.build_frame(master.STUDENT_CHANNELS, s, master.ACTION_TO_RAD, True, clocks)
     i = master.STUDENT_CHANNELS.index("cycle:walk_sin")
     assert frame[i] == pytest.approx(math.sin(2 * math.pi * 2.347 * 7 * 0.04))
+
+
+def test_the_switch_test_runs_teacher_and_master_on_the_same_scripts() -> None:
+    r = master.Rollout(master.DEFAULT_TEACHERS)
+    policy = json.loads((master.Path("policies/master-1/policy_master.json")).read_text())
+    runner = master.MasterRunner(policy, r.teachers)
+    for who in (None, runner):
+        out = master.switch_test(r, who, [1], 2.0)
+        assert out["episodes"] == 1 and out["falls"] in (0, 1)

@@ -638,12 +638,15 @@ def drive(
 
 
 def switch_test(
-    rollout: Rollout, master: MasterRunner, seeds: list[int], seconds: float
+    rollout: Rollout, master: MasterRunner | None, seeds: list[int], seconds: float
 ) -> dict[str, float]:
-    """Master-driven episodes of random commands: falls against mode switches."""
+    """Episodes of random commands, falls against mode switches: driven by the master,
+    or (None) by the teachers on the same scripts, so a fall rate the teachers share
+    shows as theirs."""
     falls = switches = 0
     for seed in seeds:
-        ep = rollout.episode(seed, seconds, master.policy, beta=0.0)
+        policy = None if master is None else master.policy
+        ep = rollout.episode(seed, seconds, policy, beta=0.0)
         falls += ep["fell"]
         switches += ep["switches"]
     return {"falls": falls, "switches": switches, "episodes": len(seeds)}
@@ -669,7 +672,11 @@ def evaluate(
                 agg["falls"] = sum(r["fell"] for r in runs)
                 agg["runs"] = len(runs)
                 report.setdefault(mode, {}).setdefault(f"{start:+.0f}", {})[who] = agg
-    report["switch"] = switch_test(rollout, master, [7000 + k for k in range(switch_episodes)], 60)
+    seeds = [7000 + k for k in range(switch_episodes)]
+    report["switch"] = {
+        "teacher": switch_test(rollout, None, seeds, 60),
+        "master": switch_test(rollout, master, seeds, 60),
+    }
     return report
 
 
@@ -685,11 +692,12 @@ def format_report(report: dict[str, Any]) -> str:
                     f"{start:>6}  {who:<8} {r['toward']:7.4f} {r['speed']:7.4f} "
                     f"{r['err']:6.1f} {r['turn_s']:7.2f}  {r['falls']}/{r['runs']}"
                 )
-    sw = report["switch"]
-    lines.append(
-        f"-- switches: {sw['falls']} falls in {sw['switches']} mode switches "
-        f"over {sw['episodes']} minute-long runs"
-    )
+    for who in ("teacher", "master"):
+        sw = report["switch"][who]
+        lines.append(
+            f"-- switches, {who}-driven: {sw['falls']} falls in {sw['switches']} mode "
+            f"switches over {sw['episodes']} minute-long runs"
+        )
     return "\n".join(lines)
 
 

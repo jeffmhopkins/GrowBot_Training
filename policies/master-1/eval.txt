@@ -22,4 +22,5 @@
    +45  master   -0.0265  0.0281    7.6    2.74  0.0/5
    -45  teacher  -0.0262  0.0289    6.7    4.30  0.0/5
    -45  master   -0.0258  0.0286    8.0    5.51  0.0/5
--- switches: 3 falls in 108 mode switches over 20 minute-long runs
+-- switches, teacher-driven: 3 falls in 100 mode switches over 20 minute-long runs
+-- switches, master-driven: 3 falls in 108 mode switches over 20 minute-long runs

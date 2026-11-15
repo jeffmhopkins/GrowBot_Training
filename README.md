@@ -502,15 +502,25 @@ rule: lift and fall's gait rears up past look's back-fall line by design.
 ```
 
 `evaluate` drives the same robots once with the teachers (through the same mode rule)
-and once with the master, per mode and start, then counts falls against mode switches in
-20 minute-long runs of random commands. The first master (`policies/master-1`, from
-look-v7, lift-fall-2 and nose-walk-1) is within 5% of its teachers in every mode on
-speed, heading error and turn time (backing from -45 degrees ends 8.0 degrees off against
-6.7). It fell 3 times in 108 mode switches, against a bar of under 1 in 50. Driven by
-its teachers instead, the same scripts fall about 1 in 50, mostly lift-fall-2 tipping on
-a turn. So the remaining falls are the walking teacher's, and the master gets better
-as the teachers do. It isn't listed in `policies/index.toml` yet: the Body tab's runner
-takes it, but nothing in the app sends a signed speed until the follower does.
+and once with the master, per mode and start. It then counts falls against mode
+switches in 20 minute-long runs of random commands, driven each way on the same scripts.
+The first master (`policies/master-1`, from look-v7, lift-fall-2 and nose-walk-1) matches
+its teachers within 5% on speed in every mode. Heading error is within 1.3 degrees: the
+worst is backing from -45, 8.0 against 6.7. Turn times are within a second, the worst
+being walking from -45, 2.9 s against 2.0. It fell 3 times in 108 mode switches, against a
+bar of under 1 in 50. Its teachers, driving the same scripts, fell 3 times in 100. In the per-mode runs only lift-fall-2's walk falls, master or teacher.
+So the master gets better as the teachers do.
+
+Its limits, until the walks it learns from are retrained:
+
+- **Bodies:** it only ever saw bodies as far from the as-built one as lift-fall-2 trained
+  on (35% of the ranges), in every mode. Look and the nose walk handle the full ranges,
+  but the master is untested there.
+- **Forward speed:** lift-fall-2 has one speed, so forward is stop-or-go. Anything above
+  0 means full speed, as the follower already treats it.
+
+It isn't listed in `policies/index.toml` yet: the Body tab's runner takes it, but
+nothing in the app sends a signed speed until the follower does.
 
 ## Training on a different robot every time (randomisation)
 

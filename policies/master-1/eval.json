@@ -168,8 +168,15 @@
   }
  },
  "switch": {
-  "falls": 3,
-  "switches": 108,
-  "episodes": 20
+  "teacher": {
+   "falls": 3,
+   "switches": 100,
+   "episodes": 20
+  },
+  "master": {
+   "falls": 3,
+   "switches": 108,
+   "episodes": 20
+  }
  }
 }
