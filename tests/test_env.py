@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+from pathlib import Path
 
 import mujoco
 import numpy as np
@@ -949,3 +950,85 @@ def test_the_stop_drift_band_narrows_with_the_curriculum() -> None:
     assert env._stop_drift_free() == pytest.approx(0.375)
     env.dr_scale = 1.0  # full ramp, and evaluation
     assert env._stop_drift_free() == pytest.approx(0.25)
+
+
+NOSE_WALK = Path(__file__).parent.parent / "configs" / "nose_walk.toml"
+
+
+def _residual_env(**task) -> GrowBotHeadingEnv:
+    from growbot_train import config as config_mod
+
+    cfg = config_mod.load(NOSE_WALK)
+    for k, v in task.items():
+        setattr(cfg.task, k, v)
+    cfg.randomization.enabled = False
+    return GrowBotHeadingEnv(cfg)
+
+
+def test_a_residual_gait_walks_with_no_policy_output() -> None:
+    # The gait is in charge: a policy that outputs nothing still backs nose first.
+    env = _residual_env()
+    env.reset(seed=0, options={"retarget": False, "target_error_deg": 0.0, "speed_cmd": 1.0})
+    along = []
+    for _ in range(round(8 / CONTROL_DT)):
+        _, _, term, _, info = env.step(np.zeros(2))
+        along.append(info["v_along"])
+        assert not term
+    assert np.mean(along[25:]) > 0.02
+
+
+def test_the_speed_command_sets_a_residual_gaits_step_rate() -> None:
+    env = _residual_env()
+    for cmd in (1.0, 0.5, 0.0):
+        env.reset(seed=0, options={"retarget": False, "target_error_deg": 0.0, "speed_cmd": cmd})
+        for _ in range(50):
+            env.step(np.zeros(2))
+        assert env.cycles == pytest.approx(50 * CONTROL_DT * env.cfg.task.gait_hz * cmd)
+
+
+def test_a_residual_gait_must_run_at_the_clock_rate() -> None:
+    with pytest.raises(ValueError, match="hz"):
+        _residual_env(gait_hz=1.0)
+
+
+def test_the_export_tells_the_runner_about_a_residual_gait() -> None:
+    from growbot_train import config as config_mod
+    from growbot_train.export import _residual_spec
+
+    cfg = config_mod.load(NOSE_WALK)
+    spec = _residual_spec(cfg)["residual_gait"]
+    assert spec["hz"] == cfg.task.gait_hz and len(spec["keys_rad"]) == 2
+    cfg.task.residual_gait = ""
+    assert _residual_spec(cfg) == {}
+
+
+def test_a_residual_gait_cannot_also_be_cloned() -> None:
+    from growbot_train import config as config_mod
+
+    cfg = config_mod.load(NOSE_WALK)
+    cfg.train.warm_gait = cfg.task.residual_gait
+    with pytest.raises(ValueError, match="warm_gait"):
+        GrowBotHeadingEnv(cfg)
+
+
+def test_a_residual_policy_exports_and_evaluates(tmp_path: Path) -> None:
+    import subprocess
+    import sys
+
+    out = tmp_path / "run"
+    cmd = [sys.executable, "-m", "growbot_train.train", "--config", str(NOSE_WALK)]
+    cmd += ["--out", str(out), "--steps", "512", "--envs", "2"]
+    cmd += ["--set", "train.n_steps=128", "--set", "train.batch_size=256"]
+    subprocess.run(cmd, check=True, capture_output=True)
+    subprocess.run(
+        [sys.executable, "-m", "growbot_train.export", str(out)], check=True, capture_output=True
+    )
+    from growbot_train.evaluate import env_for
+    from growbot_train.policy import JsonPolicy
+
+    pol = JsonPolicy(out / "policy_nose_walk.json")
+    assert "residual_gait" in pol.data["obs_spec"]
+    env = env_for(pol)
+    obs, _ = env.reset(seed=0, options={"speed_cmd": 0.5})
+    env.step(pol.env_action(obs))
+    assert env.cycles == pytest.approx(CONTROL_DT * env.cfg.task.gait_hz * 0.5)

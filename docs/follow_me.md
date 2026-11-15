@@ -78,7 +78,9 @@ The teachers don't line up yet, and the distillation has to bridge these gaps:
   degrees nose-up, some 22 under rest), whatever `cmd_pitch` says. So `cmd_pitch` only steers the camera at speed 0,
   until the walks learn a camera-height input (roadmap phase 1).
 - **Clock:** each teacher's gait clock ticks at its own rate (look 1 Hz, nose walk
-  0.906 Hz, lift and fall 2.347 Hz). The student needs the clock per mode, or its own clock
+  0.906 Hz, lift and fall 2.347 Hz), and the nose walk's runs at that times the speed
+  command's size: it walks a residual gait, its legs the gait plus the policy's output
+  (`residual_gait` in its policy file). The student needs the clock per mode, or its own clock
   with the teachers' phases mapped onto it.
 - **Heading:** look measures the error from where the camera points (`heading_from =
   "lens"`), which is what the tracker reports. Lift and fall measures it from the tail

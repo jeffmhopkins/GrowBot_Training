@@ -34,6 +34,15 @@ class Keyframes:
         g = data.get("gait", data)  # a search result file or a bare gait
         return cls(g["hz"], g["keys_rad"])
 
+    @classmethod
+    def load_repo(cls, path: str | Path) -> Keyframes:
+        """A gait named in a config: as given, or relative to the repo when the run
+        starts somewhere else."""
+        p = Path(path)
+        if not p.is_absolute() and not p.exists():
+            p = Path(__file__).resolve().parents[1] / p
+        return cls.load(p)
+
     def __call__(self, t: float) -> np.ndarray:
         k = self.keys.shape[1]
         ph = (t * self.hz % 1.0) * k

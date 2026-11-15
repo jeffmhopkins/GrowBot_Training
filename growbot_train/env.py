@@ -10,7 +10,8 @@ frame, newest first (the JBrain2 app's ``growbot_runner.js`` builds the same vec
     cmd_yaw                        heading error / 180, in [-1, 1]
     cmd_forward                    speed command in [-1, 1] (task.speed = "command" only)
     cmd_pitch                      camera height command in [-1, 1] (task.tilt_command)
-    cycle:gait_sin, cycle:gait_cos a fixed-rate clock, counted in ticks from the start
+    cycle:gait_sin, cycle:gait_cos a clock from the start: fixed-rate, or under a residual
+                                   gait at |speed command| x gait_hz
 
 Heading error is ``target - current`` in degrees, wrapped to [-180, 180]: positive means
 the target is counter-clockwise of the robot's nose, seen from above (turn left).
@@ -192,6 +193,19 @@ class GrowBotHeadingEnv(gym.Env):
             raise ValueError("randomization.ramp_to must be in (0, 1]")
         if cfg.randomization.ramp_to < cfg.randomization.ramp_from:
             raise ValueError("randomization.ramp_to must be at least ramp_from")
+        self._gait = None
+        if cfg.task.residual_gait:
+            from growbot_train.gait import Keyframes
+
+            self._gait = Keyframes.load_repo(cfg.task.residual_gait)
+            if abs(self._gait.hz - cfg.task.gait_hz) > 1e-6:
+                raise ValueError("task.residual_gait's hz must equal task.gait_hz")
+            if cfg.task.speed == "still":
+                raise ValueError("task.residual_gait walks; it can't train standing still")
+            if cfg.train.warm_gait:
+                # The clone teaches absolute angles on a fixed clock; here the output is a
+                # correction on a clock the speed sets, so it would teach the gait twice.
+                raise ValueError("task.residual_gait and train.warm_gait can't both be set")
         self.channels = channels_for(cfg)
         self._torso = m.body("base_body").id
         self._legs = [m.body("right_leg").id, m.body("left_leg").id]
@@ -529,9 +543,15 @@ class GrowBotHeadingEnv(gym.Env):
             d.time = 0.0
 
         self.step_index = 0
+        self.cycles = 0.0  # gait cycles walked: the clock, which a residual gait slows
         self.motor = legs.copy()
         self.queue = np.tile(legs, (DELAY_SLOTS, 1))
-        self.prev_action = np.clip(legs / self.cfg.task.action_to_rad, -1.0, 1.0)
+        # Under a residual gait the output is a correction, none yet at the start.
+        self.prev_action = (
+            np.zeros(2)
+            if self._gait is not None
+            else np.clip(legs / self.cfg.task.action_to_rad, -1.0, 1.0)
+        )
         self.vel_avg = np.zeros(2)
         self.anchor = self.data.qpos[0:2].copy()
         self.heading_bias = 0.0
@@ -561,7 +581,10 @@ class GrowBotHeadingEnv(gym.Env):
     def step(self, action: np.ndarray) -> tuple[np.ndarray, float, bool, bool, dict[str, Any]]:
         cfg, m, d = self.cfg, self.model, self.data
         a = np.tanh(np.clip(np.asarray(action, dtype=np.float64), -ACTION_LIMIT, ACTION_LIMIT))
-        self._actuate(a * cfg.task.action_to_rad)
+        if self._gait is None:
+            self._actuate(a * cfg.task.action_to_rad)
+        else:
+            self._actuate(self.gait_rad() + a * cfg.task.residual_rad)
         p0 = d.qpos[0:2].copy()
         # Headings before the step; the error is taken against the target after any
         # retarget below, so a retarget itself pays no turn reward.
@@ -569,6 +592,7 @@ class GrowBotHeadingEnv(gym.Env):
         for _ in range(self.n_substeps):
             mujoco.mj_step(m, d)
         self.step_index += 1
+        self.cycles += cfg.task.gait_hz * CONTROL_DT * self.gait_rate()
         t = self.step_index * CONTROL_DT
         self.heading_bias += self.ep.heading_drift_deg_s * CONTROL_DT
 
@@ -755,6 +779,18 @@ class GrowBotHeadingEnv(gym.Env):
         lo = task.speed_back_min if k >= 1.0 else 1.0 - k * (1.0 - task.speed_back_min)
         return self._u((lo, 1.0))
 
+    def gait_rate(self) -> float:
+        """How fast the clock runs, as a share of gait_hz: always 1, but under a
+        residual gait the speed command's size (a stop holds the legs where they are)."""
+        return abs(self.speed_cmd) if self._gait is not None else 1.0
+
+    def gait_rad(self) -> np.ndarray:
+        """The residual gait's leg angles now, eased in over its first second from the
+        settled stance, as the bench plays it."""
+        assert self._gait is not None
+        ease = min(1.0, self.step_index * CONTROL_DT)
+        return ease * self._gait(self.cycles / self._gait.hz)
+
     def _actuate(self, cmd_rad: np.ndarray) -> None:
         """The relay and servo between the phone's command and the joint: dropped
         packets, a fractional delay, a slew-rate limit and a first-order lag."""
@@ -882,7 +918,7 @@ class GrowBotHeadingEnv(gym.Env):
         if self._noisy:
             acc = acc + self.np_random.normal(0, r.accel_noise_m_s2, 3)
             gyro = gyro + self.ep.gyro_bias + self.np_random.normal(0, r.gyro_noise_rad_s, 3)
-        phase = 2 * math.pi * self.cfg.task.gait_hz * self.step_index * CONTROL_DT
+        phase = 2 * math.pi * self.cycles
         cmd = [self._err_obs / 180.0]
         if self.cfg.task.speed == "command":
             cmd.append(self.speed_cmd)
