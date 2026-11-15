@@ -65,6 +65,14 @@ run = "527daab9"
 notes = "The forward teacher now: the turning-gated lift and fall at 50M. About 10 degrees off on random bodies and 4.1 cm/s toward the target; half a turn in about 14 s. 3 falls in 36 randomised evaluations, but short-legged and nose-heavy bodies fall on every big turn (50 sweep falls in 153, as many as lift-fall-1), so falls are its main gap. Trained with heading gates main has since dropped: its config is in its folder."
 
 [[policy]]
+slug = "lift-fall-3"
+title = "Lift and fall 3: walk tall, on the robot as built"
+job = "growbot_lift_fall_turns"
+file = "policies/lift-fall-3/policy_lift_fall.json"
+run = "a0e521dd"
+notes = "The forward teacher for the STL-pinned body (Jeff: his robot is the STL): legs as printed, weight and balance point varied a little, servos, floor, delays and trim at 60% of their ranges, paid for keeping a face in the picture. At 37.5M: 1 fall in 100 minute-long walks with the target within 30 degrees, 5.8 cm/s toward it, 5 degrees off, the face in the picture throughout (lift-fall-2 on the same test: 7 falls in 50, 4.3 cm/s). It does not walk on other leg lengths, and turns wider than 30 degrees while walking fall, so the master turns first."
+
+[[policy]]
 slug = "look-v9"
 title = "Look v9: turn on the spot to face a target"
 job = "growbot_look"
