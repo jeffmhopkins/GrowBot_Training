@@ -137,8 +137,9 @@ The gaps it has to bridge are listed in [follow_me.md](follow_me.md#1-one-master
 speed, 1.3 degrees on aim and 1.3 s on turns. It falls 3 times in 114 switches; its
 teachers, driving the same scripts, fall 3 times in 100. Its per-mode runs fall only in lift-fall-2's walk, so it waits on
 the walks, not on the distillation. Still to come:
-- a residual-gait teacher (the new nose walk), labelled with its full leg angles, with
-  a nose clock that runs at its speed;
+- distilling from the residual-gait walks once they pass. The distillation takes them
+  already: labels are their full leg angles, and backing is stop-or-go at full speed
+  until the app runner has a speed-scaled clock;
 - the PPO fine-tune.
 
 ## Phase 4: the final follow-me test

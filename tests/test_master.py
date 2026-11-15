@@ -10,8 +10,11 @@ import math
 import numpy as np
 import pytest
 
+from growbot_train import config as config_mod
 from growbot_train import master
+from growbot_train.env import GrowBotHeadingEnv, channels_for
 from growbot_train.evaluate import env_for
+from growbot_train.export import _residual_spec
 from growbot_train.policy import JsonPolicy, runner_forward
 
 
@@ -60,10 +63,57 @@ def test_the_walk_lets_go_only_past_its_hysteresis() -> None:
 
 
 def test_teacher_actions_are_matched_in_radians() -> None:
-    a = np.array([0.5, -0.25])
-    out = master.to_student(a, 1.0)
-    assert np.allclose(out * master.ACTION_TO_RAD, a * 1.0)
-    assert np.all(np.abs(master.to_student(np.array([1.0, -1.0]), 1.57)) <= master.SQUASH)
+    rad = np.array([0.5, -0.25])
+    assert np.allclose(master.to_student(rad) * master.ACTION_TO_RAD, rad)
+    assert np.all(np.abs(master.to_student(np.array([1.57, -1.57]))) <= master.SQUASH)
+
+
+def test_a_residual_teacher_sees_its_frames_and_sends_its_legs(tmp_path) -> None:
+    # A stand-in for the residual nose walk: its config, small random weights.
+    cfg = config_mod.load("configs/nose_walk.toml")
+    assert cfg.task.residual_gait and cfg.task.residual_steer_deg
+    env = GrowBotHeadingEnv(cfg)
+    channels = channels_for(cfg)
+    n = cfg.task.history_frames * len(channels)
+    rng = np.random.default_rng(0)
+    policy = {
+        "obs_spec": {
+            "segments": [{"channels": list(channels), "frames": cfg.task.history_frames}],
+            "cycles": {"gait_sin": {"type": "sin", "frequency": cfg.task.gait_hz}},
+            "action_to_rad": cfg.task.action_to_rad,
+            **_residual_spec(cfg),
+        },
+        "mean": [0.0] * n,
+        "std": [1.0] * n,
+        "layers": [{"W": (rng.normal(0, 0.3, (n, 2))).tolist(), "b": [0.0, 0.0]}],
+        "training": {"config": cfg.to_dict()},
+    }
+    path = tmp_path / "residual.json"
+    path.write_text(json.dumps(policy))
+    teacher = master.Teacher.load("back", path)
+    assert teacher.gait is not None
+    env.reset(
+        seed=4,
+        options={"retarget": False, "speed_cmd": 1.0, "target_error_deg": 35.0},
+    )
+    for _ in range(40):
+        s = master.Senses(
+            acc=env.hist[0][0:3],
+            gyro=env.hist[0][3:6],
+            prev_rad=env.prev_action * cfg.task.residual_rad + teacher.base,
+            err_lens=env._err_obs,
+            err_body=env._err_obs,
+            forward=-1.0,
+            tilt=1.0,
+            step_index=env.step_index,
+        )
+        teacher.observe(s)
+        assert np.allclose(teacher.hist[0], env.hist[0], atol=1e-12)
+        out = runner_forward(teacher.data, teacher.hist.reshape(-1))
+        want = env.gait_rad() + env.steer_rad() + out * cfg.task.residual_rad
+        assert np.allclose(teacher.act_rad(), np.clip(want, -1.57, 1.57), atol=1e-12)
+        _, _, term, _, _ = env.step(np.arctanh(out))
+        assert not term
 
 
 def test_the_rollout_judges_falls_by_the_active_teachers_rule() -> None:
