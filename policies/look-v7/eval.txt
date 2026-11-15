@@ -1,0 +1,102 @@
+-- randomised bodies (speed cap 0.030 m/s)
+ start   toward   speed  over%    err  turn_s  falls
+    +0  -0.0065  0.0069    0.0   11.8    0.04   0/6
+   +45  -0.0066  0.0071    0.0   11.6    4.35   0/6
+   -45  -0.0066  0.0071    0.0   11.9    4.11   0/6
+   +90  -0.0066  0.0075    0.0   11.0    9.81   0/6
+   -90  -0.0066  0.0075    0.0   11.2   10.03   0/6
+  +180  -0.0048  0.0085    0.0   11.1   19.51   0/6
+-- nominal body, no noise (speed cap 0.030 m/s)
+ start   toward   speed  over%    err  turn_s  falls
+    +0  -0.0073  0.0075    0.0    4.9    0.04   0/1
+   +45  -0.0130  0.0133    0.0    9.4    2.08   0/1
+   -45  -0.0123  0.0125    0.0    7.6    2.52   0/1
+   +90  -0.0090  0.0099    0.0    8.1    7.40   0/1
+   -90  -0.0093  0.0103    0.0    5.5    8.00   0/1
+  +180  -0.0065  0.0115    0.0    5.6   15.80   0/1
+-- sweep: hard (speed cap 0.030 m/s)
+ start   toward   speed  over%    err  turn_s  falls
+    +0  -0.0085  0.0089    0.0    7.9    0.04   0/3
+   +90  -0.0083  0.0098    0.0    7.0   11.37   0/3
+  +180  -0.0058  0.0110    0.0    8.0   17.95   0/3
+-- sweep: carpet (speed cap 0.030 m/s)
+ start   toward   speed  over%    err  turn_s  falls
+    +0  -0.0062  0.0065    0.0    7.6    0.04   0/3
+   +90  -0.0070  0.0083    0.0    8.7   11.89   0/3
+  +180  -0.0045  0.0091    0.0   11.6   23.92   0/3
+-- sweep: light (speed cap 0.030 m/s)
+ start   toward   speed  over%    err  turn_s  falls
+    +0  -0.0094  0.0097    0.0    9.3    0.04   0/3
+   +90  -0.0102  0.0120    0.0    8.7   10.13   0/3
+  +180  -0.0064  0.0129    0.0   11.4   23.92   0/3
+-- sweep: heavy (speed cap 0.030 m/s)
+ start   toward   speed  over%    err  turn_s  falls
+    +0  -0.0055  0.0059    0.0   10.1    0.04   0/3
+   +90  -0.0060  0.0071    0.0    9.9   12.16   0/3
+  +180  -0.0042  0.0083    0.0   13.2   25.75   0/3
+-- sweep: short_legs (speed cap 0.030 m/s)
+ start   toward   speed  over%    err  turn_s  falls
+    +0  -0.0076  0.0085    0.0   22.7    0.04   0/3
+   +90  -0.0049  0.0086    0.0   47.0   25.35   0/3
+  +180  -0.0048  0.0089    0.0   16.8   19.84   0/3
+-- sweep: long_legs (speed cap 0.030 m/s)
+ start   toward   speed  over%    err  turn_s  falls
+    +0  -0.0091  0.0095    0.0    8.3    0.04   0/3
+   +90  -0.0100  0.0117    0.1    7.9    9.64   0/3
+  +180  -0.0064  0.0136    0.0    7.3   19.88   0/3
+-- sweep: weak_servos (speed cap 0.030 m/s)
+ start   toward   speed  over%    err  turn_s  falls
+    +0  -0.0067  0.0071    0.0    8.5    0.04   0/3
+   +90  -0.0072  0.0087    0.0    9.8   12.85   0/3
+  +180  -0.0041  0.0091    0.0    9.4   18.91   0/3
+-- sweep: strong_servos (speed cap 0.030 m/s)
+ start   toward   speed  over%    err  turn_s  falls
+    +0  -0.0115  0.0118    0.0    7.7    0.04   0/3
+   +90  -0.0128  0.0147    0.3    8.0   10.77   0/3
+  +180  -0.0073  0.0150    0.2   10.5   24.73   0/3
+-- sweep: slippery (speed cap 0.030 m/s)
+ start   toward   speed  over%    err  turn_s  falls
+    +0  -0.0089  0.0091    0.0    7.5    0.04   0/3
+   +90  -0.0093  0.0109    0.0    7.7   10.63   0/3
+  +180  -0.0064  0.0124    0.0    6.6   19.64   0/3
+-- sweep: grippy (speed cap 0.030 m/s)
+ start   toward   speed  over%    err  turn_s  falls
+    +0  -0.0071  0.0074    0.0    7.6    0.04   0/3
+   +90  -0.0075  0.0087    0.0    8.3   10.93   0/3
+  +180  -0.0042  0.0094    0.0   16.7   28.72   0/3
+-- sweep: slow_relay (speed cap 0.030 m/s)
+ start   toward   speed  over%    err  turn_s  falls
+    +0  -0.0080  0.0084    0.0    8.4    0.04   0/3
+   +90  -0.0084  0.0097    0.0    8.5   11.77   0/3
+  +180  -0.0052  0.0109    0.0    8.4   18.76   0/3
+-- sweep: slow_sensors (speed cap 0.030 m/s)
+ start   toward   speed  over%    err  turn_s  falls
+    +0  -0.0080  0.0083    0.0    6.9    0.04   0/3
+   +90  -0.0078  0.0092    0.0    7.9   11.08   0/3
+  +180  -0.0051  0.0109    0.0    8.3   23.64   0/3
+-- sweep: weak_torque (speed cap 0.030 m/s)
+ start   toward   speed  over%    err  turn_s  falls
+    +0  -0.0068  0.0071    0.0    8.0    0.04   0/3
+   +90  -0.0063  0.0075    0.0    8.2   14.60   0/3
+  +180  -0.0047  0.0088    0.0   11.2   29.24   0/3
+-- sweep: narrow_feet (speed cap 0.030 m/s)
+ start   toward   speed  over%    err  turn_s  falls
+    +0  -0.0088  0.0092    0.0    8.7    0.04   0/3
+   +90  -0.0092  0.0108    0.0    7.5   12.53   0/3
+  +180  -0.0058  0.0116    0.0    9.6   24.09   0/3
+-- sweep: mis_trimmed (speed cap 0.030 m/s)
+ start   toward   speed  over%    err  turn_s  falls
+    +0  -0.0074  0.0079    0.0   12.3    0.04   0/3
+   +90  -0.0062  0.0094    0.0   35.2    6.76   0/3
+  +180  -0.0046  0.0100    0.0   10.0   18.28   0/3
+-- sweep: nose_heavy (speed cap 0.030 m/s)
+ start   toward   speed  over%    err  turn_s  falls
+    +0  -0.0036  0.0056    0.0   13.5    0.04   0/3
+   +90  -0.0027  0.0069    0.0   39.1    7.70   0/3
+  +180  -0.0014  0.0082    0.0   11.8   20.63   0/3
+-- sweep: tail_heavy (speed cap 0.030 m/s)
+ start   toward   speed  over%    err  turn_s  falls
+    +0  -0.0066  0.0067    0.0    3.8    0.04   0/3
+   +90  -0.0073  0.0078    0.0    3.1    9.09   0/3
+  +180  -0.0059  0.0092    0.0    4.5   18.57   0/3
+eval summary: toward -0.0063 m/s, heading error 11.5 deg, falls 0/36

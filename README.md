@@ -199,7 +199,7 @@ Every tick the reward is the sum of these terms. All the weights live in
 | --- | --- | --- |
 | progress | `progress = 2.0` | Moving in the target direction. Full value at the speed cap, a fraction below it, nothing extra above it, negative when moving away. |
 | heading | `heading = 0.5` | Pointing the nose at the target. Full value dead on, half at 90 degrees off, zero facing away. With `heading_width_deg` > 0 (look, nose walk: 40) it is exp(-(error/width)^2) instead, paying only near the target. |
-| progress_width_deg | `progress_width_deg = 0.0` (nose walk: 45) | With > 0, progress (paid or charged) is scaled by exp(-(error/width)^2), so it counts only while pointing near the target. Speed along the target alone pays 77% walking 40 degrees off. Tried on lift and fall and taken back off: that gait turns by arcing, and with no pay for the arc it stopped turning (from a 90-degree start, 58 degrees off at 16M steps, against 26-30 without it). |
+| progress_width_deg | `progress_width_deg = 0.0` (nose walk: 45) | With > 0, progress (paid or charged) is scaled by exp(-(error/width)^2), so it counts only while pointing near the target. Speed along the target alone pays 77% walking 40 degrees off. Tried on lift and fall and taken back off after 16M steps, where that gait, which turns by arcing, had stopped turning (from a 90-degree start, 58 degrees off, against 26-30 without it); the same run recovered by 50M and is kept as `policies/lift-fall-2`, so whether the gates go back on is open. |
 | arrive | `arrive = 0.0` (lift and fall and look: 30) | A one-off bonus each target that starts at least `arrive_within_deg` (15 degrees) off, once the error has stayed under it for `arrive_hold_s` (1 s): weight times (1 minus the time since the target moved over `arrive_by_s`, 20 s), so 95% for turning at once and nothing after 20 s (look: held 2 s, paying until 30 s). Discounting already favours a quick turn a little; this pays for arriving and settling. |
 | overspeed | `overspeed = 4.0` | Going faster than `speed_cap_m_s` (3 cm/s; camera walk 1 cm/s with `overspeed = 1.0`). Grows with the square of the excess, so a little over is mild and a lot over is harsh. |
 | tilt | `tilt = 1.0` | Leaning away from how it stood at the start. (This body naturally rests nose-up at about 34 degrees, so "upright" means its own starting stance, the same reference the app's tip check uses.) |
@@ -360,11 +360,19 @@ speed cap is 5 cm/s, the stance bonus and lean-back penalty are off as the body 
 and only going over onto the screen (past 88 degrees) or forwards ends an episode.
 From JBrain it's the "GrowBot lift and fall" job.
 
-The run with the 35% body cap (run ca607df3) is kept as `policies/lift-fall-1`, the
-forward teacher for now: on random bodies it ends about 17 degrees off the heading, walks
-3.9 cm/s toward it, and turns a quarter in about 5 s, with 4 falls in 36 evaluations
-(half of them on half turns). Its 16M checkpoint (`policies/lift-fall-1-16m`,
-27 degrees, 5 falls) is kept beside it to show the rest of the run was worth it.
+The run with the 35% body cap (run ca607df3) is kept as `policies/lift-fall-1`: on
+random bodies it ends about 17 degrees off the heading, walks 3.9 cm/s toward it, and
+turns a quarter in about 5 s, with 4 falls in 36 evaluations (half of them on half
+turns). Its 16M checkpoint (`policies/lift-fall-1-16m`, 27 degrees, 5 falls) is kept
+beside it to show the rest of the run was worth it. A run with the heading gates on
+(`reward.heading_width_deg = 40`, `progress_width_deg = 45`; run 527daab9, the second
+slot) looked worse at 16M, so main took the gates back off, but at 50M it finished
+better than lift-fall-1 on random bodies and is kept as `policies/lift-fall-2`, the
+forward teacher now: about 10 degrees off, 4.1 cm/s toward the target, half a turn in
+about 14 s (a quarter in about 6 s, a little slower), 3 falls in 36. Its config is in
+its folder, since main's no longer has the gates. In the sweep it falls as often as
+lift-fall-1 (50 of 153), and short-legged and nose-heavy bodies fall on every big turn,
+so falls are its main gap.
 
 ## The look policy
 
@@ -429,8 +437,15 @@ paying until 30 s), so a quick turn that settles pays more. The creep is charged
 distance per turn instead of speed: the anchor charges up to 1.0 a tick (was 0.4) while
 the free speed band stays at 1.5 cm/s. This body drifts more the faster it turns, so a
 tighter speed band pays a slow turn (v5 learned exactly that), while the anchor charges a
-quick turn and a slow one alike for the same wander. Unlike the camera walk it trains on
-the printed build with bare-print surfaces (see [Bodies](#bodies)), like the heading walk.
+quick turn and a slow one alike for the same wander. v7 (run 200aa414, kept as
+`policies/look-v7`), trained before those two changes, ends 11.5 degrees off on average
+from every start, 180 included, takes about 20 s for half a turn and 10 s for a quarter,
+creeps 0.7 cm/s, and fell in none of its 36 randomised evaluations and none of the 153
+in the sweep, though short-legged, nose-heavy and mis-trimmed bodies end 35-47 degrees
+off from a quarter turn. In the follow-me test it keeps the person in view less than v6
+(56% vs 68% on the nominal body), so the follow baseline uses both.
+Unlike the camera walk it trains on the printed build with bare-print surfaces (see
+[Bodies](#bodies)), like the heading walk.
 It's the camera walk otherwise, and only the lines marked CHANGED differ from that file.
 From JBrain it's the "GrowBot look" job.
 
