@@ -26,7 +26,11 @@ One exported policy with one input set, so the app never swaps files mid-walk:
 | `cmd_forward` | signed speed, -1..+1 of one shared cap |
 | `cmd_pitch` | camera height: -1 low (the camera looks almost straight up) .. +1 tall (toward the horizon) |
 
-What it does with them:
+What it does with them. **The sign of `cmd_forward` alone picks the mode, never the
+heading** (Jeff, 2026-11-15): a person behind it is a spin to face them (speed 0, or
+turning while it walks forward), never a reason to back up; a negative speed backs away
+nose first whatever the heading, with the camera still facing the person.
+
 
 - **Speed above 0:** walk tall, camera first, toward the heading. Teacher: lift and
   fall (`configs/lift_fall.toml`).
