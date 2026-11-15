@@ -251,7 +251,16 @@ def test_hold_freezes_on_the_average_of_the_last_second_once_settled_on_target()
     _settle(h, acts[n - 1 :])
     # It holds the moment it has a full second on target, and keeps that pose.
     assert h.held is not None
-    assert np.allclose(h.held, np.mean(acts[:n], axis=0))
+    # Averaged as servo targets, after the env's tanh, and handed back in its input.
+    assert np.allclose(np.tanh(h.held), np.mean(np.tanh(acts[:n]), axis=0))
+
+
+def test_hold_averages_a_saturated_command_as_the_servo_saw_it() -> None:
+    # The env clips its input at ACTION_LIMIT, so a command of 7 drives the servo no
+    # further than one of 4; averaging raw inputs would push the pose too far.
+    h = Hold(window=4, settle_s=0.1)
+    _settle(h, [np.array([7.0, 0.0]), np.array([-4.0, 0.0])] * 2)
+    assert h.held is not None and abs(h.held[0]) < 1e-6
 
     # Held: the policy isn't asked, and the same pose comes back every tick.
     def boom() -> np.ndarray:

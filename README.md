@@ -138,10 +138,12 @@ creeps. So once the camera has been within 6 degrees of the person for a second 
 robot is asked to stand, the follower stops calling the policy and the servos hold the
 average of the last second of commands, which is the stance the policy was holding
 (Jeff, 2026-11-15). It lets go past 15 degrees, when asked to walk or change camera
-height, or when the person is lost. `--hold-check` measures it: look-v7 on 12 random
-bodies creeps 0.72 cm/s on target with the policy running and 0.02 with Hold, its
-heading drifts 2 degrees in 20 s instead of 7, and a 90 degree turn from the held pose
-still ends 10 degrees off (12 without the hold). In the follow runs it rarely engages,
+height by more than 0.15, or when the person is lost. `--hold-check` measures it, with
+a perfect compass so the policy isn't chasing gyro drift: look-v7 settled on 9 of 12
+random bodies (one fell turning in, two never got within 6 degrees), and on those it
+creeps 0.64 cm/s on target with the policy running and 0.01 with Hold, its heading
+moves 1.9 degrees in 20 s instead of 4.3, and a 90 degree turn from the held pose
+still ends 5 degrees off, as it does without the hold. In the follow runs it rarely engages,
 since the person seldom stands still long enough for look to settle on them.
 
 Training progress: `.venv/bin/tensorboard --logdir runs` and open the page it prints.

@@ -26,7 +26,7 @@ from typing import Any
 
 import numpy as np
 
-from growbot_train.env import CONTROL_DT, GrowBotHeadingEnv, wrap_deg
+from growbot_train.env import ACTION_LIMIT, CONTROL_DT, GrowBotHeadingEnv, wrap_deg
 from growbot_train.evaluate import env_for
 from growbot_train.policy import JsonPolicy
 
@@ -375,6 +375,7 @@ class Hold:
         ):
             self.held = None
             self._on_s = 0.0
+            self._recent.clear()
         if self.held is not None:
             return self.held
         a = policy_action()
@@ -384,7 +385,10 @@ class Hold:
         on = standing and not lost and abs(bearing_deg) < self.enter_deg
         self._on_s = self._on_s + CONTROL_DT if on else 0.0
         if self._on_s >= self.settle_s and len(self._recent) == self.window:
-            self.held = np.mean(np.asarray(self._recent), axis=0)
+            # Averaged as joint targets (after the env's clip and tanh), then turned back
+            # into the env's input, so a briefly saturated command can't skew the pose.
+            servo = np.tanh(np.clip(np.asarray(self._recent), -ACTION_LIMIT, ACTION_LIMIT))
+            self.held = np.arctanh(np.clip(servo.mean(axis=0), -0.999999, 0.999999))
             self._tilt = tilt
         return a
 
@@ -498,11 +502,16 @@ def hold_check(
     def err() -> float:
         return abs(wrap_deg(env.target_deg - env.yaw_deg()))
 
+    def step(a: np.ndarray) -> tuple[np.ndarray, bool]:
+        # A perfect compass, as in run(): with the gyro's drift left in, the policy
+        # chases the drift and that reads as creep and turn error.
+        env.heading_bias = 0.0
+        o, _, term, _, _ = env.step(a)
+        return o, term
+
     holder = Hold()
     for _ in range(round(40.0 / CONTROL_DT)):
-        obs, _, term, _, _ = env.step(
-            holder.action(lambda o=obs: policy.env_action(o), err(), True, False, 1.0)
-        )
+        obs, term = step(holder.action(lambda o=obs: policy.env_action(o), err(), True, False, 1.0))
         if term:
             return {"fell": 1.0}
         if holder.held is not None:
@@ -512,7 +521,7 @@ def hold_check(
     pose = holder.held
     p0, yaw0 = env.data.qpos[0:2].copy(), env.yaw_deg()
     for _ in range(round(hold_s / CONTROL_DT)):
-        obs, _, term, _, _ = env.step(pose if hold else policy.env_action(obs))
+        obs, term = step(pose if hold else policy.env_action(obs))
         if term:
             return {"fell": 1.0}
     out = {
@@ -522,7 +531,7 @@ def hold_check(
     }
     env.target_deg = wrap_deg(env.target_deg + 90.0)
     for _ in range(round(25.0 / CONTROL_DT)):
-        obs, _, term, _, _ = env.step(policy.env_action(obs))
+        obs, term = step(policy.env_action(obs))
         if term:
             return {**out, "fell": 1.0}
     return {**out, "turn_err_deg": err()}
@@ -566,15 +575,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.hold_check:
         for hold in (False, True):
             rs = [hold_check(policy, s, hold, args.nominal) for s in range(args.seeds)]
-            done = [r for r in rs if r]
-            kept = [r for r in done if "creep_cm_s" in r]
+            kept = [r for r in rs if r and "creep_cm_s" in r]
+            falls = sum(1 for r in rs if r and r["fell"])
             m = {
                 k: float(np.nanmean([r.get(k, np.nan) for r in kept])) if kept else math.nan
                 for k in ("creep_cm_s", "yaw_drift_deg", "turn_err_deg")
             }
             print(
-                f"{'hold' if hold else 'policy'}: settled {len(done)}/{len(rs)}, "
-                f"falls {sum(r['fell'] for r in done):.0f}, creep {m['creep_cm_s']:.2f} cm/s, "
+                f"{'hold' if hold else 'policy'}: settled and held {len(kept)}/{len(rs)}, "
+                f"falls {falls}, creep {m['creep_cm_s']:.2f} cm/s, "
                 f"yaw drift {m['yaw_drift_deg']:.1f} deg, then a 90 degree turn ends "
                 f"{m['turn_err_deg']:.1f} deg off"
             )
