@@ -441,8 +441,8 @@ creeps 0.7 cm/s, and fell in none of its 36 randomised evaluations and none of t
 in the sweep, though short-legged, nose-heavy and mis-trimmed bodies end 35-47 degrees
 off from a quarter turn. In the follow-me test it keeps the person in view less than v6
 (56% vs 68% on the nominal body), so the follow baseline uses both.
-Unlike the camera walk it trains on
-the printed build with bare-print surfaces (see [Bodies](#bodies)), like the heading walk.
+Unlike the camera walk it trains on the printed build with bare-print surfaces (see
+[Bodies](#bodies)), like the heading walk.
 It's the camera walk otherwise, and only the lines marked CHANGED differ from that file.
 From JBrain it's the "GrowBot look" job.
 
