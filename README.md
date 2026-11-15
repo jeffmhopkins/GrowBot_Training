@@ -492,9 +492,11 @@ v9 (run 32fae7c5, kept as `policies/look-v9`) is that run. It is the look teache
 - **Creep and falls:** it creeps 0.8 cm/s on target (v7 0.7), which Hold stops. 0 of 36
   randomised evaluations fell. One sweep case did: long legs from 180 degrees, 1 run in
   3, over that 1-in-10 limit. That case also ends 64 degrees off.
+
 The next run (v10) turns on the camera-picture reward (`reward.frame = 2.0`, see
 [The reward](#the-reward)): look's stop is where the follower needs the face centred, and
 v9 lands it about 7 degrees off centre on random bodies (`img_x`; 1-3 on the nominal one).
+
 Unlike the camera walk it trains on the printed build with bare-print surfaces (see
 [Bodies](#bodies)), like the heading walk.
 It's the camera walk otherwise, and only the lines marked CHANGED differ from that file.
