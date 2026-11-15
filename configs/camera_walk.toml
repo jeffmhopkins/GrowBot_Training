@@ -1,6 +1,6 @@
-# GrowBot camera walk: the second policy, and the one meant for following faces. The phone lies on top with its rear camera
+# GrowBot camera walk: the second policy, and the one meant for following faces. The phone lies screen up on top, its front camera
 # looking up and back over the tail, so this walk goes tail first ("backwards"), toward
-# what the camera sees, and stands a little taller to lift the camera's view. The heading
+# what the camera sees, and stands a little taller to tilt the camera down toward faces. The heading
 # error is measured from the camera end: 0 means the face the camera sees is dead ahead.
 # A second input says how fast: walk up to the face, stop and keep facing it, or back
 # away, so the app can hold a comfortable distance (e.g. from how big the face looks).
