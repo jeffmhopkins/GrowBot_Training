@@ -98,6 +98,13 @@ def clone_gait(model, vec, cfg, gait: Keyframes, samples: int, epochs: int, log=
     if cfg.train.warm_gait_steer:
         # Targets all the way round, even while the curriculum keeps the bodies narrow.
         vec.set_attr("target_scale", 1.0)
+    command = cfg.task.speed == "command"
+    if command:
+        # The full spread of speed commands, though the labels ignore them: on the one
+        # full-speed command the curriculum starts on, the normaliser would learn a near-zero
+        # spread for that input and blow up the first slower command PPO sees.
+        cmd_was = vec.get_attr("cmd_scale")
+        vec.set_attr("cmd_scale", 1.0)
     vec.reset()
     while len(raw) * vec.num_envs < samples:
         t = np.array(vec.get_attr("step_index"), dtype=float) * CONTROL_DT
@@ -109,6 +116,9 @@ def clone_gait(model, vec, cfg, gait: Keyframes, samples: int, epochs: int, log=
         vec.step((a + rng.normal(0.0, 0.3, a.shape)).astype(np.float32))
     if cfg.train.warm_gait_steer:
         vec.set_attr("target_scale", None)
+    if command:
+        for i, k in enumerate(cmd_was):
+            vec.set_attr("cmd_scale", k, indices=i)
     obs = torch.as_tensor(vec.normalize_obs(np.concatenate(raw)), dtype=torch.float32)
     act = torch.as_tensor(np.concatenate(targets), dtype=torch.float32)
     policy = model.policy
