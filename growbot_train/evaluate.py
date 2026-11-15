@@ -60,7 +60,14 @@ def env_for(policy: JsonPolicy, body: str | None = None) -> GrowBotHeadingEnv:
     cfg.task.action_to_rad = float(policy.data["obs_spec"]["action_to_rad"])
     if body:
         cfg.task.body = body
-    return GrowBotHeadingEnv(cfg)
+    env = GrowBotHeadingEnv(cfg)
+    spec = policy.data["obs_spec"].get("residual_gait")
+    if spec:
+        # The gait it trained on and the phone runs, not whatever the file says now.
+        from growbot_train.gait import Keyframes
+
+        env._gait = Keyframes(spec["hz"], spec["keys_rad"])
+    return env
 
 
 def run_episode(

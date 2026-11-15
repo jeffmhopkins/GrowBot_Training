@@ -10,7 +10,8 @@ frame, newest first (the JBrain2 app's ``growbot_runner.js`` builds the same vec
     cmd_yaw                        heading error / 180, in [-1, 1]
     cmd_forward                    speed command in [-1, 1] (task.speed = "command" only)
     cmd_pitch                      camera height command in [-1, 1] (task.tilt_command)
-    cycle:gait_sin, cycle:gait_cos a fixed-rate clock, counted in ticks from the start
+    cycle:gait_sin, cycle:gait_cos a clock from the start: fixed-rate, or under a residual
+                                   gait at |speed command| x gait_hz
 
 Heading error is ``target - current`` in degrees, wrapped to [-180, 180]: positive means
 the target is counter-clockwise of the robot's nose, seen from above (turn left).
@@ -201,6 +202,10 @@ class GrowBotHeadingEnv(gym.Env):
                 raise ValueError("task.residual_gait's hz must equal task.gait_hz")
             if cfg.task.speed == "still":
                 raise ValueError("task.residual_gait walks; it can't train standing still")
+            if cfg.train.warm_gait:
+                # The clone teaches absolute angles on a fixed clock; here the output is a
+                # correction on a clock the speed sets, so it would teach the gait twice.
+                raise ValueError("task.residual_gait and train.warm_gait can't both be set")
         self.channels = channels_for(cfg)
         self._torso = m.body("base_body").id
         self._legs = [m.body("right_leg").id, m.body("left_leg").id]
@@ -541,7 +546,12 @@ class GrowBotHeadingEnv(gym.Env):
         self.cycles = 0.0  # gait cycles walked: the clock, which a residual gait slows
         self.motor = legs.copy()
         self.queue = np.tile(legs, (DELAY_SLOTS, 1))
-        self.prev_action = np.clip(legs / self.cfg.task.action_to_rad, -1.0, 1.0)
+        # Under a residual gait the output is a correction, none yet at the start.
+        self.prev_action = (
+            np.zeros(2)
+            if self._gait is not None
+            else np.clip(legs / self.cfg.task.action_to_rad, -1.0, 1.0)
+        )
         self.vel_avg = np.zeros(2)
         self.anchor = self.data.qpos[0:2].copy()
         self.heading_bias = 0.0

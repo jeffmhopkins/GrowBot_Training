@@ -50,6 +50,28 @@ def _layers(model: PPO) -> list[dict[str, Any]]:
     return out
 
 
+def _residual_spec(cfg: config_mod.Config) -> dict[str, Any]:
+    """A residual-gait policy's legs are the gait plus its output, on a clock that runs
+    at the speed command's size; the runner has to know both."""
+    if not cfg.task.residual_gait:
+        return {}
+    from growbot_train.gait import Keyframes
+
+    g = Keyframes.load_repo(cfg.task.residual_gait)
+    return {
+        "residual_gait": {
+            "hz": g.hz,
+            "keys_rad": g.keys.round(4).tolist(),
+            "residual_rad": cfg.task.residual_rad,
+            "meaning": (
+                "leg command (rad) = gait(phase) + output x residual_rad, eased in over "
+                "the first second; the gait_sin/cos phase advances at frequency x "
+                "|speed command| (a stop holds it), not at a fixed rate"
+            ),
+        }
+    }
+
+
 def build_policy(model: PPO, norm: Any, cfg: config_mod.Config, name: str) -> dict[str, Any]:
     mean = np.asarray(norm.obs_rms.mean, dtype=np.float64)
     std = np.sqrt(np.asarray(norm.obs_rms.var, dtype=np.float64) + norm.epsilon)
@@ -218,25 +240,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
-
-def _residual_spec(cfg: config_mod.Config) -> dict[str, Any]:
-    """A residual-gait policy's legs are the gait plus its output, on a clock that runs
-    at the speed command's size; the runner has to know both."""
-    if not cfg.task.residual_gait:
-        return {}
-    from growbot_train.gait import Keyframes
-
-    g = Keyframes.load_repo(cfg.task.residual_gait)
-    return {
-        "residual_gait": {
-            "hz": g.hz,
-            "keys_rad": g.keys.round(4).tolist(),
-            "residual_rad": cfg.task.residual_rad,
-            "meaning": (
-                "leg command (rad) = gait(phase) + output x residual_rad, eased in over "
-                "the first second; the gait_sin/cos phase advances at frequency x "
-                "|speed command| (a stop holds it), not at a fixed rate"
-            ),
-        }
-    }

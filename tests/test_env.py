@@ -1000,3 +1000,35 @@ def test_the_export_tells_the_runner_about_a_residual_gait() -> None:
     assert spec["hz"] == cfg.task.gait_hz and len(spec["keys_rad"]) == 2
     cfg.task.residual_gait = ""
     assert _residual_spec(cfg) == {}
+
+
+def test_a_residual_gait_cannot_also_be_cloned() -> None:
+    from growbot_train import config as config_mod
+
+    cfg = config_mod.load(NOSE_WALK)
+    cfg.train.warm_gait = cfg.task.residual_gait
+    with pytest.raises(ValueError, match="warm_gait"):
+        GrowBotHeadingEnv(cfg)
+
+
+def test_a_residual_policy_exports_and_evaluates(tmp_path: Path) -> None:
+    import subprocess
+    import sys
+
+    out = tmp_path / "run"
+    cmd = [sys.executable, "-m", "growbot_train.train", "--config", str(NOSE_WALK)]
+    cmd += ["--out", str(out), "--steps", "512", "--envs", "2"]
+    cmd += ["--set", "train.n_steps=128", "--set", "train.batch_size=256"]
+    subprocess.run(cmd, check=True, capture_output=True)
+    subprocess.run(
+        [sys.executable, "-m", "growbot_train.export", str(out)], check=True, capture_output=True
+    )
+    from growbot_train.evaluate import env_for
+    from growbot_train.policy import JsonPolicy
+
+    pol = JsonPolicy(out / "policy_nose_walk.json")
+    assert "residual_gait" in pol.data["obs_spec"]
+    env = env_for(pol)
+    obs, _ = env.reset(seed=0, options={"speed_cmd": 0.5})
+    env.step(pol.env_action(obs))
+    assert env.cycles == pytest.approx(CONTROL_DT * env.cfg.task.gait_hz * 0.5)

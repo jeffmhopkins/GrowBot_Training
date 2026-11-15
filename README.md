@@ -198,7 +198,7 @@ Every 40 ms (25 times a second) the policy gets the last 5 ticks of:
 | `cmd_yaw` | the heading error divided by 180, so -1 to 1. **Positive means the target is to the left** (counter-clockwise seen from above) |
 | `cmd_forward` | camera walk only: the speed command, -1 to 1 (see "The camera walk") |
 | `cmd_pitch` | camera walk only: the camera-height command, -1 to 1 (see "The camera walk") |
-| `cycle:gait_sin/cos` | a steady clock (`task.gait_hz`: 1 Hz, camera walk 2 Hz) that starts at zero when the walk starts, to help it keep a rhythm |
+| `cycle:gait_sin/cos` | a steady clock (`task.gait_hz`: 1 Hz, camera walk 2 Hz) that starts at zero when the walk starts, to help it keep a rhythm; under a residual gait (nose walk) it runs at the speed command's size times that, a stop holding it |
 
 It answers with two numbers between -1 and 1, the right leg and the left leg, which
 become servo angles of up to 1 radian (about 57 degrees) either side of straight down.

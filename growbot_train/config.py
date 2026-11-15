@@ -108,7 +108,7 @@ class TaskConfig:
     # only a correction of up to residual_rad per leg: a robust open-loop gait stays in
     # charge, so PPO can't unlearn it (the cloned nose walk drifted to half the gait's
     # own speed). Its hz must equal gait_hz. The speed command sets the step rate (the
-    # clock runs at speed_cmd x gait_hz; a stop freezes it), the way the bench showed
+    # clock runs at |speed_cmd| x gait_hz; a stop freezes it), the way the bench showed
     # this gait's speed scales. Empty = off: the policy drives the legs on its own.
     residual_gait: str = ""
     residual_rad: float = 0.5
