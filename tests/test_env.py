@@ -1032,3 +1032,15 @@ def test_a_residual_policy_exports_and_evaluates(tmp_path: Path) -> None:
     obs, _ = env.reset(seed=0, options={"speed_cmd": 0.5})
     env.step(pol.env_action(obs))
     assert env.cycles == pytest.approx(CONTROL_DT * env.cfg.task.gait_hz * 0.5)
+
+
+def test_the_built_in_steering_pushes_the_leg_on_the_side_to_turn() -> None:
+    env = _residual_env()
+    env.reset(seed=0, options={"retarget": False, "target_error_deg": 0.0, "speed_cmd": 1.0})
+    t = env.cfg.task
+    env._err_obs = t.residual_steer_deg / 2
+    assert env.steer_rad() == pytest.approx([t.residual_steer_rad / 2, 0.0])
+    env._err_obs = -3 * t.residual_steer_deg
+    assert env.steer_rad() == pytest.approx([0.0, t.residual_steer_rad])
+    env.speed_cmd = 0.0  # a stop stays still
+    assert not env.steer_rad().any()

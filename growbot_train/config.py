@@ -112,6 +112,14 @@ class TaskConfig:
     # this gait's speed scales. Empty = off: the policy drives the legs on its own.
     residual_gait: str = ""
     residual_rad: float = 0.5
+    # A steering rule built into the residual gait's base, so PPO refines turning rather
+    # than having to find it (from scratch the nose walk was still 47 degrees off at 7.5M;
+    # this rule alone holds 15-23 on random robots): one leg pushed out by up to
+    # residual_steer_rad, in proportion to the observed heading error over
+    # residual_steer_deg, the right leg to turn left. Negative rad flips it, for a gait
+    # that turns the other way. 0 = off.
+    residual_steer_deg: float = 0.0
+    residual_steer_rad: float = 0.5
     history_frames: int = 5
     # action [-1, 1] -> servo angle in radians; 1.0 rad is about 57 degrees each way.
     action_to_rad: float = 1.0
