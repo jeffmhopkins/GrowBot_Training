@@ -11,14 +11,14 @@ name = "nose_walk"  # CHANGED: the run's name
 # cares more about that thing. See README "The reward" for what each one does.
 progress = 2.0          # walking along the target direction, full value at the speed cap
 heading = 0.5           # pointing at the target: full value dead on, zero facing away
-heading_width_deg = 40.0  # CHANGED: ...and it pays only near it (exp(-(error/40)^2)), as for look
-progress_width_deg = 45.0  # CHANGED: progress counts only while pointing near the target: the first nose walk held 34-50 degrees off and rarely came round from behind
+heading_width_deg = 0.0  # cosine heading pay, as the lift and fall: a cloned gait turns by arcing, and a narrow pay leaves the arc unpaid
+progress_width_deg = 0.0  # off, for the same reason (the lift and fall's gated run turned worse)
 arrive = 30.0           # CHANGED: one-off bonus per target that needs a turn, once it has held within 15 degrees for 1 s, less the longer it took (none after 20 s)
 speed_cap_m_s = 0.03    # "slow": 3 cm/s. Upstream's forward walk does about 3.6 cm/s
 speed_window_s = 1.0    # speed is averaged over this long before the cap is checked
 overspeed = 4.0         # penalty for going faster (total speed) than the command or the free band, whichever is higher (grows with the square); 20 froze run 5e2f5518 (0.2 cm/s, 79 degrees off by 7M steps, overspeed outweighing progress)
 stop_drift_free = 0.2   # CHANGED: speed up to this x the cap (0.6 cm/s, not 1.5) is never charged as overspeed, at a stop or a slow command: at 0.5 any command under half the cap could walk 1.5 cm/s free. Stops are for standing still; the master spins with look
-tilt = 1.0              # penalty for leaning away from how it stood at the start
+tilt = 0.3              # CHANGED: penalty for leaning away from how it stood at the start: lighter, as the cloned waddle runs about 22 degrees under that (0.07 a tick at 1.0, pushing it back up); falls still end the episode
 fall = 10.0             # one-off penalty when it tips past fall_tilt_deg (episode ends)
 action_rate = 0.05      # penalty for jerky leg commands (change since last tick, squared)
 effort = 0.01           # small penalty for big leg angles
@@ -37,12 +37,12 @@ floors = ["hard", "carpet"] # each episode on one of these floors
 start_pitch_deg = 35.0      # set down tail first, as the real one is (level, the printed build balances on its soles)
 servo_torque_nm = 0.25      # an MG90S's real torque (upstream's model allows 1.5)
 episode_seconds = 60.0      # CHANGED: a minute, so slow turns and speed changes can play out
-initial_error_deg = 180.0   # first target: up to this many degrees off the robot's nose
+initial_error_deg = 60.0    # CHANGED: first target up to 60 degrees off: wider turns are the look policy's spin, which the master hands them to (the nose walk only backs away from the camera)
 retarget_every_s = [10.0, 25.0]  # CHANGED: the target moves every 10-25 s, long enough for a slow turn to finish...
-retarget_max_deg = 120.0        # ...by up to this much
-gait_hz = 1.0               # the clock the policy sees; roughly one step cycle a second
+retarget_max_deg = 60.0         # CHANGED: ...by up to this much, for the same reason
+gait_hz = 0.906             # CHANGED: the cloned waddle's own rate, so its rhythm lines up with the clock
 history_frames = 5          # how many past ticks of sensors the policy sees
-action_to_rad = 1.0         # full action = 1 radian (~57 degrees) of leg swing
+action_to_rad = 1.57        # CHANGED: the waddle uses the servos' whole range
 fall_tilt_deg = 55.0        # tipped this far from the starting stance = fallen (the app aborts at 55)
 facing = "nose"             # which end walks first: "nose", or "camera" (the tail end)
 stand_lift_deg = 0.0        # stand this many degrees more nose-up than at rest
@@ -89,12 +89,13 @@ heading_drift_deg_per_s = 0.2  # CHANGED: slower, so over the minute-long episod
 heading_refresh_ticks = [1, 6]
 push_every_s = [0.0, 0.0]   # a sudden shove this often (off here)
 push_pitch_rad_s = 0.0      # how hard a shove spins it (pitch, rad/s)
-ramp_steps = 0              # curriculum: widen every range from ramp_from of its width over this many steps (0 = full from the start)
+ramp_steps = 20000000      # CHANGED: start near the as-built robot (the cloned gait is tuned there) and widen to the full ranges over the first 20M steps
 ramp_from = 0.15
 ramp_to = 1.0               # where the body ranges stop widening (the targets still go to full)
 
 [train]
 total_steps = 30000000
+warm_gait = "configs/gaits/nose_walk.json"  # CHANGED: clone the bench's low nose-first waddle (search.py n2: about 12 degrees nose-up, never past 45) before PPO; Jeff, 2026-11-15: the upright nose walk wasn't making progress
 n_envs = 0                  # 0 = one simulator per CPU thread
 envs_per_worker = 4         # CHANGED: four simulators per worker process, so the cores stay busy (as the look)
 n_steps = 64                # CHANGED: a quarter of 256, so 4x the simulators keep the rollout the same size
@@ -105,7 +106,7 @@ gamma = 0.99
 gae_lambda = 0.95
 clip_range = 0.2
 ent_coef = 0.0
-log_std_init = -0.5
+log_std_init = -1.5         # CHANGED: less exploration noise, so the cloned gait's timing survives the first updates
 policy_layers = [128, 128]
 value_layers = [256, 256]
 checkpoint_every_steps = 2000000

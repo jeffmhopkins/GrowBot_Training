@@ -74,11 +74,11 @@ The teachers don't line up yet, and the distillation has to bridge these gaps:
   (phase 1); until then the follower treats forward as stop-or-go. The master's cap
   per direction has to be set.
 - **Camera height:** only look has it (-1 is 20 degrees under rest). Lift and fall
-  stands about 18 degrees taller than rest and the nose walk walks at its rest
-  height, whatever `cmd_pitch` says. So `cmd_pitch` only steers the camera at speed 0,
+  stands about 18 degrees taller than rest and the nose walk waddles low (about 12
+  degrees nose-up, some 22 under rest), whatever `cmd_pitch` says. So `cmd_pitch` only steers the camera at speed 0,
   until the walks learn a camera-height input (roadmap phase 1).
-- **Clock:** each teacher's gait clock ticks at its own rate (look and nose walk
-  1 Hz, lift and fall 2.347 Hz). The student needs the clock per mode, or its own clock
+- **Clock:** each teacher's gait clock ticks at its own rate (look 1 Hz, nose walk
+  0.906 Hz, lift and fall 2.347 Hz). The student needs the clock per mode, or its own clock
   with the teachers' phases mapped onto it.
 - **Heading:** look measures the error from where the camera points (`heading_from =
   "lens"`), which is what the tracker reports. Lift and fall measures it from the tail
