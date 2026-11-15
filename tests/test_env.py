@@ -164,6 +164,31 @@ def test_progress_scored_speed_commands_pay_like_the_cap_walk(cmd: float) -> Non
         assert run(cap, 0.0)["terms"]["overspeed"] < 0.0
 
 
+def test_progress_scoring_is_checked() -> None:
+    cfg = Config()
+    cfg.task.speed = "command"
+    cfg.task.speed_reward = "progres"
+    with pytest.raises(ValueError, match="speed_reward"):
+        GrowBotHeadingEnv(cfg)
+    cfg.task.speed_reward = "progress"
+    cfg.task.speed_back_min = -1.0  # a back-away command it would be charged for obeying
+    with pytest.raises(ValueError, match="speed_back_min"):
+        GrowBotHeadingEnv(cfg)
+
+
+def test_a_progress_scored_stop_lets_it_drift_back_a_little_for_free() -> None:
+    cfg = Config()
+    cfg.task.speed = "command"
+    cfg.task.speed_reward = "progress"
+    cfg.task.speed_back_min = 0.0
+    env = GrowBotHeadingEnv(cfg)
+    env.reset(seed=4, options={"nominal": True, "target_error_deg": 0.0, "speed_cmd": 0.0})
+    free = cfg.reward.stop_drift_free * cfg.reward.speed_cap_m_s
+    assert _coast(env, -0.5 * free, 0.0)["terms"]["progress"] == pytest.approx(0.0, abs=1e-4)
+    env.reset(seed=4, options={"nominal": True, "target_error_deg": 0.0, "speed_cmd": 0.0})
+    assert _coast(env, -3 * free, 0.0)["terms"]["progress"] < 0.0
+
+
 def test_levelling_is_a_pure_tilt() -> None:
     from growbot_train.env import _rot_onto_z
 

@@ -45,9 +45,10 @@ class RewardConfig:
     # warning that grows long before the point of no return. 0 turns it off.
     back_lean: float = 0.0
     back_lean_margin_deg: float = 12.0
-    # With task.speed "command" or "still", progress pays for matching the wanted
-    # velocity instead: weight * (|wanted| - miss) / cap, floored at -weight, where miss is
-    # how far the averaged velocity is from the wanted one (direction included), in m/s.
+    # With task.speed "command" (unless task.speed_reward is "progress") or "still",
+    # progress pays for matching the wanted velocity instead: weight * (|wanted| - miss)
+    # / cap, floored at -weight, where miss is how far the averaged velocity is from the
+    # wanted one (direction included), in m/s.
     # Standing still always scores exactly zero, as it does in "cap" mode: an earlier
     # form paid a third of the weight for standing still when told to walk.
     # During a stop (the command is exactly 0, and always in "still" mode) drift up to

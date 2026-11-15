@@ -176,6 +176,14 @@ class GrowBotHeadingEnv(gym.Env):
         self._lens = cfg.task.heading_from == "lens"
         if cfg.task.speed not in SPEED_MODES:
             raise ValueError(f"task.speed must be one of {SPEED_MODES}, not {cfg.task.speed!r}")
+        if cfg.task.speed_reward not in ("match", "progress"):
+            raise ValueError(
+                f'task.speed_reward must be "match" or "progress", not {cfg.task.speed_reward!r}'
+            )
+        if cfg.task.speed_reward == "progress" and cfg.task.speed_back_min < 0:
+            # It pays only for speed toward the target, so a back-away command would be
+            # charged for doing what it was told.
+            raise ValueError('task.speed_reward "progress" needs task.speed_back_min >= 0')
         self.channels = channels_for(cfg)
         self._torso = m.body("base_body").id
         self._legs = [m.body("right_leg").id, m.body("left_leg").id]
@@ -575,17 +583,21 @@ class GrowBotHeadingEnv(gym.Env):
         tr = math.radians(self.target_deg)
         v_along = float(self.vel_avg[0] * math.cos(tr) + self.vel_avg[1] * math.sin(tr))
         speed = float(np.linalg.norm(self.vel_avg))
-        limit = cap
+        speed_limit = cap
         if cfg.task.speed == "cap":
             progress = r.progress * min(v_along, cap) / cap
             speed_miss = abs(v_along - cap)
-        elif cfg.task.speed_reward == "progress":
+        elif cfg.task.speed == "command" and cfg.task.speed_reward == "progress":
             # Paid like the cap walk, up to the commanded speed, and charged for going
-            # faster than it: walking the wrong way costs no more than standing still.
-            want_s = max(0.0, self.speed_cmd) * cap
-            progress = r.progress * min(v_along, want_s) / cap
+            # faster than it: sideways flailing costs no more than standing still. Its
+            # speed_miss is along the target only, as in "cap" mode.
+            want_s = self.speed_cmd * cap
+            free = self._stop_drift_free() * cap
+            # A stop keeps the usual free drift band, backwards too, for turning on the spot.
+            along = v_along if want_s > 0 else min(0.0, v_along + free)
+            progress = r.progress * min(along, want_s) / cap
             speed_miss = abs(v_along - want_s)
-            limit = max(want_s, self._stop_drift_free() * cap)
+            speed_limit = max(want_s, free)
         else:
             want = self.speed_cmd * cap * np.array([math.cos(tr), math.sin(tr)])
             miss = speed_miss = float(np.linalg.norm(self.vel_avg - want))
@@ -603,7 +615,7 @@ class GrowBotHeadingEnv(gym.Env):
                 if r.heading_width_deg > 0
                 else (1 + math.cos(math.radians(err_score))) / 2
             ),
-            "overspeed": -r.overspeed * (max(0.0, speed - limit) / cap) ** 2,
+            "overspeed": -r.overspeed * (max(0.0, speed - speed_limit) / cap) ** 2,
             "tilt": -r.tilt * (1 - tall_cos),
             "action_rate": -r.action_rate * float(np.sum((a - self.prev_action) ** 2)),
             "effort": -r.effort * float(np.sum(a**2)),
