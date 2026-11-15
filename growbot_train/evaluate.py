@@ -4,7 +4,8 @@
     python -m growbot_train.evaluate runs/my_run/policy_heading_walk.json --sweep
 
 Runs the JSON file itself (not the training checkpoint) on randomised bodies, starting
-with the target dead ahead, to the side, and behind, and reports per case:
+with the target dead ahead, to the side, and behind (no further off than it trained
+on, task.initial_error_deg), and reports per case:
 
     toward   average speed along the target direction (m/s); higher is better
     speed    average speed in any direction; should sit at or under the cap
@@ -36,6 +37,20 @@ from growbot_train.env import CONTROL_DT, GrowBotHeadingEnv
 from growbot_train.policy import JsonPolicy
 
 START_ERRORS = (0.0, 45.0, -45.0, 90.0, -90.0, 180.0)
+
+
+def start_errors(
+    cfg: config_mod.Config, errors: tuple[float, ...] = START_ERRORS
+) -> tuple[float, ...]:
+    """The starts within what the policy trained on (task.initial_error_deg), plus that
+    edge itself when it cuts the list: a policy that only steers within 60 degrees, the
+    master handing wider turns to the spin, isn't scored on turning round from 180."""
+    lim = cfg.task.initial_error_deg
+    within = tuple(e for e in errors if abs(e) <= lim)
+    if len(within) == len(errors):
+        return errors
+    edges = tuple(e for e in (lim, -lim) if e not in within)
+    return within + edges
 
 
 def env_for(policy: JsonPolicy, body: str | None = None) -> GrowBotHeadingEnv:
@@ -195,9 +210,10 @@ def main(argv: list[str] | None = None) -> int:
     env = env_for(policy, args.body)
     cap = env.cfg.reward.speed_cap_m_s
     report: dict[str, Any] = {"policy": str(args.policy), "speed_cap_m_s": cap}
-    report["randomized"] = score(env, policy, args.episodes)
+    starts = start_errors(env.cfg)
+    report["randomized"] = score(env, policy, args.episodes, errors=starts)
     print(_table("randomised bodies", report["randomized"], cap), flush=True)
-    report["nominal"] = score(env, policy, 1, nominal=True)
+    report["nominal"] = score(env, policy, 1, nominal=True, errors=starts)
     print(_table("nominal body, no noise", report["nominal"], cap), flush=True)
     if env.cfg.task.speed == "command":
         report["speed_tracking"] = rows = speed_tracking(env, policy, args.episodes)
@@ -213,7 +229,11 @@ def main(argv: list[str] | None = None) -> int:
         report["sweep"] = {}
         for name, ov in sweep_cases(env.cfg).items():
             rows = score(
-                env, policy, max(1, args.episodes // 2), overrides=ov, errors=(0.0, 90.0, 180.0)
+                env,
+                policy,
+                max(1, args.episodes // 2),
+                overrides=ov,
+                errors=start_errors(env.cfg, (0.0, 90.0, 180.0)),
             )
             report["sweep"][name] = rows
             print(_table(f"sweep: {name}", rows, cap), flush=True)
