@@ -13,14 +13,12 @@ progress = 2.0          # here only a cost: drifting more than stop_drift_free x
 heading = 3.0           # CHANGED: facing the target is the whole job here...
 heading_width_deg = 40.0  # CHANGED: ...and it pays only near it (exp(-(error/40)^2)): sitting 60 degrees off earns a tenth, not the cosine's three quarters
 progress_width_deg = 0.0  # with > 0: progress pays only while pointing near the target (exp(-(error/width)^2))
-arrive = 30.0           # CHANGED: one-off bonus per target once it has held within 15 degrees for arrive_hold_s: more the sooner it gets there (none after arrive_by_s), so quick turns that settle pay more than slow ones...
-arrive_hold_s = 2.0     # CHANGED: ...held 2 s, so spinning through the target doesn't count (at 17 degrees a second it crosses the 30 degree window in under 2 s)...
-arrive_by_s = 30.0      # CHANGED: ...and it still pays something up to 30 s, so v6's 20 s half turns still feel the slope
+arrive = 0.0            # one-off bonus per target for reaching it quickly (0 = off). v8 with it at 30 (and a firmer anchor, 1.0) aimed worse than v7 (15 degrees vs 11.5, worst from +90 on odd bodies) and turned no faster
 speed_cap_m_s = 0.03    # CHANGED: 3 cm/s. Look never walks, so the cap only sets how much drift a turn may have
 speed_window_s = 1.0    # speed is averaged over this long before the cap is checked
 overspeed = 4.0         # CHANGED: penalty for going faster than the cap (grows with the square)
-stop_drift_free = 0.5   # CHANGED: drift up to this x the cap is free (1.5 cm/s); not tighter: this body's drift grows with how fast it turns, so a speed band pays it to turn slowly. Wander is the anchor's job, charged by distance per turn
-anchor = 1.0            # CHANGED: wandering from where this turn began costs, up to this per tick, full at 15 cm past anchor_free_m. Charged on distance, not speed, so a quick turn wanders no more than a slow one; v6 still wandered 1-2 cm/s at 0.4...
+stop_drift_free = 0.8   # CHANGED: drift up to this x the cap is free (2.4 cm/s). This body drifts more the faster it spins (about 1.2 cm/s at the open-loop spin's 15 degrees a second on random bodies, more above), so at 0.5 the squared overspeed charge capped how fast it turned: v7 took 20 s for half a turn where the cloned spin manages 12-15. Standing still on target is the follower's Hold (follow.py), which stops creep there outright
+anchor = 0.4            # CHANGED: back to v7's; wandering from where this turn began costs, up to this per tick, full at 15 cm past anchor_free_m (1.0 in v8 bought nothing)
 anchor_free_m = 0.02    # ...the first 2 cm free
 tilt = 4.0              # CHANGED: penalty for leaning away from the stance; firm, so it turns instead of leaning
 fall = 10.0             # one-off penalty when it tips past fall_tilt_deg (episode ends)
