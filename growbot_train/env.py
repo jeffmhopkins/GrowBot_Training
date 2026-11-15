@@ -184,6 +184,8 @@ class GrowBotHeadingEnv(gym.Env):
             # It pays only for speed toward the target, so a back-away command would be
             # charged for doing what it was told.
             raise ValueError('task.speed_reward "progress" needs task.speed_back_min >= 0')
+        if not 0.0 < cfg.randomization.ramp_to <= 1.0:
+            raise ValueError("randomization.ramp_to must be in (0, 1]")
         self.channels = channels_for(cfg)
         self._torso = m.body("base_body").id
         self._legs = [m.body("right_leg").id, m.body("left_leg").id]
@@ -356,16 +358,21 @@ class GrowBotHeadingEnv(gym.Env):
 
     def _near(self, lo_hi: tuple[float, float], nominal: float) -> tuple[float, float]:
         """A range drawn in toward the as-built value by the curriculum (dr_scale)."""
-        k = self.dr_scale
+        k = self._body_k()
         if k >= 1.0:
             return lo_hi
         return (nominal + (lo_hi[0] - nominal) * k, nominal + (lo_hi[1] - nominal) * k)
+
+    def _body_k(self) -> float:
+        # Capped at ramp_to while the targets keep widening with dr_scale: a body that
+        # only walks near the as-built robot can still learn the big turns.
+        return min(1.0, self.dr_scale, self.cfg.randomization.ramp_to)
 
     def _draw(self, overrides: dict[str, Any], randomize: bool) -> tuple[dict[str, Any], Episode]:
         r = self.cfg.randomization
         rng = self.np_random
         ng = self.model.ngeom
-        near, k = self._near, min(1.0, self.dr_scale)
+        near, k = self._near, self._body_k()
         if randomize:
             shared = self._u(near(r.leg_length_scale, 1.0))
             fr = r.friction
@@ -726,7 +733,7 @@ class GrowBotHeadingEnv(gym.Env):
         """The relay and servo between the phone's command and the joint: dropped
         packets, a fractional delay, a slew-rate limit and a first-order lag."""
         ep = self.ep
-        drop = self.cfg.randomization.relay_drop_prob * min(1.0, self.dr_scale)
+        drop = self.cfg.randomization.relay_drop_prob * self._body_k()
         if self._noisy and self.np_random.random() < drop:
             cmd_rad = self.queue[0]
         self.queue = np.concatenate([cmd_rad[None], self.queue[:-1]])

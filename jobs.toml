@@ -58,7 +58,8 @@ est_hours = "2-5 h"
 notes = """The stock-leg gait like the clip: the legs lift the body high on its tail and let \
 it fall back down a little further tail first, about twice a second \
 (configs/lift_fall.toml). It clones the gait the bench found, then learns to steer it with \
-a heading, starting on robots close to the as-built one and widening to the full spread. \
+a heading, starting on robots close to the as-built one and widening to 35% of the full \
+spread (the targets widen to full). \
 Downloads and the Live card work as for the heading walk."""
 
 [[job]]
