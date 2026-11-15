@@ -171,7 +171,7 @@ Every tick the reward is the sum of these terms. All the weights live in
 | progress | `progress = 2.0` | Moving in the target direction. Full value at the speed cap, a fraction below it, nothing extra above it, negative when moving away. |
 | heading | `heading = 0.5` | Pointing the nose at the target. Full value dead on, half at 90 degrees off, zero facing away. With `heading_width_deg` > 0 (look and lift and fall: 40) it is exp(-(error/width)^2) instead, paying only near the target. |
 | progress_width_deg | `progress_width_deg = 0.0` (lift and fall: 45) | With > 0, progress (paid or charged) is scaled by exp(-(error/width)^2), so it counts only while pointing near the target. Speed along the target alone pays 77% walking 40 degrees off; the first capped lift and fall run turned partway and then walked straight that far off. |
-| arrive | `arrive = 0.0` (lift and fall: 30) | A one-off bonus each target that starts at least `arrive_within_deg` (15 degrees) off, once the error has stayed under it for `arrive_hold_s` (1 s): weight times (1 minus the time since the target moved over `arrive_by_s`, 20 s), so 95% for turning at once and nothing after 20 s. The turn term pays a slow turn the same as a quick one; this pays for quick. |
+| arrive | `arrive = 0.0` (lift and fall and look: 30) | A one-off bonus each target that starts at least `arrive_within_deg` (15 degrees) off, once the error has stayed under it for `arrive_hold_s` (1 s): weight times (1 minus the time since the target moved over `arrive_by_s`, 20 s), so 95% for turning at once and nothing after 20 s (look: held 2 s, paying until 30 s). Discounting already favours a quick turn a little; this pays for arriving and settling. |
 | overspeed | `overspeed = 4.0` | Going faster than `speed_cap_m_s` (3 cm/s; camera walk 1 cm/s with `overspeed = 1.0`). Grows with the square of the excess, so a little over is mild and a lot over is harsh. |
 | tilt | `tilt = 1.0` | Leaning away from how it stood at the start. (This body naturally rests nose-up at about 34 degrees, so "upright" means its own starting stance, the same reference the app's tip check uses.) |
 | fall | `fall = 10.0` | A one-off penalty when it tips more than `fall_tilt_deg` (55 degrees) from its stance. The episode ends there, so it also loses all the reward it would have earned. |
@@ -385,7 +385,16 @@ spin it clones, so the old 6 to 14 s between targets often moved the target befo
 robot got there. The target now moves every 15 to 30 s, the camera height every 8 to 20 s, and
 an episode lasts a minute so it holds two to four targets. The gyro heading drift
 (`randomization.heading_drift_deg_per_s`) builds for the whole episode, so look's error
-at 30-60 s isn't comparable with the 30 s runs before. Unlike the camera walk it trains on
+at 30-60 s isn't comparable with the 30 s runs before.
+v6 (run 36d29750, kept as `policies/look-v6`) evaluated at 16 degrees of heading error
+averaged over its starts (7 to 10 from most starts, 27 and 34 from +90 and 180 degrees),
+but took 20 to 28 s for half a turn, against about 11 for the spin it cloned, and crept
+1 to 2 cm/s. So look now also earns the arrive bonus (`reward.arrive = 30`, held 2 s,
+paying until 30 s), so a quick turn that settles pays more. The creep is charged by
+distance per turn instead of speed: the anchor charges up to 1.0 a tick (was 0.4) while
+the free speed band stays at 1.5 cm/s. This body drifts more the faster it turns, so a
+tighter speed band pays a slow turn (v5 learned exactly that), while the anchor charges a
+quick turn and a slow one alike for the same wander. Unlike the camera walk it trains on
 the printed build with bare-print surfaces (see [Bodies](#bodies)), like the heading walk.
 It's the camera walk otherwise, and only the lines marked CHANGED differ from that file.
 From JBrain it's the "GrowBot look" job.
