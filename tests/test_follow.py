@@ -254,6 +254,13 @@ def test_hold_freezes_on_the_average_of_the_last_second_once_settled_on_target()
     # Averaged as servo targets, after the env's tanh, and handed back in its input.
     assert np.allclose(np.tanh(h.held), np.mean(np.tanh(acts[:n]), axis=0))
 
+    # Held: the policy isn't asked, and the same pose comes back every tick.
+    def boom() -> np.ndarray:
+        raise AssertionError("the policy was asked while held")
+
+    out = h.action(boom, 10.0, standing=True, lost=False, tilt=1.0)
+    assert np.array_equal(out, h.held)
+
 
 def test_hold_averages_a_saturated_command_as_the_servo_saw_it() -> None:
     # The env clips its input at ACTION_LIMIT, so a command of 7 drives the servo no
@@ -261,13 +268,6 @@ def test_hold_averages_a_saturated_command_as_the_servo_saw_it() -> None:
     h = Hold(window=4, settle_s=0.1)
     _settle(h, [np.array([7.0, 0.0]), np.array([-4.0, 0.0])] * 2)
     assert h.held is not None and abs(h.held[0]) < 1e-6
-
-    # Held: the policy isn't asked, and the same pose comes back every tick.
-    def boom() -> np.ndarray:
-        raise AssertionError("the policy was asked while held")
-
-    out = h.action(boom, 10.0, standing=True, lost=False, tilt=1.0)
-    assert np.array_equal(out, h.held)
 
 
 def test_hold_waits_for_the_robot_to_settle_and_to_be_asked_to_stand() -> None:
