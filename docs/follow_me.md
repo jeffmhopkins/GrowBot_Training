@@ -1,8 +1,9 @@
 # Follow me: the plan
 
 Status: the simulator harness (person, camera model, tracker, follower, voice script)
-is built for single skills (`growbot_train/follow.py`); distractors, the replay and the
-master are not. Last verified 2026-11-15.
+is built for single skills (`growbot_train/follow.py`). The master is distilled
+(`growbot_train/master.py`, `policies/master-1`) but not yet fine-tuned or run through
+the harness; distractors and the replay are not built. Last verified 2026-11-15.
 
 The end use for the GrowBot policies (Jeff, 2026-11-14): say "follow me" and the robot
 follows the person, keeping a set distance and keeping the phone's camera on them, and
@@ -36,7 +37,9 @@ the heading, with the camera still facing the person.
 What it does with them:
 
 - **Speed above 0:** walk tall, camera first, toward the heading. Teacher: lift and
-  fall (`configs/lift_fall.toml`).
+  fall (`configs/lift_fall.toml`), but only within 60 degrees of the heading (let go at
+  70, so the switch doesn't chatter). Further off, look's spin teaches, so a person off
+  to the side or behind gets a turn on the spot first, not a walk in an arc.
 - **Speed below 0:** back away from the person in the original low waddle, nose first
   (Jeff, 2026-11-14). The camera sits at the tail, so walking nose first is walking
   away from what the camera sees. Teacher: the nose walk (`configs/nose_walk.toml`), the

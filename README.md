@@ -473,6 +473,45 @@ Unlike the camera walk it trains on the printed build with bare-print surfaces (
 It's the camera walk otherwise, and only the lines marked CHANGED differ from that file.
 From JBrain it's the "GrowBot look" job.
 
+## The master policy
+
+One file for the app, whatever the follower asks: `growbot_train/master.py` distils the
+three skills into one student, as [follow_me.md](docs/follow_me.md#1-one-master-policy)
+plans. The student takes the follower's `cmd_yaw` (from where the camera points),
+`cmd_forward` (signed: the sign alone picks the gait) and `cmd_pitch`. It also sees one
+gait clock per teacher at that teacher's rate (`cycle:look_sin` and so on; the app runner
+steps any declared clock). Each tick one teacher labels what the legs should do:
+
+- speed below 0: the nose walk, backing away nose first, whatever the heading;
+- speed above 0 and within 60 degrees (let go at 70): lift and fall;
+- otherwise: look's spin, which also handles walking toward someone well off to the
+  side or behind.
+
+The teachers' commands are matched in radians, so the student swings the servos' full
+1.57 radians. Each teacher keeps its own sensor history every tick, so it takes over a
+hand-over with a full history. Training is DAgger: in the first round the teachers
+drive, then the student drives more and more while the teachers keep labelling, so it
+learns to recover from its own mistakes. Minute-long episodes switch mode every 3-12 s,
+move the target and change the camera height. Bodies vary only as far as every teacher
+trained on (lift-fall-2 saw 35% of the ranges). Each mode falls by its own teacher's
+rule: lift and fall's gait rears up past look's back-fall line by design.
+
+```bash
+.venv/bin/python -m growbot_train.master distill --out runs/master    # about 10 minutes on 4 cores
+.venv/bin/python -m growbot_train.master evaluate runs/master/policy_master.json
+```
+
+`evaluate` drives the same robots once with the teachers (through the same mode rule)
+and once with the master, per mode and start, then counts falls against mode switches in
+20 minute-long runs of random commands. The first master (`policies/master-1`, from
+look-v7, lift-fall-2 and nose-walk-1) is within 5% of its teachers in every mode on
+speed, heading error and turn time (backing from -45 degrees ends 8.0 degrees off against
+6.7). It fell 3 times in 108 mode switches, against a bar of under 1 in 50. Driven by
+its teachers instead, the same scripts fall about 1 in 50, mostly lift-fall-2 tipping on
+a turn. So the remaining falls are the walking teacher's, and the master gets better
+as the teachers do. It isn't listed in `policies/index.toml` yet: the Body tab's runner
+takes it, but nothing in the app sends a signed speed until the follower does.
+
 ## Training on a different robot every time (randomisation)
 
 No two GrowBots are the same, and the simulator is not the real world. So every episode
@@ -669,6 +708,7 @@ doing only if the CPU runs prove too slow.
 | `growbot_train/export.py` | Trained network to the app's JSON, with a match check |
 | `growbot_train/evaluate.py` | Scores an exported JSON, optional robustness sweep |
 | `growbot_train/follow.py` | The follow-me harness: person, camera model, tracker, follower, voice script |
+| `growbot_train/master.py` | Distils the skills into one master policy and scores it against them |
 | `growbot_train/replay.py` | Writes the browser 3D replay page (`replay_template.html`) |
 | `growbot_train/view.py` | Live MuJoCo viewer with a steerable target, or an mp4 |
 | `growbot_train/policy.py` | Runs an exported JSON with the app runner's arithmetic |
