@@ -586,8 +586,8 @@ Its limits, until the walks it learns from are retrained:
   wherever its clock is, which the teacher never trained on. The switch test counts the
   falls that causes.
 
-It isn't listed in `policies/index.toml` yet: the Body tab's runner takes it, but
-nothing in the app sends a signed speed until the follower does.
+master-2 is listed in `policies/index.toml` as "Master", so the Body tab offers it:
+its look and spin buttons send speed 0, forward +1 and back -1, which is each mode.
 
 ## Training on a different robot every time (randomisation)
 

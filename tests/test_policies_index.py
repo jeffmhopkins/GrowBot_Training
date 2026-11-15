@@ -3,11 +3,14 @@
 
 from __future__ import annotations
 
+import json
 import re
 import tomllib
 from pathlib import Path
 
-from growbot_train.policy import JsonPolicy
+import numpy as np
+
+from growbot_train.policy import JsonPolicy, runner_forward
 
 ROOT = Path(__file__).resolve().parent.parent
 SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,47}$")
@@ -48,4 +51,12 @@ def test_every_entry_is_well_formed() -> None:
 
 def test_every_listed_policy_loads() -> None:
     for p in _policies():
-        JsonPolicy(ROOT / p["file"])
+        data = json.loads((ROOT / p["file"]).read_text())
+        if "master" in data.get("training", {}):
+            # A master drives no single env, so it is checked as the phone runs it:
+            # its whole input history in, two leg commands out.
+            spec = data["obs_spec"]["segments"][0]
+            n = len(spec["channels"]) * spec["frames"]
+            assert runner_forward(data, np.zeros(n)).shape == (2,)
+        else:
+            JsonPolicy(ROOT / p["file"])
