@@ -15,15 +15,15 @@ phase 7. Foot geometry is parked.
 - **Up to three runs at once** (since 2026-11-15). Each training run gets its own run
   folder and its own pinned CPU cores, and sizes its simulators to those cores. Each
   job can have only one live run.
-- **An Ops → Update kills every running job.** Seen on 2026-11-14: the job is gone after
-  the update, not paused, so updates wait for a gap between runs. Every thread that owns a run says when
-  the box is free.
+- **An Ops → Update kills a running job.** Seen on 2026-11-14 with one job: it is gone
+  after the update, not paused. Assume it kills every running job, so updates wait until
+  no run is live. Every thread that owns a run says when the box is free.
 - **No update needed for a new run.** A job clones this repo's `main` when it starts, and
   the Jobs list refreshes from `jobs.toml`, so a config change goes live on merge.
 - **Ownership:** the locomotion thread owns the tall and low gaits (lift and fall, the
   backing waddle) and foot geometry (parked). The look and spin thread owns look, the follow
-  test, the distillation and the final test. Runs are queued between them in the order
-  below.
+  test, the distillation and the final test. Runs share the box's three slots in the
+  order below.
 
 ## Phase 1: the three skills, on stock legs
 
@@ -31,7 +31,7 @@ Each skill trains on its own on the printed build.
 
 | Skill | Config | Owner | State |
 | --- | --- | --- | --- |
-| Look: spin in place to a heading, tilt the camera | `configs/look.toml` | look thread | v6 trained; next run waits on a creep fix |
+| Look: spin in place to a heading, tilt the camera | `configs/look.toml` | look thread | v6 trained; v7 waits on a creep fix |
 | Tall walk: camera first, lift and fall, forward | `configs/lift_fall.toml` | locomotion thread | training (randomisation capped, #37) |
 | Backing waddle: low, nose first, away from the camera, at a commanded speed | `configs/nose_walk.toml` | locomotion thread | training (speed reward fixed, #34) |
 
@@ -44,12 +44,12 @@ Where each one stands (2026-11-15):
     fixed in the reward.
   - Targets now move every 15 to 30 s, because this body turns only about 17 degrees a
     second and needs 10 s or more for half a turn (#36).
-  - Planned for v7: a lift-and-fall style spin found on the bench turns as fast with
-    about 30% less drift, and suits the lowest camera angles. Using it needs a gait clock
+  - Planned after the creep fix: a lift-and-fall style spin found on the bench turns as
+    fast with about 30% less drift, and suits the lowest camera angles. Using it needs a gait clock
     per mode (2.35 Hz against look's 1 Hz).
-- **Tall walk:** the run before fell apart once the body randomisation widened past
-  about a third of full (89 degrees of heading error at 22M steps). The randomisation is
-  now capped (#37) and a fresh run is training.
+- **Tall walk:** the run before held up near 0.3 of the full body randomisation and fell
+  apart past about 0.45 (89 degrees of heading error by 22M steps). The randomisation is
+  now capped at 0.35 (#37) and a fresh run is training.
 - **Backing waddle:** the nose walk (#27) is the heading walk's nose-first waddle with a
   speed input, from a stop up to 3 cm/s. Its speed is now scored like the heading walk's
   (#34) and a fresh run is training.
@@ -59,7 +59,7 @@ Where each one stands (2026-11-15):
 The tall walk also needs two things it lacks today, as follow-up runs:
 
 - **Variable speed:** its cloned gait has one speed (5 cm/s). It has to learn slower
-  speeds down to a stop, or the follower is stop-or-go. The backing waddle has one now.
+  speeds down to a stop, or the follower is stop-or-go. The backing waddle is training one now.
 - **Camera tilt while walking:** a camera-height input, so the camera can stay on a face
   while it walks.
 
@@ -78,7 +78,7 @@ tall, so it can't yet score a commanded speed, backing, or a camera height.
   1 in 10.
 
 **Box order:** the tall walk and the backing waddle are training side by side. Look v7
-(creep fix, then the low-angle spin) goes in the third slot, and the tall walk with
+(the creep fix), then a run with the low-angle spin, go in the third slot, and the tall walk with
 variable speed and tilt follows.
 
 ## Phase 2: the follow test, single-skill baseline
@@ -150,7 +150,7 @@ the requirements for running policies on the robot. The first pieces are followi
 face and the generic voice commands. Later, "walk forward for X seconds" or "X metres",
 using the trained speed to work out the distance and taking camera views as often as it
 can on the way. The software can be built against today's single-skill policies and
-take the master policy when it lands.
+take the master policy when it lands; the list and exit below are the end state.
 
 In the JBrain2 PWA:
 
