@@ -616,6 +616,13 @@ off. The turn itself still moves it 10-25 cm, which the follower's distance keep
 back. `evaluate` reports both: `drift` (cm moved over the second half) and `net_cm`
 (start to end); each round's log gives `held_pct`, the share of ticks held.
 
+**Replay.** `python -m growbot_train.master replay POLICY` writes `replay.html` beside it,
+the same 3D page as the other skills, on eight walks with all three commands: turning to
+90 degrees and behind, walking to a target 25 degrees off, backing away, the camera height
+stepping, a turn-walk-stop-back-turn sequence, and two runs of the training's random
+commands on random bodies. The box's master job writes it too, so the run's Live card
+offers it.
+
 **On the box.** The Jobs list has "GrowBot master (turn, walk and back up, all in one)"
 (`growbot_master`, `configs/master.toml`, which names the teachers). It distils on every
 core, then evaluates; the Live card shows each round and the run's `eval.txt` ends with a
