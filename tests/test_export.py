@@ -128,3 +128,15 @@ def test_a_speed_policy_is_checked_at_each_commanded_speed(tiny_speed_run: Path)
     cap = env.cfg.reward.speed_cap_m_s
     assert [m["want"] for m in rows.values()] == [s * cap for s in SPEED_STEPS]
     assert all(m["episodes"] == 1 for m in rows.values())
+
+
+def test_evaluation_starts_stay_within_the_trained_range() -> None:
+    from growbot_train.config import Config
+    from growbot_train.evaluate import START_ERRORS, start_errors
+
+    cfg = Config()
+    cfg.task.initial_error_deg = 180.0
+    assert start_errors(cfg) == START_ERRORS
+    cfg.task.initial_error_deg = 60.0
+    assert start_errors(cfg) == (0.0, 45.0, -45.0, 60.0, -60.0)
+    assert start_errors(cfg, (0.0, 90.0, 180.0)) == (0.0, 60.0, -60.0)
