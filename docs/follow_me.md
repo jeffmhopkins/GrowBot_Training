@@ -2,7 +2,7 @@
 
 Status: the simulator harness (person, camera model, tracker, follower, voice script)
 is built for single skills (`growbot_train/follow.py`). The master is distilled
-(`growbot_train/master.py`, `policies/master-2`) but not yet fine-tuned or run through
+(`growbot_train/master.py`, `policies/master-v1`) but not yet fine-tuned or run through
 the harness; distractors and the replay are not built. Last verified 2026-11-15.
 
 The end use for the GrowBot policies (Jeff, 2026-11-14): say "follow me" and the robot

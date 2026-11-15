@@ -530,7 +530,9 @@ hand-over with a full history. Training is DAgger: in the first round the teache
 drive, then the student drives more and more while the teachers keep labelling, so it
 learns to recover from its own mistakes. Minute-long episodes switch mode every 3-12 s,
 move the target and change the camera height. Bodies vary only as far as every teacher
-trained on (lift-fall-2 saw 35% of the ranges). Each mode falls by its own teacher's
+trained on: as built to the STL, as lift-fall-3 trained (`DEFAULT_BODY`, or
+`[master.body]` in `configs/master.toml`; Jeff, 2026-11-15: the robot is the STL). On
+look's wider bodies lift-fall-3 walked backwards and fell in half its runs. Each mode falls by its own teacher's
 rule: lift and fall's gait rears up past look's back-fall line by design.
 
 ```bash
@@ -574,10 +576,11 @@ seated face at 2 m), so nose-walk-1 stays.
 
 Its limits, until the walks it learns from are retrained:
 
-- **Bodies:** it only ever saw bodies as far from the as-built one as lift-fall-2 trained
-  on (35% of the ranges), in every mode. Look and the nose walk handle the full ranges,
-  but the master is untested there.
-- **Forward speed:** lift-fall-2 has one speed, so forward is stop-or-go. Anything above
+- **Bodies:** master-v1 saw bodies only as far from the as-built one as lift-fall-2
+  trained on (35% of the ranges); from lift-fall-3 on, only the STL build with its
+  weight varied. Look and the nose walk handle the full ranges, but the master is
+  untested there.
+- **Forward speed:** the lift-and-fall walks have one speed, so forward is stop-or-go. Anything above
   0 means full speed, as the follower already treats it.
 - **Residual-gait teachers** (the nose walk since it walks on a gait, with the policy
   correcting): the student is labelled with the teacher's whole leg angles (gait,
@@ -589,9 +592,13 @@ Its limits, until the walks it learns from are retrained:
   wherever its clock is, which the teacher never trained on. The switch test counts the
   falls that causes.
 
-master-2 is listed in `policies/index.toml` as "Master 2", so the Body tab offers it
-under Trained walks: its look and spin buttons send speed 0, forward +1 and back -1,
-which is each mode.
+The current master is `policies/master-v1`, "Master v1" under Trained walks on the
+Body tab: the box's first master run (growbot_master v1), from the same teachers as
+master-2 with the hold below. Within 3% of its teachers on speed, 1.9-2.5 degrees off
+after a turn (master-2 3.4-4.7), 2-5 cm of drift over the last 15 s of a look, no falls in
+45 runs and 1 in 208 switches (its teachers 1 in 190). master-2 stays in `policies/` but
+is no longer listed. The Body tab's look and spin buttons send speed 0, forward +1 and
+back -1, which is each mode.
 
 **Standing dead still.** Standing on target, look's legs keep fiddling and the body
 creeps about 1.3 cm/s. So the master's labels hold still once it has settled
@@ -607,8 +614,11 @@ back. `evaluate` reports both: `drift` (cm moved over the second half) and `net_
 **On the box.** The Jobs list has "GrowBot master (turn, walk and back up, all in one)"
 (`growbot_master`, `configs/master.toml`, which names the teachers). It distils on every
 core, then evaluates; the Live card shows each round and the run's `eval.txt` ends with a
-one-line summary. Once done, its policy can be added from Trained walks on the Body tab,
-and a master worth keeping is listed in `policies/index.toml` as "Master N".
+one-line summary. The Launcher passes a GrowBot run only when its `export_verify.log`
+ends `EXPORT OK`: for the master that checks the file, read back, gives through the app
+runner's arithmetic what its layers give as the torch network. A master worth keeping is
+listed in `policies/index.toml` as "Master vN", N being its run's version, as every kept
+walk is named after its run.
 
 ## Training on a different robot every time (randomisation)
 

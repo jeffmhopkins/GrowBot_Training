@@ -8,7 +8,10 @@
 # ones we pick").
 #
 #   slug   a-z, 0-9 and - (1-48): the folder, and how the box tells entries apart
-#   title  the name the Body tab shows first (up to 60 characters)
+#   title  the name the Body tab shows first (up to 60 characters). It starts with the
+#          job's name and the run's version as the Jobs screen shows them ("Look v10" is
+#          growbot_look's run v10), so a walk and the run it came from read the same
+#          (owner, 2026-11-15); the run's note on the box says what it was kept as
 #   job    the growbot_ training job that made it; the Body tab groups walks by it
 #   file   the policy JSON, policies/<folder>/<name>.json
 #   run    optional: the Jobs run id it came from
@@ -26,7 +29,7 @@ notes = "Stand-in for the phone app. Best aim so far (about 16 degrees off on ra
 
 [[policy]]
 slug = "nose-walk-1"
-title = "Nose walk 1: back away at a commanded speed"
+title = "Nose walk v3: back away at a commanded speed"
 job = "growbot_nose_walk"
 file = "policies/nose-walk-1/policy_nose_walk.json"
 run = "6e69e32c"
@@ -34,7 +37,7 @@ notes = "Stand-in for the phone app's backing mode: walks nose first (away from 
 
 [[policy]]
 slug = "lift-fall-1"
-title = "Lift and fall 1: walk tall toward a heading"
+title = "Lift and fall v2: walk tall toward a heading"
 job = "growbot_lift_fall"
 file = "policies/lift-fall-1/policy_lift_fall.json"
 run = "ca607df3"
@@ -42,7 +45,7 @@ notes = "Walks tall, camera first, at its 5 cm/s cap (no speed input). About 17 
 
 [[policy]]
 slug = "lift-fall-1-16m"
-title = "Lift and fall 1 at 16M steps"
+title = "Lift and fall v2 at 16M steps"
 job = "growbot_lift_fall"
 file = "policies/lift-fall-1-16m/policy_lift_fall.json"
 run = "ca607df3"
@@ -50,7 +53,7 @@ notes = "The same run's 16M checkpoint, kept for comparison: about 27 degrees of
 
 [[policy]]
 slug = "look-v7"
-title = "Look v7: turn on the spot to face a target"
+title = "Look v8: turn on the spot to face a target"
 job = "growbot_look"
 file = "policies/look-v7/policy_look.json"
 run = "200aa414"
@@ -58,7 +61,7 @@ notes = "The best look so far: 11.5 degrees off on random bodies from every star
 
 [[policy]]
 slug = "lift-fall-2"
-title = "Lift and fall 2: walk tall toward a heading"
+title = "Lift and fall, second slot v1: walk tall toward a heading"
 job = "growbot_lift_fall_turns"
 file = "policies/lift-fall-2/policy_lift_fall.json"
 run = "527daab9"
@@ -66,23 +69,24 @@ notes = "The forward teacher now: the turning-gated lift and fall at 50M. About 
 
 [[policy]]
 slug = "lift-fall-3"
-title = "Lift and fall 3: walk tall, on the robot as built"
-job = "growbot_lift_fall_turns"
+title = "Lift and fall v5: walk tall, on the robot as built"
+job = "growbot_lift_fall"
 file = "policies/lift-fall-3/policy_lift_fall.json"
 run = "a0e521dd"
 notes = "The forward teacher for the STL-pinned body (Jeff: his robot is the STL): legs as printed, weight and balance point varied a little, servos, floor, delays and trim at 60% of their ranges, paid for keeping a face in the picture. At 37.5M: 1 fall in 100 minute-long walks with the target within 30 degrees, 5.8 cm/s toward it, 5 degrees off, the face in the picture throughout (lift-fall-2 on the same test: 7 falls in 50, 4.3 cm/s). It does not walk on other leg lengths, and turns wider than 30 degrees while walking fall, so the master turns first."
 
 [[policy]]
 slug = "look-v9"
-title = "Look v9: turn on the spot to face a target"
+title = "Look v10: turn on the spot to face a target"
 job = "growbot_look"
 file = "policies/look-v9/policy_look.json"
 run = "32fae7c5"
 notes = "The look teacher now: 10.6 degrees off on random bodies (v7 11.5), and the odd bodies v7 left 35-47 degrees off now end 11-15 off. Quarter turns mostly 7-9 s (short legs from +90 takes 18 s). Half turns about 20 s on random bodies, as v7 (a search for a faster open-loop spin found none that holds up on random bodies). Creeps 0.8 cm/s on target (v7 0.7), which the follower's Hold stops. 0 falls in 36 randomised evaluations; 1 in 153 sweep ones (long legs from 180 degrees, which also ends 64 degrees off)."
 
 [[policy]]
-slug = "master-2"
-title = "Master 2: turn, walk and back up, all in one"
+slug = "master-v1"
+title = "Master v1: turn, walk and back up, all in one"
 job = "growbot_master"
-file = "policies/master-2/policy_master.json"
-notes = "The one policy the follower will run, distilled from look-v9, lift-fall-2 and nose-walk-1. Speed 0 turns on the spot to face the target; forward walks camera first (only within 30 degrees, it turns first otherwise); back backs away nose first (within 45 degrees). Within 4% of those teachers on speed, 0.7 degrees on aim, no falls in 173 mode switches, and the face stays in the camera's picture 97-100% of the time while moving."
+file = "policies/master-v1/policy_master.json"
+run = "5e827bc9"
+notes = "The one policy the follower will run, distilled on the box from look-v9, lift-fall-2 and nose-walk-1, and the first to hold still once it faces the target. Speed 0 turns on the spot; forward walks camera first (within 30 degrees, it turns first otherwise); back backs away nose first (within 45 degrees). Within 3% of those teachers on speed and 2-2.5 degrees off after a turn, 2-5 cm of drift over the last 15 s of a look, no falls in 45 runs and 1 in 208 mode switches."

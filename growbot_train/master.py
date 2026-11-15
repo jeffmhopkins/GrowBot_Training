@@ -38,6 +38,7 @@ import numpy as np
 from growbot_train import config as config_mod
 from growbot_train.env import CONTROL_DT, CTRL_LIMIT, GrowBotHeadingEnv, wrap_deg
 from growbot_train.export import FORMAT, LENS_BLEND
+from growbot_train.export import TOLERANCE as EXPORT_TOLERANCE
 from growbot_train.gait import Keyframes
 from growbot_train.policy import runner_forward
 
@@ -67,8 +68,18 @@ SQUASH = 0.9993  # tanh(ACTION_LIMIT): the furthest a squashed action reaches
 
 DEFAULT_TEACHERS = {
     "look": "policies/look-v9/policy_look.json",
-    "walk": "policies/lift-fall-2/policy_lift_fall.json",
+    "walk": "policies/lift-fall-3/policy_lift_fall.json",
     "back": "policies/nose-walk-1/policy_nose_walk.json",
+}
+# The robot is built as the STL (Jeff, 2026-11-15), as lift-fall-3 trained: only the weight
+# and its balance point vary. Look and the nose walk trained on wider bodies.
+DEFAULT_BODY: dict[str, list[float]] = {
+    "mass_scale": [0.85, 1.15],
+    "com_x_m": [-0.010, 0.010],
+    "com_y_m": [-0.005, 0.005],
+    "com_z_m": [-0.005, 0.008],
+    "leg_length_scale": [1.0, 1.0],
+    "leg_asymmetry": [1.0, 1.0],
 }
 
 STUDENT_CHANNELS = (
@@ -374,9 +385,16 @@ class Script:
 class Rollout:
     """One worker's simulator and teachers, reused across episodes."""
 
-    def __init__(self, teacher_paths: dict[str, str]) -> None:
+    def __init__(
+        self, teacher_paths: dict[str, str], body: dict[str, list[float]] | None = None
+    ) -> None:
         self.teachers = {m: Teacher.load(m, p) for m, p in teacher_paths.items()}
         self.env = student_env(self.teachers["look"])
+        # The robot is built as the STL (Jeff, 2026-11-15), so a config can narrow the
+        # bodies to the walk's own pinned ranges: on look's wider ones a pinned walk
+        # teacher walked backwards and fell in half its runs.
+        for key, span in (body or {}).items():
+            setattr(self.env.cfg.randomization, key, (float(span[0]), float(span[1])))
         # Bodies only as far from the as-built one as every teacher trained on: past
         # that a teacher's labels are guesses (lift-fall-2 saw 35% of the ranges).
         self.env.dr_scale = min(t.ramp_to for t in self.teachers.values())
@@ -463,9 +481,9 @@ class Rollout:
 _WORKER: Rollout | None = None
 
 
-def _init(teacher_paths: dict[str, str]) -> None:
+def _init(teacher_paths: dict[str, str], body: dict[str, list[float]] | None) -> None:
     global _WORKER
-    _WORKER = Rollout(teacher_paths)
+    _WORKER = Rollout(teacher_paths, body)
 
 
 def _run(args: tuple[int, float, dict[str, Any] | None, float]) -> dict[str, Any]:
@@ -480,12 +498,14 @@ def collect(
     student: dict[str, Any] | None,
     beta: float,
     workers: int,
+    body: dict[str, list[float]] | None = None,
 ) -> list[dict[str, Any]]:
     jobs = [(s, seconds, student, beta) for s in seeds]
     if workers <= 1:
-        _init(teacher_paths)
+        _init(teacher_paths, body)
         return [_run(j) for j in jobs]
-    with get_context("fork").Pool(workers, initializer=_init, initargs=(teacher_paths,)) as pool:
+    ctx = get_context("fork")
+    with ctx.Pool(workers, initializer=_init, initargs=(teacher_paths, body)) as pool:
         return pool.map(_run, jobs)
 
 
@@ -642,6 +662,7 @@ def distill(
     workers: int = 4,
     seed: int = 0,
     log: Any = print,
+    body: dict[str, list[float]] | None = None,
 ) -> Path:
     out.mkdir(parents=True, exist_ok=True)
     teachers = {m: Teacher.load(m, p) for m, p in teacher_paths.items()}
@@ -652,7 +673,7 @@ def distill(
     history = []
     for r, beta in enumerate(rounds):
         seeds = [seed * 100003 + r * 10007 + k for k in range(episodes)]
-        eps = collect(teacher_paths, seeds, seconds, student, beta, workers)
+        eps = collect(teacher_paths, seeds, seconds, student, beta, workers, body)
         obs_all += [e["obs"] for e in eps if len(e["obs"])]
         lab_all += [e["labels"] for e in eps if len(e["labels"])]
         falls = sum(e["fell"] for e in eps)
@@ -677,6 +698,8 @@ def distill(
         log(json.dumps(row))
     assert student is not None
     policy = export_policy(student, teachers, teacher_paths)
+    if body:
+        policy["training"]["master"]["body"] = body
     path = out / "policy_master.json"
     path.write_text(json.dumps(policy))
     (out / "distill.json").write_text(json.dumps(history, indent=1))
@@ -806,7 +829,7 @@ def evaluate(
 ) -> dict[str, Any]:
     policy = json.loads(Path(policy_path).read_text())
     teacher_paths = policy["training"]["master"]["teachers"]
-    rollout = Rollout(teacher_paths)
+    rollout = Rollout(teacher_paths, policy["training"]["master"].get("body"))
     master = MasterRunner(policy, rollout.teachers)
     report: dict[str, Any] = {}
     for mode, (fwd, starts) in SCENARIOS.items():
@@ -852,7 +875,7 @@ def format_report(report: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-JOB_KEYS = {*MODES, "episodes", "rounds", "epochs", "seed"}
+JOB_KEYS = {*MODES, "episodes", "rounds", "epochs", "seed", "body"}
 
 
 def load_job(path: Path) -> dict[str, Any]:
@@ -867,6 +890,10 @@ def load_job(path: Path) -> dict[str, Any]:
     for m in MODES:
         if not Path(job[m]).is_file():
             raise ValueError(f"{path}: the {m} teacher {job[m]} is not in the repo")
+    ranges = {k for k, v in vars(config_mod.RandomizationConfig()).items() if isinstance(v, tuple)}
+    for key, span in job.get("body", {}).items():
+        if key not in ranges or not isinstance(span, list) or len(span) != 2 or span[0] > span[1]:
+            raise ValueError(f"{path}: [master.body] {key} must be a randomization range")
     return job
 
 
@@ -938,6 +965,43 @@ class JobProgress:
         os.replace(tmp, self.path)
 
 
+def verify_export(path: Path, log: Path, samples: int = 256) -> bool:
+    """JBrain's Launcher passes a GrowBot run only when ``export_verify.log`` ends
+    ``EXPORT OK`` (as growbot_train.export writes for a PPO run). Here the check is that
+    the file, read back, gives through the app runner's arithmetic what the same layers
+    give as the torch network they were trained as."""
+    import torch
+
+    policy = json.loads(path.read_text())
+    if policy["obs_size"] != len(policy["mean"]) or policy["obs_size"] != len(policy["std"]):
+        log.write_text(
+            f"policy: {path.name}\nobs_size does not match its normaliser\nEXPORT MISMATCH\n"
+        )
+        return False
+    rng = np.random.default_rng(0)
+    obs = np.asarray(policy["mean"]) + rng.normal(size=(samples, policy["obs_size"])) * np.asarray(
+        policy["std"]
+    )
+    x = torch.tensor((obs - np.asarray(policy["mean"])) / np.asarray(policy["std"]))
+    for layer in policy["layers"]:
+        f64 = torch.float64
+        x = x @ torch.tensor(layer["W"], dtype=f64) + torch.tensor(layer["b"], dtype=f64)
+        if layer["act"] == "tanh":
+            x = torch.tanh(x)
+    net = torch.tanh(x).numpy()
+    gap = float(np.max(np.abs(runner_forward(policy, obs) - net)))
+    ok = gap < EXPORT_TOLERANCE
+    lines = [
+        f"policy: {path.name}",
+        f"obs_size: {policy['obs_size']}",
+        f"max |json - network|: {gap:.3e} (tolerance {EXPORT_TOLERANCE:g})",
+        "EXPORT OK" if ok else "EXPORT MISMATCH",
+    ]
+    log.write_text("\n".join(lines) + "\n")
+    print("\n".join(lines), flush=True)
+    return ok
+
+
 def run_job(run: Path, config: Path) -> Path:
     """The box's Jobs entry: distil on every core, then score it, into one run folder."""
     job = load_job(config)
@@ -957,7 +1021,10 @@ def run_job(run: Path, config: Path) -> Path:
         workers=len(os.sched_getaffinity(0)),
         seed=int(job.get("seed", 0)),
         log=log,
+        body=job.get("body"),
     )
+    if not verify_export(path, run / "export_verify.log"):
+        raise SystemExit("the exported master does not reproduce its network")
     report = evaluate(path)
     (run / "eval.json").write_text(json.dumps(report, indent=1))
     text = format_report(report) + f"\neval summary: {summarise(report)}\n"
@@ -1001,6 +1068,7 @@ def main(argv: list[str] | None = None) -> int:
             epochs=args.epochs,
             workers=args.workers,
             seed=args.seed,
+            body=DEFAULT_BODY,
         )
         print(path)
         return 0

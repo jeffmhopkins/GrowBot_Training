@@ -332,6 +332,13 @@ def test_the_master_job_distils_scores_and_reports_progress(tmp_path, monkeypatc
     monkeypatch.setattr(master, "distill", _tiny_distill(master.distill))
     path = master.run_job(tmp_path / "run", cfg)
     assert path.name == "policy_master.json"
+    # JBrain's Launcher fails a GrowBot run whose export_verify.log doesn't end so.
+    verify = (tmp_path / "run" / "export_verify.log").read_text().splitlines()
+    assert verify[-1] == "EXPORT OK"
+    broken = json.loads(path.read_text())
+    broken["obs_size"] += 1
+    path.write_text(json.dumps(broken))
+    assert not master.verify_export(path, tmp_path / "v.log")
     progress = json.loads((tmp_path / "run" / "live" / "progress.json").read_text())
     assert progress["state"] == "finishing" and progress["summary"][0]["value"] == "2 of 2"
     tail = (tmp_path / "run" / "eval.txt").read_text().splitlines()[-1]
@@ -376,3 +383,42 @@ def test_teacher_driven_look_settles_after_a_turn_and_the_episode_counts_it() ->
     ep = r.episode(0, 60.0, None, beta=1.0)
     assert 0 < ep["held"] < len(ep["obs"])
     assert r.episode(0, 60.0, None, beta=1.0)["held"] == ep["held"]
+
+
+def test_a_master_config_can_pin_the_bodies_and_the_policy_keeps_them(tmp_path) -> None:
+    job = master.load_job(master.Path("configs/master.toml"))
+    assert job["body"]["leg_length_scale"] == [1.0, 1.0]
+    r = master.Rollout(master.DEFAULT_TEACHERS, job["body"])
+    assert r.env.cfg.randomization.leg_length_scale == (1.0, 1.0)
+    assert master.Rollout(master.DEFAULT_TEACHERS).env.cfg.randomization.leg_length_scale != (
+        1.0,
+        1.0,
+    )
+    path = master.distill(
+        tmp_path,
+        master.DEFAULT_TEACHERS,
+        rounds=(1.0,),
+        episodes=1,
+        seconds=1.0,
+        epochs=1,
+        workers=1,
+        log=lambda _row: None,
+        body=job["body"],
+    )
+    saved = json.loads(path.read_text())["training"]["master"]["body"]
+    assert saved == job["body"]
+
+
+@pytest.mark.parametrize("bad", ["ramp_to = [0, 1]", "nope = [0, 1]", "mass_scale = [2, 1]"])
+def test_a_master_body_takes_only_randomization_ranges(tmp_path, bad: str) -> None:
+    cfg = tmp_path / "master.toml"
+    teachers = "\n".join(f'{m} = "{p}"' for m, p in master.DEFAULT_TEACHERS.items())
+    cfg.write_text(f"[master]\n{teachers}\n[master.body]\n{bad}\n")
+    with pytest.raises(ValueError, match="randomization range"):
+        master.load_job(cfg)
+
+
+def test_the_box_job_and_the_command_line_distil_the_same_master() -> None:
+    job = master.load_job(master.Path("configs/master.toml"))
+    assert {m: job[m] for m in master.MODES} == master.DEFAULT_TEACHERS
+    assert job["body"] == master.DEFAULT_BODY
