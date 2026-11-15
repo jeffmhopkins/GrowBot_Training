@@ -1,0 +1,26 @@
+{
+ "source": "research/locomotion/search.py scenario n2 on the final build (stock bare legs): a low nose-first waddle the bench found, 4.9 cm/s nose first on the as-built robot (2.5 on held-out bodies, 2 falls in 32), averaging 12 degrees nose-up and never rearing past 45",
+ "hz": 0.906,
+ "keys_rad": [
+  [
+   -1.465,
+   1.298,
+   -0.608,
+   1.179,
+   -1.436,
+   -1.478,
+   -1.414,
+   -1.284
+  ],
+  [
+   -1.499,
+   -1.426,
+   -1.395,
+   -1.464,
+   -1.362,
+   1.327,
+   -0.885,
+   1.06
+  ]
+ ]
+}
