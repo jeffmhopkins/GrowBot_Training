@@ -479,3 +479,22 @@ def test_the_replay_drives_every_preset_with_its_commands() -> None:
     # Frame layout (replay.recorder): index 5 is the signed speed command.
     assert back["frames"][-1][5] == -1.0 and not back["fell"]
     assert all(len(e["frames"]) > 40 for e in data["episodes"])
+
+
+def test_the_track_takes_the_face_where_the_person_should_be() -> None:
+    from growbot_train.follow import Sighting
+
+    last = Sighting(0.0, 0.0, 1.0)
+    near, stranger = Sighting(4.0, 0.0, 1.1), Sighting(-30.0, 0.0, 1.0)
+    assert master._pick([stranger, near], last, 0.0) is near
+    # A stranger far from the prediction is never taken just because it's the only face.
+    assert master._pick([stranger, None], last, 0.0) is None
+    # With no track yet, the nearest face.
+    assert master._pick([near, stranger], None, 0.0) is stranger
+
+
+def test_follow_me_runs_the_master_through_the_voice_script_with_two_people() -> None:
+    policy = json.loads(master.Path("policies/master-v2/policy_master.json").read_text())
+    r = master.follow_me(policy, 1, seconds=20.0, distractor=True)
+    assert r["fell"] == 0.0 and r["completed"] == 1.0
+    assert 0.0 <= r["wrong_pct"] <= 100.0 and r["in_view_pct"] > 0.0

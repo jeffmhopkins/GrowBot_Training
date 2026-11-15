@@ -954,6 +954,137 @@ def follow_spin(
     }
 
 
+def _pick(reads: list[Any], last: Any, age_s: float) -> Any:
+    """The one reading the person's own track takes, as the app's Track.update does: the
+    nearest the last sighting within a gate that widens with time since it (a brisk walk
+    past it), and never a face far from it just because it's the only one in view. With
+    no track yet, the nearest face, as the app's lock does. The app's gates exactly, so
+    the two-person run measures what the app would do."""
+    seen = [r for r in reads if r is not None]
+    if not seen:
+        return None
+    if last is None:
+        return min(seen, key=lambda r: r.distance_m)
+    gate = 10.0 + 60.0 * min(2.0, age_s)
+    best, cost = None, math.inf
+    for r in seen:
+        d_az = abs(wrap_deg(r.bearing_deg - last.bearing_deg))
+        d_d = abs(r.distance_m - last.distance_m) / max(0.3, last.distance_m)
+        if d_az > gate or d_d > 0.5:
+            continue
+        c = d_az / gate + d_d / 0.5
+        if c < cost:
+            best, cost = r, c
+    return best
+
+
+def follow_me(
+    policy: dict[str, Any],
+    seed: int,
+    seconds: float = 120.0,
+    script: tuple[tuple[float, str], ...] | None = None,
+    distractor: bool = False,
+) -> dict[str, float]:
+    """The whole follow-me loop on the master (docs/follow_me.md): a person wandering the
+    room (Person), the phone camera's noise, latency and dropouts, the tracker, the
+    follower, and the voice script ("follow me", "come closer", "go further back", "stay",
+    "come"). distractor adds a second person wandering the same room; the track keeps the
+    first by where they should be, and wrong_pct is the time it held the other one.
+    Seed 0 is the nominal body."""
+    from growbot_train import follow
+
+    meta = policy["training"]["master"]
+    rollout = Rollout(meta["teachers"], meta.get("body"))
+    runner = MasterRunner(policy, rollout.teachers)
+    env = rollout.env
+    opts: dict[str, Any] = {
+        "retarget": False,
+        "speed_cmd": 0.0,
+        "tilt_cmd": 1.0,
+        "target_error_deg": 0.0,
+    }
+    if seed == 0:
+        opts["nominal"] = True
+    env.reset(seed=seed, options=opts)
+    n = round(seconds / CONTROL_DT)
+    env.max_steps = n + 1
+    rng = np.random.default_rng(seed + 7919)
+    person = follow.Person(seed)
+    other = follow.Person(seed + 104729) if distractor else None
+    cams = [follow.Camera(follow.CameraSpec(), rng)]
+    if other is not None:
+        cams.append(follow.Camera(follow.CameraSpec(), np.random.default_rng(seed + 1)))
+    tracker, follower = follow.Tracker(), follow.Follower()
+    pending = sorted(follow.DEFAULT_SCRIPT if script is None else script)
+    trace: list[dict[str, float]] = []
+    yaw_prev = env.yaw_deg()
+    mode: str | None = None
+    switches = 0
+    wrong = 0
+    fell = False
+    for i in range(n):
+        t = i * CONTROL_DT
+        while pending and pending[0][0] <= t:
+            follower.voice(pending.pop(0)[1])
+        person.step(CONTROL_DT)
+        truth = follow.true_sighting(env, person)
+        reads = [cams[0].frame(truth)]
+        if other is not None:
+            other.step(CONTROL_DT)
+            reads.append(cams[1].frame(follow.true_sighting(env, other)))
+        yaw = env.yaw_deg()
+        turned = wrap_deg(yaw - yaw_prev)
+        yaw_prev = yaw
+        # The track's last sighting, carried round by the turn, is the prediction.
+        last = tracker.last
+        if last is not None:
+            last = follow.Sighting(
+                wrap_deg(last.bearing_deg - turned), last.pitch_deg, last.distance_m
+            )
+        seen = _pick(reads, last, tracker.age_s)
+        if other is not None and seen is not None and seen is reads[1]:
+            wrong += 1
+        tracked = tracker.update(seen, turned)
+        if tracked is not None:
+            tracked = follow.floor_from_camera(env, tracked)
+        aim, speed, tilt = follower.command(tracked, tracker.lost, seen is not None)
+        env.target_deg = follow.skill_target_deg(env, aim)
+        env.heading_bias = 0.0
+        env.tilt_cmd = env._fixed_tilt = tilt
+        env._set_stance()
+        # The master backed only at 0.3-1 in training (Script), and walked only at 1.
+        fwd = 1.0 if speed > 0 else min(speed, -0.3) if speed < 0 else 0.0
+        s = senses(env, fwd, tilt)
+        new = choose_mode(s.forward, s.err_body, mode)
+        switches += mode is not None and new != mode
+        mode = new
+        rollout.judge_as(mode)
+        _, _, term, _, info = env.step(np.arctanh(runner.act(s)))
+        trace.append(
+            {
+                "t": t,
+                "bearing_true": truth.bearing_deg,
+                "pitch_true": truth.pitch_deg,
+                "distance": follow.floor_distance_m(env, person),
+                "set_distance": follower.set_distance_m,
+                "in_view": float(cams[0].in_view(truth)),
+                "lost": float(tracker.lost),
+                "stay": float(follower.stay),
+                "robot_speed": info["speed"],
+                # The master's hold is inside its network, so it can't be read out here.
+                "held": 0.0,
+            }
+        )
+        if term:
+            fell = True
+            break
+    out = follow.summarise(trace, fell, seconds)
+    out["switches"] = float(switches)
+    if other is not None:
+        out["wrong_pct"] = 100.0 * wrong / max(1, len(trace))
+    return out
+
+
 # The 3D replay's walks (title, nominal body, command steps). Each step is (seconds in,
 # speed: 0 turns on the spot, + walks camera first, - backs away nose first; target turn
 # in degrees from where it was; camera height). None: the training script's random
@@ -1249,6 +1380,10 @@ def main(argv: list[str] | None = None) -> int:
     f = sub.add_parser("follow-spin", help="spin to a person 1 m off, then keep the distance")
     f.add_argument("policy", type=Path)
     f.add_argument("--seeds", type=int, default=3)
+    fm = sub.add_parser("follow-me", help="the whole follow-me loop: a wandering person")
+    fm.add_argument("policy", type=Path)
+    fm.add_argument("--seeds", type=int, default=8)
+    fm.add_argument("--two", action="store_true", help="a second person in the room")
     j = sub.add_parser("job", help="what the box's master job runs: distil, then evaluate")
     j.add_argument("--out", type=Path, required=True)
     j.add_argument("--config", type=Path, required=True)
@@ -1274,6 +1409,15 @@ def main(argv: list[str] | None = None) -> int:
                     f"{r['net_cm']:6.1f}  {r['aim_deg']:4.1f}  {r['walked_s']:8.1f}  "
                     f"{r['fell']:.0f}"
                 )
+        return 0
+    if args.cmd == "follow-me":
+        policy = json.loads(args.policy.read_text())
+        keys = ("in_view_pct", "lost_pct", "distance_err_m", "stay_speed_cm_s", "fell")
+        keys += ("wrong_pct",) if args.two else ()
+        print("seed  " + "  ".join(keys))
+        for seed in range(args.seeds):
+            r = follow_me(policy, seed, distractor=args.two)
+            print(f"{seed:4d}  " + "  ".join(f"{r[k]:{len(k)}.2f}" for k in keys))
         return 0
     if args.cmd == "distill":
         paths = {m: getattr(args, m) for m in MODES}
