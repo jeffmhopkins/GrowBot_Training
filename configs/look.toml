@@ -35,9 +35,9 @@ surfaces = ["pla", "pla", "pla", "pla"]  # CHANGED: tail, belly, tail-side and n
 floors = ["hard", "carpet"] # each episode on one of these floors
 start_pitch_deg = 35.0      # CHANGED: set down tail first, as the real one is (level, the printed build balances on its soles)
 servo_torque_nm = 0.25      # an MG90S's real torque (upstream's model allows 1.5)
-episode_seconds = 30.0      # as camera walk: longer, so each episode holds several commands
+episode_seconds = 60.0      # CHANGED: a minute, so an episode still holds two to four of the longer commands below
 initial_error_deg = 180.0   # first target: up to this many degrees off the camera end
-retarget_every_s = [6.0, 14.0]  # CHANGED: the target moves every 6-14 s, time to spin round to it...
+retarget_every_s = [15.0, 30.0]  # CHANGED: the target moves every 15-30 s: half a turn takes 10 s or more at 17 degrees a second, so this leaves time to get there and hold it...
 retarget_max_deg = 180.0        # CHANGED: ...by up to half a turn, so it learns to face what is behind it
 gait_hz = 1.0               # CHANGED: the clock the policy sees; about one turning step a second
 history_frames = 5          # how many past ticks of sensors the policy sees
@@ -57,7 +57,7 @@ speed_ramp_steps = 0              # with a speed input: start every command at f
 speed_reward = "match"              # with a speed input: "match" the commanded velocity, or "progress" like the cap walk (forward only)
 tilt_command = true         # as camera walk: a camera-height input: -1 low (camera looks almost straight up), +1 tall
 tilt_lift_deg = [-20.0, 6.0]       # CHANGED: -1 and +1 in degrees from the resting pitch; not as low, so the lens never looks straight up and loses its heading
-tilt_command_every_s = [3.0, 8.0]  # a new height this often...
+tilt_command_every_s = [8.0, 20.0]  # CHANGED: a new height this often, slower too so a height change doesn't land mid-turn every few seconds...
 tilt_tall_prob = 0.5               # ...half the time standing tall, otherwise anywhere in range
 
 [randomization]

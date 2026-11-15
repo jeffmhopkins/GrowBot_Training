@@ -326,7 +326,7 @@ From JBrain it's the "GrowBot lift and fall" job.
 
 The camera walk at speed 0 already stands still and turns to face the heading. If that
 turns out wobbly, `configs/look.toml` trains a specialist that never walks
-(`task.speed = "still"`, so it has no speed input): the target moves every 6 to 14
+(`task.speed = "still"`, so it has no speed input): the target moves every 15 to 30
 seconds by up to half a turn, so it learns to spin round to what is behind it (turning
 on the spot manages about 8 degrees a second). Facing it pays three times as much,
 turning toward it pays double (`reward.turn`), and rocking costs (`reward.wobble`).
@@ -370,7 +370,13 @@ rate minus net travel: on the nominal body it spins about 24 degrees a second
 travelling 0.4 cm/s (the first spin: 12 and 2.0), and on held-out random bodies at half
 the randomisation 17 and 1.1 (the first: 11 and 1.8). Its legs swing up to 1.25 rad,
 so `task.action_to_rad` is 1.45, and the band is back at 1.5 cm/s. A rubber tail pad
-cut the first spin's travel by a third in the simulator, but the new spin needs none. It keeps the camera height input. Unlike the camera walk it trains on
+cut the first spin's travel by a third in the simulator, but the new spin needs none. It keeps the camera height input. At 17 degrees a second (less on the most varied
+bodies) half a turn takes 10 s or more, and the trained policy turns slower than the
+spin it clones, so the old 6 to 14 s between targets often moved the target before the
+robot got there. The target now moves every 15 to 30 s, the camera height every 8 to 20 s, and
+an episode lasts a minute so it holds two to four targets. The gyro heading drift
+(`randomization.heading_drift_deg_per_s`) builds for the whole episode, so look's error
+at 30-60 s isn't comparable with the 30 s runs before. Unlike the camera walk it trains on
 the printed build with bare-print surfaces (see [Bodies](#bodies)), like the heading walk.
 It's the camera walk otherwise, and only the lines marked CHANGED differ from that file.
 From JBrain it's the "GrowBot look" job.
