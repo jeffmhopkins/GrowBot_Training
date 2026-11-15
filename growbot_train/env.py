@@ -217,6 +217,8 @@ class GrowBotHeadingEnv(gym.Env):
         # (randomization.ramp_steps); 1 is the full ranges. It narrows how far off the
         # target starts and jumps too, so an early gait that only walks straight pays.
         self.dr_scale = 1.0
+        # The speed curriculum's share of the full command spread (task.speed_ramp_steps).
+        self.cmd_scale = 1.0
         # When set, scales the target ranges in place of dr_scale: a steered clone wants
         # targets all the way round while the bodies are still near the as-built one.
         self.target_scale: float | None = None
@@ -573,9 +575,17 @@ class GrowBotHeadingEnv(gym.Env):
         tr = math.radians(self.target_deg)
         v_along = float(self.vel_avg[0] * math.cos(tr) + self.vel_avg[1] * math.sin(tr))
         speed = float(np.linalg.norm(self.vel_avg))
+        limit = cap
         if cfg.task.speed == "cap":
             progress = r.progress * min(v_along, cap) / cap
             speed_miss = abs(v_along - cap)
+        elif cfg.task.speed_reward == "progress":
+            # Paid like the cap walk, up to the commanded speed, and charged for going
+            # faster than it: walking the wrong way costs no more than standing still.
+            want_s = max(0.0, self.speed_cmd) * cap
+            progress = r.progress * min(v_along, want_s) / cap
+            speed_miss = abs(v_along - want_s)
+            limit = max(want_s, self._stop_drift_free() * cap)
         else:
             want = self.speed_cmd * cap * np.array([math.cos(tr), math.sin(tr)])
             miss = speed_miss = float(np.linalg.norm(self.vel_avg - want))
@@ -593,7 +603,7 @@ class GrowBotHeadingEnv(gym.Env):
                 if r.heading_width_deg > 0
                 else (1 + math.cos(math.radians(err_score))) / 2
             ),
-            "overspeed": -r.overspeed * (max(0.0, speed - cap) / cap) ** 2,
+            "overspeed": -r.overspeed * (max(0.0, speed - limit) / cap) ** 2,
             "tilt": -r.tilt * (1 - tall_cos),
             "action_rate": -r.action_rate * float(np.sum((a - self.prev_action) ** 2)),
             "effort": -r.effort * float(np.sum(a**2)),
@@ -694,9 +704,11 @@ class GrowBotHeadingEnv(gym.Env):
             return 0.0
         if self._fixed_speed is not None:
             return float(self._fixed_speed)
-        if self.np_random.random() < task.speed_stop_prob:
+        k = min(1.0, self.cmd_scale)
+        if self.np_random.random() < task.speed_stop_prob * k:
             return 0.0
-        return self._u((task.speed_back_min, 1.0))
+        lo = task.speed_back_min if k >= 1.0 else 1.0 - k * (1.0 - task.speed_back_min)
+        return self._u((lo, 1.0))
 
     def _actuate(self, cmd_rad: np.ndarray) -> None:
         """The relay and servo between the phone's command and the joint: dropped

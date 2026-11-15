@@ -48,6 +48,8 @@ speed = "command"           # CHANGED: a speed input: 0 stop, up to +1 the cap, 
 speed_command_every_s = [3.0, 8.0]  # with a speed input: a new speed this often...
 speed_stop_prob = 0.15             # CHANGED: ...3 in 20 of them a stop (the master policy spins and looks at 0)...
 speed_back_min = 0.0               # CHANGED: ...the rest anywhere from 0 to +1: it only walks nose first
+speed_ramp_steps = 8000000  # CHANGED: every command full speed at first, widening over the first 8M steps (it must learn to walk before it can learn to stop)
+speed_reward = "progress"  # CHANGED: paid like the heading walk up to the commanded speed, so flailing early costs no more than keeping still
 tilt_command = false        # a camera-height input: -1 low (camera looks almost straight up), +1 tall
 tilt_lift_deg = [-30.0, 6.0]       # what -1 and +1 mean, degrees from the resting pitch
 tilt_command_every_s = [3.0, 8.0]  # a new height this often...
@@ -88,7 +90,8 @@ ramp_from = 0.15
 [train]
 total_steps = 30000000
 n_envs = 0                  # 0 = one simulator per CPU thread
-n_steps = 256
+envs_per_worker = 4         # CHANGED: four simulators per worker process, so the cores stay busy (as the look)
+n_steps = 64                # CHANGED: a quarter of 256, so 4x the simulators keep the rollout the same size
 batch_size = 4096
 n_epochs = 5
 learning_rate = 3e-4

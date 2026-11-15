@@ -122,6 +122,48 @@ def test_progress_is_capped_and_overspeed_penalised() -> None:
     assert info["terms"]["overspeed"] < -1.0
 
 
+def _coast(env: GrowBotHeadingEnv, along: float, side: float) -> dict:
+    """Float the robot and coast it at (along, side) m/s relative to the target."""
+    import mujoco
+
+    t = math.radians(env.target_deg)
+    env.model.opt.gravity[:] = 0
+    env.model.opt.disableflags |= mujoco.mjtDisableBit.mjDSBL_CONTACT
+    for _ in range(200):  # long enough for the 1 s speed average to settle
+        env.data.qvel[:] = 0
+        env.data.qvel[0:2] = [
+            along * math.cos(t) - side * math.sin(t),
+            along * math.sin(t) + side * math.cos(t),
+        ]
+        _, _, _, _, info = env.step(np.zeros(2))
+    return info
+
+
+@pytest.mark.parametrize("cmd", [1.0, 0.5])
+def test_progress_scored_speed_commands_pay_like_the_cap_walk(cmd: float) -> None:
+    cfg = Config()
+    cfg.task.speed = "command"
+    cfg.task.speed_reward = "progress"
+    cfg.task.speed_back_min = 0.0
+    cap = cfg.reward.speed_cap_m_s
+    opts = {"nominal": True, "target_error_deg": 0.0, "retarget": False, "speed_cmd": cmd}
+
+    def run(along: float, side: float) -> dict:
+        env = GrowBotHeadingEnv(cfg)
+        env.reset(seed=4, options=opts)
+        return _coast(env, along, side)
+
+    # At the commanded speed it earns that share of the full progress pay, no overspeed.
+    info = run(cmd * cap, 0.0)
+    assert info["terms"]["progress"] == pytest.approx(cmd * cfg.reward.progress, rel=1e-2)
+    assert info["terms"]["overspeed"] == pytest.approx(0.0, abs=1e-6)
+    # Sideways flailing costs no progress (the "match" scoring charges it), and going
+    # faster than asked is charged.
+    assert run(0.0, cmd * cap)["terms"]["progress"] == pytest.approx(0.0, abs=1e-4)
+    if cmd < 1.0:
+        assert run(cap, 0.0)["terms"]["overspeed"] < 0.0
+
+
 def test_levelling_is_a_pure_tilt() -> None:
     from growbot_train.env import _rot_onto_z
 
@@ -686,6 +728,31 @@ def test_the_curriculum_ramps_to_the_full_ranges() -> None:
     assert ramp_scale(cfg, 0) == pytest.approx(0.2)
     assert ramp_scale(cfg, 500) == pytest.approx(0.6)
     assert ramp_scale(cfg, 5000) == 1.0
+
+
+def test_the_speed_curriculum_starts_every_command_at_full_speed() -> None:
+    from growbot_train.train import cmd_scale
+
+    cfg = Config()
+    cfg.task.speed = "command"
+    cfg.task.speed_stop_prob = 0.3
+    cfg.task.speed_back_min = 0.0
+    assert cmd_scale(cfg, 10**9) == 1.0  # off by default
+    cfg.task.speed_ramp_steps = 1000
+    assert cmd_scale(cfg, 0) == 0.0
+    assert cmd_scale(cfg, 500) == pytest.approx(0.5)
+    assert cmd_scale(cfg, 5000) == 1.0
+    env = GrowBotHeadingEnv(cfg)
+    env.reset(seed=0)
+    env.cmd_scale = 0.0
+    assert {env._draw_speed() for _ in range(50)} == {1.0}
+    env.cmd_scale = 0.5
+    half = [env._draw_speed() for _ in range(400)]
+    assert all(v == 0.0 or 0.5 <= v <= 1.0 for v in half)
+    assert 0.0 in half  # stops come back, at half their rate
+    env.cmd_scale = 1.0
+    full = [env._draw_speed() for _ in range(400)]
+    assert min(v for v in full if v > 0) < 0.2
 
 
 def test_wandering_while_stopped_costs_past_the_free_radius() -> None:

@@ -24,7 +24,13 @@ There are four walks, each a config file:
 | [`lift_fall.toml`](configs/lift_fall.toml) | tail first by lifting the body and letting it fall | tall, bouncing (about 55 to 64 degrees as built) | standing |
 
 The nose walk is the heading walk with a speed input: the master policy's way of backing
-away from the camera. Its evaluation adds a speed-tracking table, the speed it walks at
+away from the camera. Scored on matching the command, a policy that can't walk yet earns
+most by keeping still, so asked for slow walks and stops from the start it never learned
+to walk at all (its first run stood still for 3M steps). Two settings fix
+that. `task.speed_reward = "progress"` pays like the heading walk, for speed along the
+target up to the command, and charges for going faster, so early flailing costs no more
+than standing still. `task.speed_ramp_steps` starts every command at full speed with no
+stops and widens the spread to the full range over the first 8M steps. Its evaluation adds a speed-tracking table, the speed it walks at
 for each commanded share of the cap. See [The camera walk](#the-camera-walk) for why the
 camera walk exists and what it can and can't do with this body.
 
