@@ -528,7 +528,8 @@ def export_policy(
                 "scale": (
                     f"+1 walks camera first toward the target at {caps['walk'] * 100:g} "
                     f"cm/s, -1 backs away nose first at {caps['back'] * 100:g} cm/s, 0 "
-                    "stands and turns to face it; the sign alone picks the gait"
+                    "stands and turns to face it; the sign picks the gait, and a wide heading "
+                    "turns first"
                 ),
             },
             "cmd_pitch": {
@@ -609,7 +610,10 @@ SCENARIOS = {
     # mode: (forward command, start errors)
     "look": (0.0, (90.0, -90.0, 180.0)),
     "walk": (1.0, (0.0, 25.0, -25.0)),  # inside WALK_DEG, so it measures the walk alone
-    "back": (-1.0, (0.0, 45.0, -45.0)),
+    "back": (
+        -1.0,
+        (0.0, 35.0, -35.0),
+    ),  # inside BACK_DEG with room for noise, so it measures the nose walk alone
 }
 
 
