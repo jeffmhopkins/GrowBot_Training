@@ -63,6 +63,15 @@ spread (the targets widen to full). \
 Downloads and the Live card work as for the heading walk."""
 
 [[job]]
+name = "growbot_lift_fall_turns"
+title = "GrowBot lift and fall, second slot (same config)"
+config = "configs/lift_fall.toml"
+est_hours = "2-5 h"
+notes = """The lift and fall job under a second name, so a run of the current config can \
+start while an older growbot_lift_fall run is still finishing (the box allows one live \
+run per job). Same config, same outputs."""
+
+[[job]]
 name = "growbot_look"
 title = "GrowBot look (stay put, turn to face a direction)"
 config = "configs/look.toml"
