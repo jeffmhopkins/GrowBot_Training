@@ -33,9 +33,10 @@ def test_the_same_seed_walks_the_same_path() -> None:
 
 def test_the_camera_sees_only_inside_its_field_of_view() -> None:
     cam = Camera(CameraSpec(hfov_deg=60, vfov_deg=40), np.random.default_rng(0))
-    assert cam.in_view(Sighting(29.0, 19.0, 1.0))
-    assert not cam.in_view(Sighting(31.0, 0.0, 1.0))
-    assert not cam.in_view(Sighting(0.0, 21.0, 1.0))
+    assert cam.in_view(Sighting(0.0, 0.0, 1.0, 29.0, 19.0))
+    assert not cam.in_view(Sighting(0.0, 0.0, 1.0, 31.0, 0.0))
+    assert not cam.in_view(Sighting(0.0, 0.0, 1.0, 0.0, 21.0))
+    assert not cam.in_view(Sighting(0.0, 0.0, 1.0, 0.0, 0.0, in_front=False))
 
 
 def test_the_camera_reports_late_by_its_latency() -> None:
@@ -82,7 +83,7 @@ def test_the_follower_backs_away_when_too_close_whatever_the_heading() -> None:
     assert f.command(Sighting(170.0, 0.0, 0.3), lost=False)[1] < 0.0
 
 
-def test_a_person_behind_never_makes_it_back_up() -> None:
+def test_a_far_person_behind_never_makes_it_back_up() -> None:
     f = Follower(set_distance_m=1.0)
     assert f.command(Sighting(180.0, 0.0, 2.0), lost=False)[1] >= 0.0
 
@@ -170,13 +171,58 @@ def test_the_floor_distance_is_shorter_than_the_line_to_a_raised_face() -> None:
     assert follow.true_sighting(env, p).distance_m > 1.2
 
 
-def test_the_nose_walk_is_only_ever_asked_to_back_away() -> None:
-    out = follow.run(JsonPolicy(NOSE), seed=1, seconds=3.0, nominal=True)
-    # Its speed input is how fast to back away: a forward command must reach it as 0,
-    # and a backing one as its size, never with the sign flipped.
-    for r in out["trace"]:
-        assert r["skill_speed"] == pytest.approx(max(0.0, -r["cmd_speed"]))
-    assert np.isfinite(out["summary"]["distance_err_m"])
+def _angle_to(env, p: Person, heading_deg: float) -> float:
+    cam, _ = follow.lens_pose(env)
+    d = p.pos - cam[:2]
+    return abs(follow.wrap_deg(heading_deg - math.degrees(math.atan2(d[1], d[0]))))
+
+
+@pytest.mark.parametrize("off_deg", [0.0, 25.0, -25.0])
+def test_the_nose_walk_is_aimed_with_its_nose_away_from_the_person(off_deg: float) -> None:
+    env = follow.env_for(JsonPolicy(NOSE))
+    env.reset(seed=1, options={"retarget": False, "nominal": True})
+    head = math.radians(follow.camera_heading_deg(env) + off_deg)
+    cam, _ = follow.lens_pose(env)
+    p = Person(seed=0)
+    p.pos = cam[:2] + 1.5 * np.array([math.cos(head), math.sin(head)])
+    target = follow.skill_target_deg(env, follow.true_sighting(env, p).bearing_deg)
+    assert _angle_to(env, p, target) == pytest.approx(180.0, abs=1e-6)
+    env_look = follow.env_for(JsonPolicy(LOOK))
+    env_look.reset(seed=1, options={"retarget": False, "nominal": True})
+    p.pos = follow.lens_pose(env_look)[0][:2] + 1.5 * np.array([math.cos(head), math.sin(head)])
+    target = follow.skill_target_deg(env_look, follow.true_sighting(env_look, p).bearing_deg)
+    assert _angle_to(env_look, p, target) == pytest.approx(0.0, abs=1e-6)
+
+
+def test_the_camera_distance_converts_back_to_the_floor_distance() -> None:
+    env = follow.env_for(JsonPolicy(LOOK))
+    env.reset(seed=1, options={"retarget": False, "nominal": True})
+    p = Person(seed=0)
+    for metres in (0.7, 1.0, 2.5):
+        _put_ahead_of_camera(env, p, metres)
+        floor = follow.floor_from_camera(env, follow.true_sighting(env, p)).distance_m
+        assert floor == pytest.approx(follow.floor_distance_m(env, p), abs=1e-6)
+
+
+def test_a_face_ahead_but_off_the_tipped_up_lens_axis_is_seen_where_the_image_puts_it() -> None:
+    # The lens looks well above the horizon, so a face 40 degrees round the compass sits
+    # nearer the middle of the image than 40 degrees: in view of a 60 degree camera.
+    env = follow.env_for(JsonPolicy(LOOK))
+    env.reset(seed=1, options={"retarget": False, "nominal": True})
+    assert follow.lens_elevation_deg(env) > 30.0
+    head = math.radians(follow.camera_heading_deg(env) + 40.0)
+    cam, _ = follow.lens_pose(env)
+    p = Person(seed=0)
+    p.pos = cam[:2] + 1.0 * np.array([math.cos(head), math.sin(head)])
+    s = follow.true_sighting(env, p)
+    assert s.bearing_deg == pytest.approx(40.0, abs=1e-6)
+    assert 0.0 < s.image_x_deg < 40.0 and s.in_front
+
+
+def test_the_camera_height_holds_on_a_tick_with_no_new_frame() -> None:
+    f = Follower(tilt=0.3)
+    f.command(Sighting(0.0, 30.0, 1.0), lost=False, fresh=False)
+    assert f.tilt == 0.3
 
 
 def test_a_short_follow_run_on_look_scores_every_tick() -> None:

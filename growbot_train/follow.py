@@ -105,6 +105,12 @@ class Sighting:
     bearing_deg: float  # left of the lens axis, CCW seen from above
     pitch_deg: float  # above the lens axis
     distance_m: float
+    # Where the face falls in the image, degrees left of and above its centre; only the
+    # field-of-view test uses these. The tracker reports compass bearing and pitch, as the
+    # app will after turning image angles into them with the phone's own attitude.
+    image_x_deg: float = 0.0
+    image_y_deg: float = 0.0
+    in_front: bool = True
 
 
 def lens_pose(env: GrowBotHeadingEnv) -> tuple[np.ndarray, np.ndarray]:
@@ -132,13 +138,41 @@ def true_sighting(env: GrowBotHeadingEnv, person: Person) -> Sighting:
     The bearing is taken against the camera's compass heading, so 0 is dead ahead in the
     image; the pitch is the face's elevation against the lens axis's; the distance is the
     straight line from lens to face, which is what eye spacing in the image measures."""
-    cam, _ = lens_pose(env)
+    cam, axis = lens_pose(env)
     face = np.array([person.pos[0], person.pos[1], person.face_z])
     v = face - cam
     flat = math.hypot(v[0], v[1])
     bearing = wrap_deg(math.degrees(math.atan2(v[1], v[0])) - camera_heading_deg(env))
     face_el = math.degrees(math.atan2(v[2], flat))
-    return Sighting(bearing, face_el - lens_elevation_deg(env), float(np.linalg.norm(v)))
+    # The image axes: left is level and square to the lens axis, up completes the frame.
+    # With the lens tipped up, a compass offset shrinks in the image by about cos(el).
+    left = np.array([-axis[1], axis[0], 0.0])
+    left /= max(float(np.linalg.norm(left)), 1e-9)
+    up = np.cross(axis, left)
+    ahead = float(v @ axis)
+    return Sighting(
+        bearing,
+        face_el - lens_elevation_deg(env),
+        float(np.linalg.norm(v)),
+        math.degrees(math.atan2(float(v @ left), ahead)),
+        math.degrees(math.atan2(float(v @ up), ahead)),
+        ahead > 0.0,
+    )
+
+
+def floor_from_camera(env: GrowBotHeadingEnv, s: Sighting) -> Sighting:
+    """The tracker's reading with its distance put on the floor. Eye spacing gives the
+    straight line to the face; the phone knows its own pitch, so the floor distance
+    follows from the face's elevation."""
+    el = math.radians(lens_elevation_deg(env) + s.pitch_deg)
+    return Sighting(s.bearing_deg, s.pitch_deg, s.distance_m * math.cos(el))
+
+
+def skill_target_deg(env: GrowBotHeadingEnv, bearing_deg: float) -> float:
+    """The heading to give the skill for a person bearing_deg off the camera's axis. For
+    a nose-first skill yaw_deg() is the nose's, so this is the person's direction turned
+    half a turn: the nose points away from them and the camera at them."""
+    return wrap_deg(env.yaw_deg() + bearing_deg)
 
 
 def floor_distance_m(env: GrowBotHeadingEnv, person: Person) -> float:
@@ -162,8 +196,10 @@ class Camera:
         )
 
     def in_view(self, s: Sighting) -> bool:
-        return abs(s.bearing_deg) <= self.spec.hfov_deg / 2 and abs(s.pitch_deg) <= (
-            self.spec.vfov_deg / 2
+        return (
+            s.in_front
+            and abs(s.image_x_deg) <= self.spec.hfov_deg / 2
+            and abs(s.image_y_deg) <= self.spec.vfov_deg / 2
         )
 
     def frame(self, truth: Sighting) -> Sighting | None:
@@ -262,20 +298,24 @@ class Follower:
         else:
             raise ValueError(f"unknown voice command {said!r}")
 
-    def command(self, tracked: Sighting | None, lost: bool) -> tuple[float, float, float]:
-        # tracked.distance_m is along the floor here (run() converts the camera's).
+    def command(
+        self, tracked: Sighting | None, lost: bool, fresh: bool = True
+    ) -> tuple[float, float, float]:
         """(heading error deg, signed speed -1..1, camera height -1..1). Lost or never
-        seen: speed 0, and spin toward where they were last seen."""
+        seen: speed 0, and spin toward the side they were last seen on. tracked.distance_m
+        is along the floor (see floor_from_camera); fresh says this tick brought a new
+        frame, the only time the camera height moves, so a held pitch isn't counted twice."""
         if tracked is None:
             # Never seen: spin on the spot until they come into view.
             return self.search_sign * self.search_deg, 0.0, self.tilt
         bearing = tracked.bearing_deg
         if lost:
-            # Spin the way they were last seen going, and keep spinning that way: chasing
-            # the remembered bearing would stall once the robot faced the spot they left.
+            # Spin toward the side of the image they were last on, and keep spinning that
+            # way: chasing the remembered bearing would stall facing the spot they left.
             return self.search_sign * self.search_deg, 0.0, self.tilt
         self.search_sign = 1.0 if bearing >= 0 else -1.0
-        self.tilt = float(np.clip(self.tilt - self.pitch_gain * tracked.pitch_deg, -1.0, 1.0))
+        if fresh:
+            self.tilt = float(np.clip(self.tilt - self.pitch_gain * tracked.pitch_deg, -1.0, 1.0))
         speed = 0.0
         err = tracked.distance_m - self.set_distance_m
         if not self.stay:
@@ -334,22 +374,19 @@ def run(
         person.step(CONTROL_DT)
         truth = true_sighting(env, person)
         yaw = env.yaw_deg()
-        tracked = tracker.update(cam.frame(truth), wrap_deg(yaw - yaw_prev))
+        seen = cam.frame(truth)
+        tracked = tracker.update(seen, wrap_deg(yaw - yaw_prev))
         yaw_prev = yaw
         if tracked is not None:
-            # Eye spacing gives the straight line to the face; the phone knows its own
-            # pitch, so the floor distance follows from the face's elevation.
-            el = math.radians(lens_elevation_deg(env) + tracked.pitch_deg)
-            floor = tracked.distance_m * math.cos(el)
-            tracked = Sighting(tracked.bearing_deg, tracked.pitch_deg, floor)
-        bearing, speed, tilt = follower.command(tracked, tracker.lost)
+            tracked = floor_from_camera(env, tracked)
+        bearing, speed, tilt = follower.command(tracked, tracker.lost, seen is not None)
         if not env.cfg.task.tilt_command:
-            follower.tilt = 1.0
+            follower.tilt = tilt = 1.0
         # The single-skill baseline: a command this skill can't carry out becomes the
         # nearest one it can (the nose walk stands for anything but backing, look for
         # anything but standing).
         fwd = max(0.0, -speed) if backs else max(0.0, speed)
-        env.target_deg = wrap_deg(env.yaw_deg() + bearing)
+        env.target_deg = skill_target_deg(env, bearing)
         env.heading_bias = 0.0
         if env.cfg.task.speed == "command":
             env.speed_cmd = env._fixed_speed = float(fwd)
@@ -368,7 +405,6 @@ def run(
                 "lost": float(tracker.lost),
                 "cmd_yaw": bearing / 180.0,
                 "cmd_speed": speed,
-                "skill_speed": fwd,
                 "cmd_tilt": tilt,
                 "stay": float(follower.stay),
                 "robot_speed": info["speed"],
@@ -385,6 +421,9 @@ def summarise(trace: list[dict[str, float]], fell: bool, seconds: float) -> dict
         return {"fell": float(fell)}
     arr = {k: np.array([r[k] for r in trace]) for k in trace[0]}
     stay = arr["stay"] > 0
+    # Distance counts only while it is being held: not on "stay", not while searching.
+    held = ~stay & (arr["lost"] == 0)
+    gap = np.abs(arr["distance"] - arr["set_distance"])
     return {
         "seconds": len(trace) * CONTROL_DT,
         "fell": float(fell),
@@ -392,7 +431,7 @@ def summarise(trace: list[dict[str, float]], fell: bool, seconds: float) -> dict
         "lost_pct": 100.0 * float(arr["lost"].mean()),
         "aim_err_deg": float(np.abs(arr["bearing_true"]).mean()),
         "pitch_err_deg": float(np.abs(arr["pitch_true"]).mean()),
-        "distance_err_m": float(np.abs(arr["distance"] - arr["set_distance"]).mean()),
+        "distance_err_m": float(gap[held].mean()) if held.any() else float("nan"),
         "stay_speed_cm_s": 100.0 * float(arr["robot_speed"][stay].mean()) if stay.any() else 0.0,
         "completed": float(len(trace) * CONTROL_DT >= seconds - CONTROL_DT),
     }
@@ -408,11 +447,12 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     policy = JsonPolicy(args.policy)
     runs = [run(policy, s, args.seconds, nominal=args.nominal) for s in range(args.seeds)]
-    keys = [k for k in runs[0]["summary"] if k != "completed"]
+    widest = max((r["summary"] for r in runs), key=len)
+    keys = [k for k in widest if k != "completed"]
     print("seed  " + "  ".join(f"{k:>14}" for k in keys))
     for s, r in enumerate(runs):
         print(f"{s:>4}  " + "  ".join(f"{r['summary'].get(k, float('nan')):>14.2f}" for k in keys))
-    mean = {k: float(np.mean([r["summary"][k] for r in runs])) for k in keys}
+    mean = {k: float(np.nanmean([r["summary"].get(k, float("nan")) for r in runs])) for k in keys}
     print("mean  " + "  ".join(f"{mean[k]:>14.2f}" for k in keys))
     if args.json:
         with open(args.json, "w") as f:

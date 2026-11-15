@@ -123,11 +123,15 @@ and falls. One skill at a time, the follower held to what that skill can do (loo
 turns and tilts, the nose walk only backs away, with its camera looking out of its tail
 so its heading is the person's turned half a turn), as the baseline the master policy
 has to beat. The set distance is along the floor; the camera's eye-spacing distance is
-the line to the face, so the follower converts it with the face's elevation. First
-baseline (nominal body, 3 seeds of 120 s, no falls): look-v6 keeps the person in view
-44% of the time, the nose walk 41%; a person walking at 0.3-0.7 m/s a metre or two away
-moves faster across the view than either skill turns. Distractor people and the replay
-page come next.
+the line to the face, so the follower converts it with the face's elevation. The field
+of view is tested where the face lands in the image, which matters because the lens
+looks 40-65 degrees above the horizon. Distance error is scored only while the distance
+is being held (not on "stay", not while searching). First baseline (nominal body, 3
+seeds of 120 s, no falls): look-v6 keeps the person in view 68% of the time with a mean
+aim error of 45 degrees; the nose walk 34%, since it can't lower its camera and loses
+faces more than a metre or so away out of the top of the image. A person walking at
+0.3-0.7 m/s a metre or two away crosses the view faster than either skill turns.
+Distractor people and the replay page come next.
 
 Training progress: `.venv/bin/tensorboard --logdir runs` and open the page it prints.
 The `walk/` graphs are the useful ones: `v_along` (speed toward the target, should climb

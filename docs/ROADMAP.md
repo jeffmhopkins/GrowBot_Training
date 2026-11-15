@@ -85,8 +85,9 @@ variable speed and tilt follows.
 
 **Started 2026-11-15:** `growbot_train/follow.py` runs the person, camera model, tracker,
 follower and voice script on one skill and reports in-view time, aim, pitch and distance
-error, stay drift and falls. Still to come: distractor people, the replay page, and the
-baseline numbers for each skill.
+error, stay drift and falls. First numbers for look-v6 and nose-walk-1 are in the README
+(nominal body); still to come: the tall walk's numbers, randomised bodies, distractor
+people and the replay page.
 
 The simulated follow-me harness from [follow_me.md](follow_me.md), run first on each
 skill alone:
