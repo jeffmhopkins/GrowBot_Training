@@ -36,9 +36,11 @@ episode_seconds = 60.0      # a minute, so slow arcing turns can play out before
 initial_error_deg = 60.0    # CHANGED: first target up to 60 degrees off: wider turns are the look policy's spin, which the master hands them to. Over minute-long runs with targets anywhere, lift-fall-1 fell in 11 of 24; within 60 degrees, 2 of 24
 retarget_every_s = [10.0, 25.0]  # the target moves every 10-25 s: this gait turns slowly, and a target that moves before a turn finishes never pays for finishing it...
 retarget_max_deg = 60.0        # CHANGED: ...by up to this much, for the same reason
-gait_hz = 2.347           # the gait's own rate, so the cloned rhythm lines up with the clock
+gait_hz = 2.347           # the gait's own rate, so its rhythm lines up with the clock
+residual_gait = "configs/gaits/lift_fall.json"  # CHANGED: the bench's lift and fall always runs, the policy adding corrections and steering, the speed setting its step rate (as built: 4.9/3.4/2.5 cm/s at 1/0.75/0.5x). Cloned instead, three runs stalled at 1.5-3 cm/s whatever the command (d4929090, 12dbbd9b): on random robots the open-loop gait itself walks 0.9 cm/s, and the bench found no camera-first gait that holds up on them (c1, c2), so the corrections have to come from the policy
+residual_rad = 0.5          # the most the policy moves a leg off the gait (radians)
 history_frames = 5          # how many past ticks of sensors the policy sees
-action_to_rad = 1.57        # the gait uses the servos' whole range
+action_to_rad = 1.57        # used only for the starting pose under a residual gait
 fall_tilt_deg = 55.0        # tipped this far from the starting stance = fallen (the app aborts at 55)
 facing = "camera"           # tail first, toward what the camera sees
 stand_lift_deg = 18.0       # it stands at about 61 degrees, 18 above rest
@@ -49,7 +51,7 @@ speed = "command"           # CHANGED: a speed input, from a stop up to the cap
 speed_command_every_s = [3.0, 8.0]  # a new speed this often...
 speed_stop_prob = 0.15             # CHANGED: ...3 in 20 of them a stop (stand tall and face it)...
 speed_back_min = 0.0               # CHANGED: ...the rest from 0 to +1: backing up is the nose walk's job
-speed_ramp_steps = 8000000        # CHANGED: every command at full speed with no stops at first, so the cloned gait pays as it did; the full spread by 8M steps
+speed_ramp_steps = 0        # every command from the start: the speed sets the gait's step rate
 speed_reward = "progress"          # CHANGED: paid like the cap walk, up to the command, so flailing costs no more than standing (the first speed-input lift and fall, scored on "match", unlearned the gait)
 tilt_command = false        # no camera-height input; the gait sets its own height
 tilt_lift_deg = [-30.0, 6.0]       # what -1 and +1 mean, degrees from the resting pitch
@@ -91,7 +93,7 @@ ramp_to = 0.35              # but the body ranges stop at 35%: on the box the ru
 
 [train]
 total_steps = 50000000      # starts from a moving gait, so a shorter run
-warm_gait = "configs/gaits/lift_fall.json"  # clone the bench's lift-and-fall gait before PPO
+warm_gait = ""  # CHANGED: not cloned: the gait runs underneath instead (task.residual_gait)
 n_envs = 0                  # 0 = one simulator per CPU thread
 n_steps = 256
 batch_size = 4096
@@ -101,7 +103,7 @@ gamma = 0.99
 gae_lambda = 0.95
 clip_range = 0.2
 ent_coef = 0.0
-log_std_init = -1.5         # less exploration noise, so the cloned gait's timing survives the first updates
+log_std_init = -1.5         # little exploration noise: the gait does the walking, so the corrections start small
 policy_layers = [128, 128]
 value_layers = [256, 256]
 checkpoint_every_steps = 2000000
