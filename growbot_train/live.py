@@ -54,9 +54,9 @@ def _cpu_seconds(pid: str) -> tuple[int, float] | None:
     try:
         with open(f"/proc/{pid}/stat") as fh:
             fields = fh.read().rsplit(")", 1)[1].split()
-    except (OSError, IndexError):
+        return int(fields[2]), (int(fields[11]) + int(fields[12])) / os.sysconf("SC_CLK_TCK")
+    except (OSError, IndexError, ValueError):
         return None
-    return int(fields[2]), (int(fields[11]) + int(fields[12])) / os.sysconf("SC_CLK_TCK")
 
 
 class CpuMeter:

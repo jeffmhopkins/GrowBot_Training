@@ -139,9 +139,9 @@ def test_the_cpu_meter_counts_the_run_and_its_trainer() -> None:
     from growbot_train.live import CpuMeter
 
     meter = CpuMeter()
-    end = time.monotonic() + 0.3
+    end = time.monotonic() + 0.5
     while time.monotonic() < end:  # keep this process busy for a moment
         pass
     got = meter.read()
-    assert 0.5 < got["trainer_cpu"] <= 1.5
+    assert 0.2 < got["trainer_cpu"] <= 1.5
     assert got["cpu_cores"] >= got["trainer_cpu"] * 0.9

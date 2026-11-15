@@ -157,7 +157,10 @@ class Diagnostics(BaseCallback):
         self.falls = 0
 
     def _load(self) -> dict[str, float]:
-        cpu = self.cpu.read()
+        try:
+            cpu = self.cpu.read()
+        except Exception:  # noqa: BLE001 - a meter must never stop a run
+            cpu = {}
         spent = self.collecting + self.learning
         if spent > 0:
             cpu["learn_frac"] = self.learning / spent
