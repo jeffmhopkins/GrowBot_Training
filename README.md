@@ -481,7 +481,8 @@ v9 (run 32fae7c5, kept as `policies/look-v9`) is that run. It is the look teache
   held-out random bodies, 9 s spins from a standstill), the open-loop spin averages
   only 11 degrees a second, and a CMA-ES search for a faster spin that holds up there
   found none. The servos stay stock, so about 20 s is the half turn these legs allow
-  and is the goal now; the earlier 12 s goal was reachable only near the as-built body.
+  and is the goal now; an open-loop spin could reach the earlier 12 s goal only near
+  the as-built body.
   The rest of the look goal: within 15 degrees, under 1 cm/s of creep, and no sweep
   case falling more than 1 run in 10.
 - **Creep and falls:** it creeps 0.8 cm/s on target (v7 0.7), which Hold stops. 0 of 36
