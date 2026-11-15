@@ -352,7 +352,7 @@ def test_the_master_job_distils_scores_and_reports_progress(tmp_path, monkeypatc
     assert progress["state"] == "finishing" and progress["summary"][0]["value"] == "2 of 2"
     tail = (tmp_path / "run" / "eval.txt").read_text().splitlines()[-1]
     assert tail == (
-        "eval summary: speed within 5% of the teachers, aim within 0.0 deg, "
+        "eval summary: speed at most 5% under the teachers, aim within 0.0 deg, "
         "falls 0/15, 1 in 90 switches"
     )
 
