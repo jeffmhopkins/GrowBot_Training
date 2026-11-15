@@ -71,3 +71,10 @@ job = "growbot_look"
 file = "policies/look-v9/policy_look.json"
 run = "32fae7c5"
 notes = "The look teacher now: 10.6 degrees off on random bodies (v7 11.5), and the odd bodies v7 left 35-47 degrees off now end 11-15 off. Quarter turns mostly 7-9 s (short legs from +90 takes 18 s). Half turns about 20 s on random bodies, as v7 (a search for a faster open-loop spin found none that holds up on random bodies). Creeps 0.8 cm/s on target (v7 0.7), which the follower's Hold stops. 0 falls in 36 randomised evaluations; 1 in 153 sweep ones (long legs from 180 degrees, which also ends 64 degrees off)."
+
+[[policy]]
+slug = "master-2"
+title = "Master: turn, walk and back up, all in one"
+job = "growbot_master"
+file = "policies/master-2/policy_master.json"
+notes = "The one policy the follower will run, distilled from look-v9, lift-fall-2 and nose-walk-1. Speed 0 turns on the spot to face the target; forward walks camera first (only within 30 degrees, it turns first otherwise); back backs away nose first (within 45 degrees). Within 4% of those teachers on speed, 0.7 degrees on aim, no falls in 173 mode switches, and the face stays in the camera's picture 97-100% of the time while moving."
