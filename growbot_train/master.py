@@ -127,7 +127,8 @@ class Teacher:
         ease = min(1.0, s.step_index * CONTROL_DT)
         base = ease * self.gait(s.step_index * CONTROL_DT)
         if self.steer_deg and self.mode != "look" and s.forward != 0.0:
-            u = float(np.clip(s.err_body / self.steer_deg, -1.0, 1.0))
+            err = s.err_lens if self.lens else s.err_body
+            u = float(np.clip(err / self.steer_deg, -1.0, 1.0))
             base = base + self.steer_rad * np.array([max(u, 0.0), max(-u, 0.0)])
         return base
 
@@ -195,8 +196,9 @@ def teacher_frame(t: Teacher, s: Senses) -> np.ndarray:
     clocks = {"gait_sin": t.hz, "gait_cos": t.hz}
     if t.gait is None:
         return build_frame(t.channels, shown, t.a2r, t.lens, clocks)
-    # Its last action is the correction that, on last tick's base, gives the legs sent.
-    shown.prev_rad = s.prev_rad - t.base
+    # Its last action is the correction that, on last tick's base, gives the legs sent;
+    # none on the first tick, as its env starts (the legs are the settled stance then).
+    shown.prev_rad = np.zeros(2) if s.step_index == 0 else s.prev_rad - t.base
     return build_frame(t.channels, shown, t.residual_rad, t.lens, clocks)
 
 

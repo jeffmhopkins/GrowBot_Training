@@ -199,3 +199,46 @@ def test_teacher_and_master_get_the_same_script() -> None:
         targets.append(seen)
     n = min(len(targets[0]), len(targets[1]))
     assert n > 0 and targets[0][:n] == targets[1][:n]
+
+
+def _stand_in_residual(tmp_path, scale: float = 0.3):
+    cfg = config_mod.load("configs/nose_walk.toml")
+    channels = channels_for(cfg)
+    n = cfg.task.history_frames * len(channels)
+    rng = np.random.default_rng(0)
+    policy = {
+        "obs_spec": {
+            "segments": [{"channels": list(channels), "frames": cfg.task.history_frames}],
+            "cycles": {"gait_sin": {"type": "sin", "frequency": cfg.task.gait_hz}},
+            "action_to_rad": cfg.task.action_to_rad,
+            **_residual_spec(cfg),
+        },
+        "mean": [0.0] * n,
+        "std": [1.0] * n,
+        "layers": [{"W": (rng.normal(0, scale, (n, 2))).tolist(), "b": [0.0, 0.0]}],
+        "training": {"config": cfg.to_dict()},
+    }
+    path = tmp_path / "residual.json"
+    path.write_text(json.dumps(policy))
+    return cfg, path, channels
+
+
+def test_a_residual_teacher_reads_back_its_own_correction_in_the_student_env(
+    tmp_path,
+) -> None:
+    # The real path: senses() from the student env, legs sent through to_student. The
+    # teacher must see its own last correction (none on the first tick).
+    cfg, path, channels = _stand_in_residual(tmp_path, scale=0.05)
+    teachers = dict(master.DEFAULT_TEACHERS)
+    teachers["back"] = str(path)
+    r = master.Rollout(teachers)
+    env, teacher = r.env, r.teachers["back"]
+    env.reset(seed=2, options={"retarget": False, "speed_cmd": 0.0, "target_error_deg": 20.0})
+    teacher.reset()
+    i0 = channels.index("prev_action_0")
+    last = np.zeros(2)
+    for _ in range(30):
+        teacher.observe(master.senses(env, -1.0, 1.0))
+        assert np.allclose(teacher.hist[0][i0 : i0 + 2], last, atol=1e-6)
+        last = runner_forward(teacher.data, teacher.hist.reshape(-1))
+        env.step(np.arctanh(master.to_student(teacher.act_rad())))
