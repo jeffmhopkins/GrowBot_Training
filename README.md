@@ -35,7 +35,10 @@ and widens the spread to the full range over the first 8M steps. Its evaluation 
 speed-tracking table, the speed it walks at for each commanded share of the cap. The first
 run walked 1.7 cm/s but held 34-50 degrees off and rarely came round from behind, so it now
 uses a turning reward: lift and fall's `turn` and `arrive`, plus progress and heading
-that count only near the target (`progress_width_deg`, `heading_width_deg`). See
+that count only near the target (`progress_width_deg`, `heading_width_deg`). With that it
+turned round from 180 degrees with no falls, but walked 1.0-1.3 cm/s whatever speed it was
+asked for, drifting through stops for free; so overspeed is charged harder (20), the free
+stop drift is 0.6 cm/s, and wandering from a stop costs (`anchor`). See
 [The camera walk](#the-camera-walk) for why the camera walk exists and what it can and
 can't do with this body.
 
