@@ -37,8 +37,8 @@ from growbot_train.gait import Keyframes
 from growbot_train.policy import runner_forward
 
 MODES = ("look", "walk", "back")
-WALK_DEG = 60.0
-WALK_HYST_DEG = 10.0  # leave the walk only past 70 degrees, so the switch doesn't chatter
+WALK_DEG = 30.0  # Jeff, 2026-11-15: wider than this, stop, spin with look, walk again
+WALK_HYST_DEG = 10.0  # leave the walk only past 40 degrees, so the switch doesn't chatter
 ACTION_TO_RAD = CTRL_LIMIT  # the student may reach every teacher's swing
 FRAMES = 5
 SQUASH = 0.9993  # tanh(ACTION_LIMIT): the furthest a squashed action reaches

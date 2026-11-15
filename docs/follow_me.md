@@ -37,8 +37,9 @@ the heading, with the camera still facing the person.
 What it does with them:
 
 - **Speed above 0:** walk tall, camera first, toward the heading. Teacher: lift and
-  fall (`configs/lift_fall.toml`), but only within 60 degrees of the heading (let go at
-  70, so the switch doesn't chatter). Further off, look's spin teaches, so a person off
+  fall (`configs/lift_fall.toml`), but only within 30 degrees of the heading (let go at
+  40, so the switch doesn't chatter; Jeff, 2026-11-15: wider than that, stop, spin with
+  look, walk again). Further off, look's spin teaches, so a person off
   to the side or behind gets a turn on the spot first, not a walk in an arc.
 - **Speed below 0:** back away from the person in the original low waddle, nose first
   (Jeff, 2026-11-14). The camera sits at the tail, so walking nose first is walking
