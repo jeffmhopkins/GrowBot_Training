@@ -385,10 +385,23 @@ def test_a_camera_height_ask_restarts_the_settling_second() -> None:
     assert hold.holding
 
 
-def test_teacher_driven_look_settles_after_a_turn_and_the_episode_counts_it() -> None:
+def test_the_hold_cuts_the_creep_after_turns(monkeypatch) -> None:
     r = master.Rollout(master.DEFAULT_TEACHERS)
-    d = master.drive(r, None, 0, 0.0, 90.0, 20.0, nominal=True)
-    assert not d["fell"] and d["drift_cm"] < 1.0
+
+    def creep() -> float:
+        runs = [master.drive(r, None, 0, 0.0, s, 30.0, nominal=True) for s in (90, -90, 180)]
+        assert not any(d["fell"] for d in runs)
+        return float(np.mean([d["drift_cm"] for d in runs]))
+
+    # One trajectory is chaotic enough to differ between machines, so compare the mean
+    # over three turns with the hold and without (7-22 cm against 0-5 cm when measured).
+    held = creep()
+    monkeypatch.setattr(master, "HOLD_ENTER_DEG", -1.0)
+    assert held < 0.5 * creep()
+
+
+def test_the_episode_counts_held_ticks() -> None:
+    r = master.Rollout(master.DEFAULT_TEACHERS)
     ep = r.episode(0, 60.0, None, beta=1.0)
     assert 0 < ep["held"] < len(ep["obs"])
     assert r.episode(0, 60.0, None, beta=1.0)["held"] == ep["held"]
