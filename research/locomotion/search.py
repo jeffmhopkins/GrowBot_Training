@@ -307,9 +307,10 @@ def cma(f, x0: np.ndarray, sigma: float, pop: int, gens: int, pool: Pool, log=No
     return best_x, best_f
 
 
-def _stats(rs: list[dict]) -> dict:
+def _stats(rs: list[dict], direction: float = 1.0) -> dict:
+    """Speeds along the scenario's own forward, so p10 is the slow tail either way."""
     rs = [r for r in rs if not r.get("bad_start")]
-    v = np.array([r["v_fwd"] for r in rs]) * 100
+    v = np.array([r["v_fwd"] for r in rs]) * 100 * direction
     return {
         "mean_cm_s": float(v.mean()),
         "p10_cm_s": float(np.percentile(v, 10)),
@@ -361,9 +362,12 @@ def run_scenario(scen: Scenario, args) -> dict:
         "train_score": best_f,
         "nominal": {"hard": nominal[0], "carpet": nominal[1]},
         "test": {
-            "all": _stats(test),
+            "all": _stats(test, scen.direction),
             **{
-                f: _stats([r for r, d in zip(test, test_doms, strict=True) if d.floor == f])
+                f: _stats(
+                    [r for r, d in zip(test, test_doms, strict=True) if d.floor == f],
+                    scen.direction,
+                )
                 for f in ("hard", "carpet")
             },
         },  # fmt: skip

@@ -46,7 +46,8 @@ def main() -> None:
     rows = [json.loads(p.read_text()) for p in sorted(folder.glob("*.json"))]
     # Ranked by the worse floor's held-out mean: it has to work on both.
     rows.sort(key=lambda r: -min(r["test"]["hard"]["mean_cm_s"], r["test"]["carpet"]["mean_cm_s"]))
-    print("Speeds tail first, cm/s. *Nominal* is the as-designed robot; *held-out* is the")
+    print("Speeds cm/s; nominal + is tail first, held-out is along each setup's own forward.")
+    print("*Nominal* is the as-designed robot; *held-out* is the")
     print("mean (and 10th percentile) over random robots the gait was not tuned on.\n")
     print(
         "| | Setup | Gait | Nominal hard | Nominal carpet | Held-out hard (p10) "
