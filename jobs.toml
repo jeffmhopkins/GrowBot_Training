@@ -72,6 +72,15 @@ start while an older growbot_lift_fall run is still finishing (the box allows on
 run per job). Same config, same outputs."""
 
 [[job]]
+name = "growbot_lift_fall_speed"
+title = "GrowBot lift and fall at a commanded speed"
+config = "configs/lift_fall_speed.toml"
+est_hours = "2-5 h"
+notes = """The lift and fall with a speed input, from a stop up to 7 cm/s \
+(configs/lift_fall_speed.toml): the master policy's tall, camera-first forward walk. \
+Downloads and the Live card work as for the heading walk."""
+
+[[job]]
 name = "growbot_look"
 title = "GrowBot look (stay put, turn to face a direction)"
 config = "configs/look.toml"
