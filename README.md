@@ -138,6 +138,19 @@ image and, with no camera-height input, faces that come too close above it. A pe
 0.3-0.7 m/s a metre or two away crosses the view faster than either skill turns.
 Distractor people and the replay page come next.
 
+**Hold.** Look is a gait with a clock, so even on target its legs keep twitching and it
+creeps. So once the camera has been within 6 degrees of the person for a second and the
+robot is asked to stand, the follower stops calling the policy and the servos hold the
+average of the last second of commands, which is the stance the policy was holding
+(Jeff, 2026-11-15). It lets go past 15 degrees, when asked to walk or change camera
+height by more than 0.15, or when the person is lost. `--hold-check` measures it, with
+a perfect compass so the policy isn't chasing gyro drift: look-v7 settled on 9 of 12
+random bodies (one fell turning in, two never got within 6 degrees), and on those it
+creeps 0.64 cm/s on target with the policy running and 0.01 with Hold, its heading
+moves 1.9 degrees in 20 s instead of 4.3, and a 90 degree turn from the held pose
+still ends 5 degrees off, as it does without the hold. In the follow runs it rarely engages,
+since the person seldom stands still long enough for look to settle on them.
+
 Training progress: `.venv/bin/tensorboard --logdir runs` and open the page it prints.
 The `walk/` graphs are the useful ones: `v_along` (speed toward the target, should climb
 to near the cap), `abs_err_deg` (should fall), `speed` (should stay under the cap) and

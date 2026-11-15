@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from growbot_train import follow
-from growbot_train.follow import Camera, CameraSpec, Follower, Person, Sighting, Tracker
+from growbot_train.follow import Camera, CameraSpec, Follower, Hold, Person, Sighting, Tracker
 from growbot_train.policy import JsonPolicy
 
 POLICIES = Path(__file__).parent.parent / "policies"
@@ -233,3 +233,83 @@ def test_a_short_follow_run_on_look_scores_every_tick() -> None:
         assert np.isfinite(s[key])
     # Look never takes a speed: the run must not have asked its env to walk.
     assert all(abs(r["robot_speed"]) < 0.1 for r in out["trace"])
+
+
+def _settle(h: Hold, acts: list[np.ndarray], bearing: float = 2.0) -> np.ndarray:
+    out = np.zeros(2)
+    for a in acts:
+        out = h.action(lambda a=a: a, bearing, standing=True, lost=False, tilt=1.0)
+    return out
+
+
+def test_hold_freezes_on_the_average_of_the_last_second_once_settled_on_target() -> None:
+    h = Hold(settle_s=1.0)
+    n = h.window
+    acts = [np.array([math.sin(i), -math.sin(i)]) for i in range(n + 5)]
+    _settle(h, acts[: n - 1])
+    assert h.held is None
+    _settle(h, acts[n - 1 :])
+    # It holds the moment it has a full second on target, and keeps that pose.
+    assert h.held is not None
+    # Averaged as servo targets, after the env's tanh, and handed back in its input.
+    assert np.allclose(np.tanh(h.held), np.mean(np.tanh(acts[:n]), axis=0))
+
+    # Held: the policy isn't asked, and the same pose comes back every tick.
+    def boom() -> np.ndarray:
+        raise AssertionError("the policy was asked while held")
+
+    out = h.action(boom, 10.0, standing=True, lost=False, tilt=1.0)
+    assert np.array_equal(out, h.held)
+
+
+def test_hold_averages_a_saturated_command_as_the_servo_saw_it() -> None:
+    # The env clips its input at ACTION_LIMIT, so a command of 7 drives the servo no
+    # further than one of 4; averaging raw inputs would push the pose too far.
+    h = Hold(window=4, settle_s=0.1)
+    _settle(h, [np.array([7.0, 0.0]), np.array([-4.0, 0.0])] * 2)
+    assert h.held is not None and abs(h.held[0]) < 1e-6
+
+
+def test_hold_waits_for_the_robot_to_settle_and_to_be_asked_to_stand() -> None:
+    h = Hold(settle_s=1.0)
+    acts = [np.ones(2)] * (2 * h.window)
+    _settle(h, acts, bearing=8.0)
+    assert h.held is None
+    for a in acts:
+        h.action(lambda a=a: a, 2.0, standing=False, lost=False, tilt=1.0)
+    assert h.held is None
+
+
+@pytest.mark.parametrize(
+    ("bearing", "standing", "lost", "tilt"),
+    [
+        (16.0, True, False, 1.0),
+        (2.0, False, False, 1.0),
+        (2.0, True, True, 1.0),
+        (2.0, True, False, 0.5),
+    ],
+)
+def test_hold_lets_go_when_the_person_moves_or_the_robot_is_asked_for_more(
+    bearing: float, standing: bool, lost: bool, tilt: float
+) -> None:
+    h = Hold()
+    _settle(h, [np.ones(2)] * (2 * h.window))
+    assert h.held is not None
+    out = h.action(lambda: np.full(2, 7.0), bearing, standing=standing, lost=lost, tilt=tilt)
+    assert h.held is None and np.array_equal(out, np.full(2, 7.0))
+
+
+def test_hold_stays_between_its_enter_and_exit_angles() -> None:
+    h = Hold(enter_deg=6.0, exit_deg=15.0)
+    _settle(h, [np.ones(2)] * (2 * h.window))
+    h.action(lambda: np.zeros(2), 12.0, standing=True, lost=False, tilt=1.0)
+    assert h.held is not None
+
+
+def test_hold_stops_look_creeping_on_target_and_it_still_turns_after() -> None:
+    policy = JsonPolicy(LOOK)
+    free = follow.hold_check(policy, 0, hold=False, nominal=True)
+    held = follow.hold_check(policy, 0, hold=True, nominal=True)
+    assert free is not None and held is not None and held["fell"] == 0.0
+    assert held["creep_cm_s"] < 0.1 < free["creep_cm_s"]
+    assert held["turn_err_deg"] < 20.0
