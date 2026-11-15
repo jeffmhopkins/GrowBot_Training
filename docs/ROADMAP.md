@@ -83,6 +83,11 @@ variable speed and tilt follows.
 
 ## Phase 2: the follow test, single-skill baseline
 
+**Started 2026-11-15:** `growbot_train/follow.py` runs the person, camera model, tracker,
+follower and voice script on one skill and reports in-view time, aim, pitch and distance
+error, stay drift and falls. Still to come: distractor people, the replay page, and the
+baseline numbers for each skill.
+
 The simulated follow-me harness from [follow_me.md](follow_me.md), run first on each
 skill alone:
 
