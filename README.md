@@ -383,7 +383,10 @@ were mostly on bodies a few percent shorter in the leg. With the geometry pinned
 walk fell 2 times in 100 at 35% of the remaining ranges and 35 in 100 at full. It also earns
 `reward.frame` while a virtual face in the target's direction (0.7-2.5 m away, 1.1-1.65 m
 high) is anywhere in the phone's picture: the old walk aimed low enough to lose a standing
-face at 1 m on about a third of random bodies. It walks at the cap with no speed input (the gait has one speed), and explores with
+face at 1 m on about a third of random bodies. That run (a0e521dd) is kept at 37.5M as
+`policies/lift-fall-3`: 1 fall in 100 minute-long walks within 30 degrees, 5.8 cm/s, 5
+degrees off, against lift-fall-2's 7 in 50 at 4.3 cm/s on the same pinned bodies. It needs
+the pinned body: on the old leg-length spread it walks backwards. It walks at the cap with no speed input (the gait has one speed), and explores with
 less noise (`train.log_std_init = -1.5`) so its timing survives the first updates. The
 speed cap is 5 cm/s, the stance bonus and lean-back penalty are off as the body bounces,
 and only going over onto the screen (past 88 degrees) or forwards ends an episode.

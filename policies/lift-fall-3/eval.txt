@@ -1,0 +1,16 @@
+lift-fall-3: run a0e521dd at 37.5M steps (configs/lift_fall.toml at fe0188e: legs pinned to the STL, frame 0.5)
+
+Minute-long walks, target jumping every 5-10 s within the range, body ranges at 60% (the run's cap),
+legs as printed, weight 0.85-1.15, balance point within 1 cm:
+
+  within +-30 deg, 100 walks: 1 fall, 5.77 cm/s toward the target, 5.4 deg off
+  (12.5M: 1 fall, 5.35 cm/s, 5.4 deg; 25M: 5 falls, 5.1 cm/s, 4.5 deg)
+  lift-fall-2 on the same test, 50 walks: 7 falls, 4.3 cm/s, 9.8 deg
+
+Wider turns while walking fall (25M copy, 50 walks each): +-60 deg 17 falls, +-90 deg 22,
+so the master stops and spins past 30 deg.
+
+Virtual face 1-2 m away, 1.1-1.65 m high: in the picture 100% of the time.
+
+On leg lengths other than the STL's it does not walk (the master's eval on the old
+spread: backwards, 9 falls in 18), so use it only with the pinned body.
