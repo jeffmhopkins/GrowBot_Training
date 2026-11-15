@@ -62,12 +62,12 @@ tilt_tall_prob = 0.5               # ...half the time standing tall, otherwise a
 [randomization]
 # Every episode gets a slightly different robot, so the policy works on the real one.
 enabled = true
-mass_scale = [0.80, 1.25]
-com_x_m = [-0.030, 0.030]
-com_y_m = [-0.015, 0.015]
-com_z_m = [-0.010, 0.015]
-leg_length_scale = [0.85, 1.15]
-leg_asymmetry = [0.96, 1.04]
+mass_scale = [0.85, 1.15]
+com_x_m = [-0.010, 0.010]
+com_y_m = [-0.005, 0.005]
+com_z_m = [-0.005, 0.008]
+leg_length_scale = [1.0, 1.0]   # the build matches the STL (lift_fall.toml)
+leg_asymmetry = [1.0, 1.0]
 servo_gain_scale = [0.75, 1.25]
 friction = [0.2, 2.2]        # one friction on every geom, when task.surfaces is empty
 floor_friction_scale = [0.5, 1.6]  # with task.surfaces: the whole floor's slickness
@@ -88,9 +88,9 @@ heading_drift_deg_per_s = 0.25  # slower, so over the minute-long episode the dr
 heading_refresh_ticks = [1, 6]
 push_every_s = [0.0, 0.0]   # a sudden shove this often (off until it can scoot)
 push_pitch_rad_s = 0.0      # how hard a shove spins it (pitch, rad/s)
-ramp_steps = 25000000      # start near the as-built robot (the gait only works there open loop) and widen to the full ranges over half the run
-ramp_from = 0.15            # ...from 15% of each range
-ramp_to = 0.35              # but the body ranges stop at 35%: on the box the run walked at 3.8 cm/s near 0.3 and fell apart past about 0.45 (0.6 cm/s by 0.9); the targets still widen to full
+ramp_steps = 25000000      # widen what can't be measured over half the run
+ramp_from = 0.35
+ramp_to = 0.6
 
 [train]
 total_steps = 50000000      # starts from a moving gait, so a shorter run
