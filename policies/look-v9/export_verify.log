@@ -1,0 +1,4 @@
+policy: policy_look.json
+obs_size: 60
+max |json - network|: 7.096e-07 (tolerance 1e-05)
+EXPORT OK
