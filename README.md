@@ -38,8 +38,8 @@ uses a turning reward: lift and fall's `turn` and `arrive`, plus progress and he
 that count only near the target (`progress_width_deg`, `heading_width_deg`). With that it
 turned round from 180 degrees with no falls, but walked 1.0-1.3 cm/s whatever speed it was
 asked for: the free band (`stop_drift_free`, 1.5 cm/s) set the overspeed line for stops
-and every command under half the cap. So the band is 0.6 cm/s, overspeed is charged
-harder (20), and wandering from a stop costs (`anchor`). It no longer turns much during
+and every command under half the cap. So the band is 0.6 cm/s and wandering from a stop
+costs (`anchor`); charging overspeed harder as well (20) froze the next run. It no longer turns much during
 stops; the master hands stops to the look policy. See
 [The camera walk](#the-camera-walk) for why the camera walk exists and what it can and
 can't do with this body.
