@@ -160,7 +160,7 @@ def speed_tracking(
             "toward": float(np.mean([r["toward"] for r in runs])),
             "speed": float(np.mean([r["speed"] for r in runs])),
             "frame_pct": float(np.mean([r["frame_pct"] for r in runs])),
-            "img_x": float(np.mean([r["img_x"] for r in runs])),
+            "img_x": float(np.nanmean([r["img_x"] for r in runs])),
             "falls": float(sum(r["fell"] for r in runs)),
             "episodes": float(episodes),
         }

@@ -575,7 +575,7 @@ class GrowBotHeadingEnv(gym.Env):
         pushes = self.cfg.randomization.push_every_s
         self._next_push = self._u(pushes) if pushes[1] > 0 else 0.0
         self._err_obs = 0.0
-        self._img_x_avg = self.face_image_deg()[0]
+        self._img_x_avg = float(np.clip(self.face_image_deg()[0], -90.0, 90.0))
         self._observe_heading(force=True)
         # "speed_cmd" pins the speed command for the whole episode (evaluation).
         self._fixed_speed = options.get("speed_cmd")

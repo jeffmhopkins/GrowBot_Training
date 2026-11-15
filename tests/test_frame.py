@@ -95,11 +95,15 @@ def test_evaluate_reports_time_in_frame() -> None:
 
 def test_a_stops_aim_is_averaged_so_a_periodic_sway_cancels() -> None:
     env = _env(LOOK, frame=1.0, err=0.0)
-    swing = iter([20.0, -20.0] * 100)
-    env.face_image_deg = lambda: (next(swing), 0.0, True)
+    # A waddle's sway: 20 degrees either side, once a second.
+    tick = iter(range(10**6))
+    env.face_image_deg = lambda: (20.0 * math.sin(2 * math.pi * next(tick) * 0.04), 0.0, True)
     env._img_x_avg = 0.0
-    for _ in range(50):
+    paid = []
+    for _ in range(150):
         _, _, _, _, info = env.step(np.zeros(2))
-    # Frame to frame it sits 20 degrees off (worth 0.56), but on average dead centre.
-    assert abs(info["image_x_avg_deg"]) < 2.0
-    assert info["terms"]["frame"] > 0.99
+        paid.append(info["terms"]["frame"])
+    # Frame to frame it swings up to 20 degrees off (worth 0.56), but the average stays
+    # within a few degrees of centre, so the aim pays nearly in full throughout.
+    assert abs(info["image_x_avg_deg"]) < 4.0
+    assert min(paid[50:]) > 0.98
