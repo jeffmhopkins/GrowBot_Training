@@ -96,9 +96,9 @@ class TaskConfig:
     action_to_rad: float = 1.0
     fall_tilt_deg: float = 55.0
     # Which end walks first. "nose" is the end the legs lean toward; "camera" is the
-    # other end, where the phone's rear camera looks when it lies on top of a nose-up
-    # body. The heading error is measured from this end, so for "camera" a heading error
-    # of 0 means "the face the camera sees is straight ahead".
+    # other end, where the phone's front (screen-side) camera looks when it lies screen
+    # up on top of a nose-up body. The heading error is measured from this end, so for
+    # "camera" a heading error of 0 means "the face the camera sees is straight ahead".
     facing: str = "nose"
     # With facing "camera", where the heading is read from. "body" is the tail end's
     # direction, which leaning and rolling don't move. "lens" is where the phone's rear

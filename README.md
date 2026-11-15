@@ -219,8 +219,10 @@ is to stand still, and it will learn exactly that.
 
 ## The camera walk
 
-The phone lies on top of the body with its rear camera facing up, at the high (nose) end. The body rests nose-up,
-so that camera actually looks up and back over the **tail**. To walk toward a face the
+The phone lies screen up on top of the body, so its front (screen-side) camera, the one
+that finds faces, points out of the top of the body. The body rests nose-up, so that
+camera actually looks up and back over the **tail**, which is the robot's front for
+following: standing taller tilts it down toward faces. To walk toward a face the
 camera sees, the robot has to walk tail first. That's the second config,
 `configs/camera_walk.toml`, and it changes these things (the lines marked CHANGED):
 

@@ -15,3 +15,11 @@
 #   notes  optional
 #
 # tests/test_policies_index.py checks this file the way the box does.
+
+[[policy]]
+slug = "look-v6"
+title = "Look v6: turn on the spot to face a target"
+job = "growbot_look"
+file = "policies/look-v6/policy_look.json"
+run = "36d29750"
+notes = "Stand-in for the phone app. Best aim so far (about 16 degrees off on random bodies) but creeps about 1-2 cm/s while turning, and half a turn takes 20-28 s."
