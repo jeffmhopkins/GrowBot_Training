@@ -5,11 +5,12 @@ The student takes the follower's three commands and sees one gait clock per teac
 each teacher's timing survives the distillation; the app runner already steps any number
 of declared `cycle:` channels. Which teacher labels a tick (`choose_mode`):
 
-- speed below 0: the nose walk, backing away nose first, whatever the heading;
-- speed above 0, the walk's heading error within `WALK_DEG`: lift and fall;
-- otherwise (standing, or asked to walk at someone well off to the side or behind):
-  look's spin. Jeff, 2026-11-15: the heading never picks the waddle, only the speed's
-  sign does.
+- speed below 0, the heading error within `BACK_DEG`: the nose walk, backing away nose
+  first;
+- speed above 0, the heading error within `WALK_DEG`: lift and fall;
+- otherwise (standing, or asked to move with the target well off to the side): look's
+  spin, until the heading comes inside the limit. Jeff, 2026-11-15: the heading never
+  picks the waddle, only the speed's sign does; a wide heading only delays it.
 
 DAgger: the first round lets the teachers drive, later rounds let the student drive more
 and more often while the teachers keep labelling, so the student also learns to recover
@@ -39,6 +40,11 @@ from growbot_train.policy import runner_forward
 MODES = ("look", "walk", "back")
 WALK_DEG = 30.0  # Jeff, 2026-11-15: wider than this, stop, spin with look, walk again
 WALK_HYST_DEG = 10.0  # leave the walk only past 40 degrees, so the switch doesn't chatter
+# The nose walk steers weakly to its left: past about 45 degrees it ends 15-20 off
+# (locomotion thread's last-10 s test at 22.5M), so wider than this it spins with look
+# first, as the walk does past WALK_DEG.
+BACK_DEG = 45.0
+BACK_HYST_DEG = 10.0
 ACTION_TO_RAD = CTRL_LIMIT  # the student may reach every teacher's swing
 FRAMES = 5
 SQUASH = 0.9993  # tanh(ACTION_LIMIT): the furthest a squashed action reaches
@@ -208,8 +214,10 @@ def student_clocks(teachers: dict[str, Teacher]) -> dict[str, float]:
 
 def choose_mode(forward: float, err_body: float, current: str | None = None) -> str:
     if forward < 0:
-        return "back"
-    if forward > 0:
+        limit = BACK_DEG + (BACK_HYST_DEG if current == "back" else 0.0)
+        if abs(err_body) <= limit:
+            return "back"
+    elif forward > 0:
         limit = WALK_DEG + (WALK_HYST_DEG if current == "walk" else 0.0)
         if abs(err_body) <= limit:
             return "walk"
@@ -537,6 +545,8 @@ def export_policy(
                 "teachers": {m: str(p) for m, p in teacher_paths.items()},
                 "walk_deg": WALK_DEG,
                 "walk_hysteresis_deg": WALK_HYST_DEG,
+                "back_deg": BACK_DEG,
+                "back_hysteresis_deg": BACK_HYST_DEG,
             },
             "speed_cap_m_s": caps["walk"],
             "speed": "command",

@@ -502,11 +502,12 @@ plans. The student takes the follower's `cmd_yaw` (from where the camera points)
 gait clock per teacher at that teacher's rate (`cycle:look_sin` and so on; the app runner
 steps any declared clock). Each tick one teacher labels what the legs should do:
 
-- speed below 0: the nose walk, backing away nose first, whatever the heading;
+- speed below 0 and within 45 degrees (let go at 55): the nose walk, backing away nose
+  first (wider, it steers too weakly to its left, so look turns it first);
 - speed above 0 and within 30 degrees (let go at 40): lift and fall (Jeff, 2026-11-15:
   wider than that, stop, spin with look, walk again);
-- otherwise: look's spin, which also handles walking toward someone well off to the
-  side or behind.
+- otherwise: look's spin, which also handles walking toward or backing from someone
+  well off to the side or behind, until the heading comes inside the limit.
 
 The teachers' commands are matched in radians, so the student swings the servos' full
 1.57 radians. Each teacher keeps its own sensor history every tick, so it takes over a

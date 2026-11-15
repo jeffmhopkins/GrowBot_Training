@@ -31,8 +31,10 @@ One exported policy with one input set, so the app never swaps files mid-walk:
 
 **The sign of `cmd_forward` alone picks the mode, never the heading** (Jeff,
 2026-11-15): a person behind it calls for a spin to face them (speed 0, or turning while
-it walks forward), never for backing up; a negative speed backs away nose first whatever
-the heading, with the camera still facing the person.
+it walks forward), never for backing up; a negative speed backs away nose first, with the
+camera still facing the person. Past 45 degrees off (let go at 55) the nose walk steers
+too weakly, so the master spins with look first and then backs: a wide heading delays
+the waddle but never picks it.
 
 What it does with them:
 
