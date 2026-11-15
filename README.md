@@ -232,7 +232,7 @@ Every tick the reward is the sum of these terms. All the weights live in
 | wobble | `wobble = 0.0` (look: 0.05) | Rocking: weight times (roll rate squared plus pitch rate squared), rad/s. A steadier camera. |
 | turn | `turn = 0.0` (camera walk: 0.5, look: 1.0) | Each degree the heading error shrank this tick, against the current target (negative when it grew). It sums to weight times (starting error minus final error), so it can't be farmed, but it gives a clear tick-by-tick signal: turning on the spot moves the heading term too little for training to notice, and the first look run never learned to turn. |
 | stance | `stance = 0.0` (camera walk: 0.5) | Standing `stand_lift_deg` taller than its resting stance: full value on target, fading out a `stance_tol_deg` (6 degrees) or so either side. Off for the first walk. When it's on, `tilt` measures from the taller stance. |
-| frame | `frame = 0.0` | Keeping the person's face in the phone camera's picture (Jeff, 2026-11-15). Each target gets a virtual face out in the person's direction (0.7-2.5 m away, 1.1-1.65 m high; for a nose-first skill the person is behind the nose). It pays full weight while the face is inside the 60 by 75 degree picture and nothing outside it, using the same image geometry as the follow tracker. Standing (speed 0, as look always is) it pays weight times (1 - (degrees across / 30) squared), so a stop has to centre the face; the degrees across are averaged with a time constant of `frame_avg_s` (1 s, a few waddle steps), so a gait's periodic sway is fine while the average points at the face (Jeff, 2026-11-15). Being in the picture is judged every frame, since the tracker has to see the face. `evaluate` reports `frame%` (time in the picture) and `img_x` (the averaged aim, degrees off centre). |
+| frame | `frame = 0.0` (look: 2.0) | Keeping the person's face in the phone camera's picture (Jeff, 2026-11-15). Each target gets a virtual face out in the person's direction (0.7-2.5 m away, 1.1-1.65 m high; for a nose-first skill the person is behind the nose). It pays full weight while the face is inside the 60 by 75 degree picture and nothing outside it, using the same image geometry as the follow tracker. Standing (speed 0, as look always is) it pays weight times (1 - (degrees across / 30) squared), so a stop has to centre the face; the degrees across are averaged with a time constant of `frame_avg_s` (1 s, a few waddle steps), so a gait's periodic sway is fine while the average points at the face (Jeff, 2026-11-15). Being in the picture is judged every frame, since the tracker has to see the face. `evaluate` reports `frame%` (time in the picture) and `img_x` (the averaged aim, degrees off centre). |
 
 With a speed command (`task.speed = "command"`, the camera walk) or none at all
 (`"still"`, the look policy), `progress` pays instead for matching the wanted velocity,
@@ -492,6 +492,9 @@ v9 (run 32fae7c5, kept as `policies/look-v9`) is that run. It is the look teache
 - **Creep and falls:** it creeps 0.8 cm/s on target (v7 0.7), which Hold stops. 0 of 36
   randomised evaluations fell. One sweep case did: long legs from 180 degrees, 1 run in
   3, over that 1-in-10 limit. That case also ends 64 degrees off.
+The next run (v10) turns on the camera-picture reward (`reward.frame = 2.0`, see
+[The reward](#the-reward)): look's stop is where the follower needs the face centred, and
+v9 lands it about 7 degrees off centre on random bodies (`img_x`; 1-3 on the nominal one).
 Unlike the camera walk it trains on the printed build with bare-print surfaces (see
 [Bodies](#bodies)), like the heading walk.
 It's the camera walk otherwise, and only the lines marked CHANGED differ from that file.
