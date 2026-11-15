@@ -48,6 +48,57 @@ def _now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
+def _cpu_seconds(pid: str) -> tuple[int, float] | None:
+    """(process group, CPU seconds used) of one process, from /proc; None if it's gone or
+    there is no /proc (macOS)."""
+    try:
+        with open(f"/proc/{pid}/stat") as fh:
+            fields = fh.read().rsplit(")", 1)[1].split()
+    except (OSError, IndexError):
+        return None
+    return int(fields[2]), (int(fields[11]) + int(fields[12])) / os.sysconf("SC_CLK_TCK")
+
+
+class CpuMeter:
+    """How many cores the run is really keeping busy: the CPU time its process group (the
+    trainer and every simulator worker) used since the last reading, over the wall time.
+    The trainer's own share says whether one serial process is what holds the run back
+    (owner, 2026-11-15: two runs side by side still showed the box ~10% busy)."""
+
+    def __init__(self) -> None:
+        self.last: tuple[float, float, float] | None = None
+        self.read()
+
+    def read(self) -> dict[str, float]:
+        try:
+            group = os.getpgrp()
+            pids = [p for p in os.listdir("/proc") if p.isdigit()]
+        except (AttributeError, OSError):
+            return {}
+        total = 0.0
+        for pid in pids:
+            got = _cpu_seconds(pid)
+            if got is not None and got[0] == group:
+                total += got[1]
+        mine = _cpu_seconds("self")
+        now = time.monotonic()
+        prev, self.last = self.last, (now, total, mine[1] if mine else 0.0)
+        if prev is None or now <= prev[0]:
+            return {}
+        wall = now - prev[0]
+        return {
+            "cpu_cores": max(0.0, total - prev[1]) / wall,
+            "trainer_cpu": max(0.0, self.last[2] - prev[2]) / wall,
+        }
+
+
+def _usable() -> int:
+    try:
+        return len(os.sched_getaffinity(0))
+    except AttributeError:
+        return os.cpu_count() or 1
+
+
 class Live:
     def __init__(
         self, run: Path, cfg: config_mod.Config, total_steps: int, start_steps: int = 0
@@ -144,6 +195,15 @@ class Live:
             if self.cfg.reward.anchor and "drift_m" in m:
                 summary.append(
                     {"label": "Wandered while stopped", "value": f"{m['drift_m'] * 100:.1f} cm"}
+                )
+            if "cpu_cores" in m:
+                summary.append(
+                    {
+                        "label": "CPU in use",
+                        "value": f"{m['cpu_cores']:.1f} of {_usable()} cores (trainer "
+                        f"{m['trainer_cpu']:.2f}, learning {100 * m.get('learn_frac', 0):.0f}%"
+                        " of the time)",
+                    }
                 )
             if self.cfg.reward.stance and "lift_deg" in m:
                 want = m.get("want_lift_deg", self.cfg.task.stand_lift_deg)

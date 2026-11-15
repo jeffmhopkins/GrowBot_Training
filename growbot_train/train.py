@@ -30,7 +30,7 @@ from stable_baselines3.common.vec_env import (
 
 from growbot_train import config as config_mod
 from growbot_train.env import GrowBotHeadingEnv
-from growbot_train.live import Live
+from growbot_train.live import CpuMeter, Live
 
 # The app's runner does not clip, so the normaliser must not either: a wide bound keeps
 # training and the phone computing the same numbers.
@@ -96,6 +96,18 @@ class Diagnostics(BaseCallback):
         self.n = 0
         self.falls = 0
         self.t0 = time.time()
+        self.cpu = CpuMeter()
+        # Wall time collecting experience vs learning from it, since the last report: the
+        # simulators sit idle while the network learns.
+        self.collecting = 0.0
+        self.learning = 0.0
+        self.mark: float | None = None
+
+    def _on_rollout_start(self) -> None:
+        now = time.monotonic()
+        if self.mark is not None:
+            self.learning += now - self.mark
+        self.mark = now
 
     def _on_step(self) -> bool:
         for info in self.locals["infos"]:
@@ -113,6 +125,10 @@ class Diagnostics(BaseCallback):
         return True
 
     def _on_rollout_end(self) -> None:
+        now = time.monotonic()
+        if self.mark is not None:
+            self.collecting += now - self.mark
+        self.mark = now
         if not self.n:
             return
         for k, v in self.sums.items():
@@ -133,11 +149,20 @@ class Diagnostics(BaseCallback):
                     "want_lift_deg": self.sums["want_lift_deg"] / self.n,
                     "speed_miss": self.sums["speed_miss"] / self.n,
                     "drift_m": self.sums["drift_m"] / self.n,
+                    **self._load(),
                 },
             )
         self.sums.clear()
         self.n = 0
         self.falls = 0
+
+    def _load(self) -> dict[str, float]:
+        cpu = self.cpu.read()
+        spent = self.collecting + self.learning
+        if spent > 0:
+            cpu["learn_frac"] = self.learning / spent
+        self.collecting = self.learning = 0.0
+        return cpu
 
 
 class LiveReplay(BaseCallback):
