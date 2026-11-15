@@ -61,6 +61,7 @@ def record(
     turn_every: float,
     nominal: bool,
     turn_deg: float = 90.0,
+    alternate: bool = False,
 ) -> dict[str, Any]:
     obs, _ = env.reset(
         seed=seed,
@@ -108,9 +109,9 @@ def record(
     every = round(turn_every / CONTROL_DT) if turn_every else 0
     for i in range(1, round(seconds / CONTROL_DT) + 1):
         if every and i % every == 0:
-            # Left then right, so the target stays within one turn of where it began: a
-            # one-way series ends up behind a policy that never trains on that.
-            sign = 1.0 if (i // every) % 2 else -1.0
+            # For a policy whose targets stay in front, left then right, so the target
+            # stays within one turn of where it began: a one-way series ends up behind.
+            sign = -1.0 if alternate and (i // every) % 2 == 0 else 1.0
             env.target_deg = wrap_deg(env.target_deg + sign * turn_deg)
         obs, _, term, _, info = env.step(policy.env_action(obs))
         frames.append(snapshot(info))
@@ -130,7 +131,9 @@ def _within(
     lim = cfg.task.initial_error_deg
     step = min(90.0, cfg.task.retarget_max_deg)
     if abs(err) > lim:
-        err = math.copysign(lim, err)
+        # Out of range on the left (90, or behind) goes to the right edge, so the two
+        # edges both get a walk rather than one twice.
+        err = -lim if err > 0 and abs(err) > 90 else math.copysign(lim, err)
         side = "left" if err > 0 else "right"
         title = title.replace(title.split(": ")[-1], f"target {lim:g} degrees {side}")
         title = title[0].upper() + title[1:]
@@ -152,7 +155,8 @@ def build(
     episodes = []
     for i, scen in enumerate(scenarios):
         title, err, turn, nominal, turn_deg = _within(scen, env.cfg)
-        ep = record(env, policy, seed + i, err, seconds, turn, nominal, turn_deg)
+        narrow = env.cfg.task.initial_error_deg < 180.0
+        ep = record(env, policy, seed + i, err, seconds, turn, nominal, turn_deg, narrow)
         ep["title"] = title
         episodes.append(ep)
         if not quiet:

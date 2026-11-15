@@ -156,5 +156,6 @@ def test_replay_scenarios_stay_within_the_training_targets() -> None:
     )
     assert got["Target turns every 6 s"][0] == "Target turns 60 degrees every 6 s"
     assert got["Target turns every 6 s"][4] == 60.0
+    assert got["Target behind"][:2] == ("Target 60 degrees right", -60.0)
     wide = SimpleNamespace(task=SimpleNamespace(initial_error_deg=180.0, retarget_max_deg=120.0))
     assert all(_within(s, wide)[:4] == s for s in SCENARIOS)
