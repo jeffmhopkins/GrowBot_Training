@@ -598,7 +598,7 @@ def distill(
 SCENARIOS = {
     # mode: (forward command, start errors)
     "look": (0.0, (90.0, -90.0, 180.0)),
-    "walk": (1.0, (0.0, 45.0, -45.0)),
+    "walk": (1.0, (0.0, 25.0, -25.0)),  # inside WALK_DEG, so it measures the walk alone
     "back": (-1.0, (0.0, 45.0, -45.0)),
 }
 
