@@ -26,12 +26,15 @@ from typing import Any
 
 import numpy as np
 
-from growbot_train.env import ACTION_LIMIT, CONTROL_DT, GrowBotHeadingEnv, wrap_deg
+from growbot_train.env import (
+    ACTION_LIMIT,
+    CONTROL_DT,
+    LENS_OFFSET_M,
+    GrowBotHeadingEnv,
+    wrap_deg,
+)
 from growbot_train.evaluate import env_for
 from growbot_train.policy import JsonPolicy
-
-# Where the phone's camera sits above the torso origin, metres along the lens axis.
-LENS_OFFSET_M = 0.03
 
 
 @dataclass

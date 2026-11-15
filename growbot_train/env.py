@@ -32,6 +32,9 @@ import numpy as np
 from growbot_train.config import Config
 from growbot_train.surfaces import FLOORS, SURFACES, split_contacts, surface_geoms
 
+# Where the phone's camera sits above the torso origin, metres along the lens axis.
+LENS_OFFSET_M = 0.03
+
 BODIES_DIR = Path(__file__).parent / "bodies"
 # How far (flat) the lens axis must reach out over the tail end before the heading is
 # the lens's alone; below it the heading fades into the tail end's. The lowest look
@@ -389,6 +392,9 @@ class GrowBotHeadingEnv(gym.Env):
         # needs a turn: one it already points at would pay for doing nothing.
         self._target_t = t
         self._held = 0
+        r = self.cfg.reward
+        self._face_dist = float(self._face_rng.uniform(*r.frame_distance_m))
+        self._face_z = float(self._face_rng.uniform(*r.frame_face_height_m))
         self._arrived = self.scored_err_deg() < self.cfg.reward.arrive_within_deg
 
     def _body_k(self) -> float:
@@ -491,6 +497,8 @@ class GrowBotHeadingEnv(gym.Env):
         self, *, seed: int | None = None, options: dict[str, Any] | None = None
     ) -> tuple[np.ndarray, dict[str, Any]]:
         super().reset(seed=seed)
+        # Its own stream, so drawing the face leaves every other draw as it was.
+        self._face_rng = np.random.Generator(self.np_random.bit_generator.jumped())
         options = options or {}
         # "nominal": the as-designed body with perfect sensors, for a clean look.
         randomize = self.cfg.randomization.enabled and not options.get("nominal", False)
@@ -567,6 +575,7 @@ class GrowBotHeadingEnv(gym.Env):
         pushes = self.cfg.randomization.push_every_s
         self._next_push = self._u(pushes) if pushes[1] > 0 else 0.0
         self._err_obs = 0.0
+        self._img_x_avg = float(np.clip(self.face_image_deg()[0], -90.0, 90.0))
         self._observe_heading(force=True)
         # "speed_cmd" pins the speed command for the whole episode (evaluation).
         self._fixed_speed = options.get("speed_cmd")
@@ -697,6 +706,18 @@ class GrowBotHeadingEnv(gym.Env):
         if r.wobble:
             # Free-joint angular velocity is in the body frame: x is roll, y is pitch.
             terms["wobble"] = -r.wobble * float(d.qvel[3] ** 2 + d.qvel[4] ** 2)
+        img_x, img_y, in_frame = self.face_image_deg()
+        # Aim is judged on the picture averaged over about a second, a few waddle steps
+        # (Jeff, 2026-11-15): a gait's periodic sway is fine while the average points at
+        # the face. The face being in the picture is judged every frame, since the
+        # tracker has to see it.
+        k_aim = min(1.0, CONTROL_DT / max(r.frame_avg_s, CONTROL_DT))
+        self._img_x_avg += k_aim * (float(np.clip(img_x, -90.0, 90.0)) - self._img_x_avg)
+        if r.frame and in_frame:
+            centre = 1.0
+            if self.speed_cmd == 0.0:
+                centre = max(0.0, 1.0 - (self._img_x_avg / (r.frame_hfov_deg / 2)) ** 2)
+            terms["frame"] = r.frame * centre
         if r.stance:
             miss = math.degrees(math.acos(max(-1.0, min(1.0, tall_cos))))
             terms["stance"] = r.stance * math.exp(-((miss / r.stance_tol_deg) ** 2))
@@ -738,6 +759,10 @@ class GrowBotHeadingEnv(gym.Env):
             "speed_cmd": self.speed_cmd,
             "tilt_cmd": self.tilt_cmd,
             "want_lift_deg": self._want_lift,
+            "in_frame": in_frame,
+            "image_x_deg": img_x,
+            "image_y_deg": img_y,
+            "image_x_avg_deg": self._img_x_avg,
         }
         return self._obs(), reward, fell, truncated, info
 
@@ -837,6 +862,36 @@ class GrowBotHeadingEnv(gym.Env):
         if self._lens:
             return self._lens_deg(xm, tail)
         return tail if self._camera_first else nose
+
+    def person_deg(self) -> float:
+        """The compass direction of the person: the target for a camera-first skill, half
+        a turn from it for a nose-first one, which walks away from them."""
+        return self.target_deg if self._camera_first else wrap_deg(self.target_deg + 180.0)
+
+    def face_image_deg(self) -> tuple[float, float, bool]:
+        """Where this target's virtual face falls in the phone's picture: degrees left of
+        and above its centre, and whether it is inside the frame. The same image axes as
+        follow.true_sighting."""
+        axis = self.lens_dir()
+        cam = self.data.xpos[self._torso] + LENS_OFFSET_M * axis
+        az = math.radians(self.person_deg())
+        face = np.array(
+            [
+                self.data.qpos[0] + self._face_dist * math.cos(az),
+                self.data.qpos[1] + self._face_dist * math.sin(az),
+                self._face_z,
+            ]
+        )
+        v = face - cam
+        left = np.array([-axis[1], axis[0], 0.0])
+        left /= max(float(np.linalg.norm(left)), 1e-9)
+        up = np.cross(axis, left)
+        ahead = float(v @ axis)
+        x = math.degrees(math.atan2(float(v @ left), ahead))
+        y = math.degrees(math.atan2(float(v @ up), ahead))
+        r = self.cfg.reward
+        inside = ahead > 0 and abs(x) <= r.frame_hfov_deg / 2 and abs(y) <= r.frame_vfov_deg / 2
+        return x, y, inside
 
     def _stop_drift_free(self) -> float:
         r = self.cfg.reward

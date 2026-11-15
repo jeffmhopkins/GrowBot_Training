@@ -66,7 +66,7 @@ def test_evaluate_runs_the_exported_file(tiny_run: Path) -> None:
     pol = JsonPolicy(tiny_run / "policy_heading_walk.json")
     env = env_for(pol)
     m = run_episode(env, pol, seed=0, options={"target_error_deg": 90.0})
-    assert set(m) == {"toward", "speed", "over_pct", "err", "turn_s", "fell"}
+    assert set(m) == {"toward", "speed", "over_pct", "err", "turn_s", "frame_pct", "img_x", "fell"}
 
 
 def test_replay_page_embeds_the_walks(tiny_run: Path, tmp_path: Path) -> None:

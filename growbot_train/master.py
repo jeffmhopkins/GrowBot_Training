@@ -663,6 +663,7 @@ def drive(
         master.reset()
     mode = None
     along, errs, speed = [], [], []
+    framed, img_x = [], []
     turn_s = float("nan")
     fell = False
     for _ in range(n):
@@ -681,6 +682,8 @@ def drive(
         along.append(info["v_along"])
         speed.append(info["speed"])
         errs.append(err)
+        framed.append(info["in_frame"])
+        img_x.append(abs(info["image_x_avg_deg"]) if info["in_frame"] else math.nan)
         if math.isnan(turn_s) and err < 15:
             turn_s = env.step_index * CONTROL_DT
         if term:
@@ -692,6 +695,8 @@ def drive(
         "speed": float(np.mean(speed[half:])),
         "err": float(np.mean(errs[half:])),
         "turn_s": turn_s,
+        "frame_pct": 100.0 * float(np.mean(framed)),
+        "img_x": float(np.nanmean(img_x[half:])) if any(framed[half:]) else math.nan,
         "fell": float(fell),
     }
 
@@ -743,13 +748,14 @@ def format_report(report: dict[str, Any]) -> str:
     lines = []
     for mode in MODES:
         lines.append(f"-- {mode}")
-        lines.append(" start  who       toward   speed    err  turn_s  falls")
+        lines.append(" start  who       toward   speed    err  turn_s  frame%  img_x  falls")
         for start, row in report[mode].items():
             for who in ("teacher", "master"):
                 r = row[who]
                 lines.append(
                     f"{start:>6}  {who:<8} {r['toward']:7.4f} {r['speed']:7.4f} "
-                    f"{r['err']:6.1f} {r['turn_s']:7.2f}  {r['falls']}/{r['runs']}"
+                    f"{r['err']:6.1f} {r['turn_s']:7.2f}  {r['frame_pct']:6.1f} "
+                    f"{r['img_x']:6.1f}  {r['falls']}/{r['runs']}"
                 )
     for who in ("teacher", "master"):
         sw = report["switch"][who]
