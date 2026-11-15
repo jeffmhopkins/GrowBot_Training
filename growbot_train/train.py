@@ -160,6 +160,9 @@ class Diagnostics(BaseCallback):
                     "want_lift_deg": self.sums["want_lift_deg"] / self.n,
                     "speed_miss": self.sums["speed_miss"] / self.n,
                     "drift_m": self.sums["drift_m"] / self.n,
+                    # Each reward term's mean per tick, so a reward change can be judged
+                    # while the run is live, not only from its logs afterwards.
+                    **{k: v / self.n for k, v in self.sums.items() if k.startswith("term_")},
                     **self._load(),
                 },
             )

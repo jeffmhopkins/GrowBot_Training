@@ -145,3 +145,28 @@ def test_the_cpu_meter_counts_the_run_and_its_trainer() -> None:
     got = meter.read()
     assert 0.2 < got["trainer_cpu"] <= 1.5
     assert got["cpu_cores"] >= got["trainer_cpu"] * 0.9
+
+
+def test_the_live_chart_carries_each_reward_term(tmp_path: Path) -> None:
+    from stable_baselines3 import PPO
+    from stable_baselines3.common.vec_env import DummyVecEnv
+
+    from growbot_train.env import GrowBotHeadingEnv
+    from growbot_train.train import Diagnostics
+
+    cfg = Config()
+    cfg.task.episode_seconds = 2.0
+    live = Live(tmp_path, cfg, total_steps=64)
+    model = PPO(
+        "MlpPolicy",
+        DummyVecEnv([lambda: GrowBotHeadingEnv(cfg)]),
+        n_steps=32,
+        batch_size=32,
+        n_epochs=1,
+        seed=0,
+        policy_kwargs={"net_arch": {"pi": [8], "vf": [8]}},
+        device="cpu",
+    )
+    model.learn(64, callback=Diagnostics(live))
+    last = _progress(tmp_path)["history"][-1]
+    assert "term_progress" in last and "term_heading" in last
