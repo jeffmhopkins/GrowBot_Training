@@ -555,7 +555,7 @@ bar of under 1 in 50. Its teachers, driving the same scripts, fell 3 times in 10
 the per-mode runs only lift-fall-2's walk falls, master or teacher, so the master gets
 better as the teachers do.
 
-The current master is `policies/master-2`: look-v9, lift-fall-2 and nose-walk-1, with
+`policies/master-2` (distilled locally before the box job) is look-v9, lift-fall-2 and nose-walk-1, with
 backing handed to look past 45 degrees and twice the episodes per round (128). Two runs
 at 64 episodes each fell once in five walking from +25 and walked about 20% slower there; at 128
 it matches its teachers:
@@ -595,7 +595,7 @@ Its limits, until the walks it learns from are retrained:
 
 The current master is `policies/master-v2`, "Master v2" under Trained walks on the Body
 tab (growbot_master run v2): look-v9, lift-fall-3 and nose-walk-1 on the robot as built
-to the STL, with the hold below. It walks 5.5-5.8 cm/s (v1 4.9), aims 2.9-4.3 degrees off
+to the STL, with the hold below. It walks 5.5-5.8 cm/s (v1 4.7-5.0), aims 2.9-4.3 degrees off
 after a turn, drifts 2.7-4.8 cm over the last 15 s of a look, and fell in none of 45
 runs or 181 mode switches (its teachers in none of 170). Master v1
 (`policies/master-v1`, run v1) is the box's first master run, from the same teachers as
