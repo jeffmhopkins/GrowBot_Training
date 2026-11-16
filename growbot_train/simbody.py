@@ -33,6 +33,8 @@ from growbot_train.env import CONTROL_DT, CTRL_LIMIT, LENS_OFFSET_M, body_xml
 ASSETS = Path(__file__).parent / "sim_assets"
 _HAIR = "hair.png"
 ROT90 = -1
+# The face plate's centre in the head's frame (the photo side, turned to the robot).
+FACE_OFFSET = np.array([-0.085, 0.0, 0.0])
 # The nominal servo between the chip's write and the joint, as the training env's
 # unrandomised body has it (env.py _draw): a slew limit and a first-order lag. The relay's
 # delay is the harness's to add, since the page's own timing is real.
@@ -181,7 +183,7 @@ def _scene_xml(body: str, face_png: str) -> str:
         name="face",
         type="box",
         size="0.004 0.11 0.11",
-        pos="-0.085 0 0",
+        pos=" ".join(f"{c:g}" for c in FACE_OFFSET),
         material="face",
         contype="0",
         conaffinity="0",
@@ -226,7 +228,14 @@ class SimBody:
         face = face_png or ASSETS / "face_stylegan.png"
         import imageio.v3 as iio
 
-        img = iio.imread(face)[:, :, :3]
+        img = iio.imread(face)
+        if img.ndim == 2:
+            img = np.stack([img] * 3, axis=-1)
+        img = img[:, :, :3]
+        side = min(img.shape[:2])
+        # Centre-cropped square: a cube texture's faces must be.
+        y0, x0 = (img.shape[0] - side) // 2, (img.shape[1] - side) // 2
+        img = img[y0 : y0 + side, x0 : x0 + side]
         # The cube's -x face shows its picture a quarter turn round from upright.
         photo = iio.imwrite("<bytes>", np.ascontiguousarray(np.rot90(img, ROT90)), extension=".png")
         # A cube texture's six pictures must be one size.
@@ -239,6 +248,7 @@ class SimBody:
         self._torso = m.body("base_body").id
         self._person = m.body_mocapid[m.body("person").id]
         self._trunk = m.body_mocapid[m.body("person_body").id]
+        self._face_body = m.body("person").id
         self._accel = m.sensor_adr[m.sensor("accel").id]
         self._gyro = m.sensor_adr[m.sensor("gyro").id]
         self._substeps = max(1, round(CONTROL_DT / m.opt.timestep))
@@ -260,6 +270,7 @@ class SimBody:
             raise ValueError(f"start must be one of {STARTS}, not {start!r}")
         m, d = self.model, self.data
         mujoco.mj_resetData(m, d)
+        self._push = None
         yaw = math.radians(yaw_deg)
         if start == "standing":
             pitch, roll, legs = math.radians(35.0), 0.0, np.zeros(2)
@@ -302,6 +313,7 @@ class SimBody:
         d = self.data
         if not p.present:
             d.mocap_pos[self._person] = d.mocap_pos[self._trunk] = [0.0, 50.0, -10.0]
+            mujoco.mj_kinematics(self.model, d)
             return
         d.mocap_pos[self._person] = d.mocap_pos[self._trunk] = [p.x, p.y, p.face_z]
         rx, ry = d.qpos[0] - p.x, d.qpos[1] - p.y
@@ -314,6 +326,8 @@ class SimBody:
         d.mocap_quat[self._person] = q
         body_yaw = math.atan2(-ry, -rx)
         d.mocap_quat[self._trunk] = [math.cos(body_yaw / 2), 0.0, 0.0, math.sin(body_yaw / 2)]
+        # So a picture taken before the next step already shows them where they now stand.
+        mujoco.mj_kinematics(self.model, d)
 
     # ------------------------------------------------------------------ the wire
 
@@ -337,7 +351,6 @@ class SimBody:
         if self.servo.limp:
             m.actuator_gainprm[:, 0] = 0.0
             m.actuator_biasprm[:, :3] = 0.0
-            # A switched-off MG90's gearbox still drags.
             self.data.ctrl[:] = 0.0
         else:
             m.actuator_gainprm[:, 0] = self._gain
@@ -348,10 +361,10 @@ class SimBody:
 
     def push(self, force_n: tuple[float, float, float], secs: float = 0.1) -> None:
         """A shove on the torso, world-frame newtons, held for ``secs``."""
-        self._push = (np.asarray(force_n, dtype=float), self.data.time + secs)
+        self._push = (np.asarray(force_n, dtype=float), secs)
 
     def lift(self, height_m: float = 0.1) -> None:
-        """Pick the robot straight up, as a hand does, keeping its attitude."""
+        """Move the robot straight up, keeping its attitude, and let go: it drops back."""
         self.data.qpos[2] += height_m
         self.data.qvel[:] = 0.0
 
@@ -368,10 +381,11 @@ class SimBody:
         self._hold(s.motor)
         for _ in range(self._substeps):
             if self._push is not None:
-                f, until = self._push
-                d.xfrc_applied[self._torso, :3] = f if d.time < until else 0.0
-                if d.time >= until:
-                    self._push = None
+                f, left = self._push
+                d.xfrc_applied[self._torso, :3] = f
+                self._push = (f, left - m.opt.timestep) if left > m.opt.timestep else None
+            else:
+                d.xfrc_applied[self._torso, :3] = 0.0
             mujoco.mj_step(m, d)
         if not self.person.present:
             return
@@ -438,7 +452,7 @@ class SimBody:
         cam = m.camera("front").id
         pos = d.cam_xpos[cam]
         rot = d.cam_xmat[cam].reshape(3, 3)
-        face = d.mocap_pos[self._person]
+        face = d.xpos[self._face_body] + d.xmat[self._face_body].reshape(3, 3) @ FACE_OFFSET
         v = rot.T @ (face - pos)
         dist = float(np.linalg.norm(face - pos))
         if v[2] >= 0:
@@ -562,11 +576,11 @@ def serve(sim: SimBody, inp: Any = sys.stdin, out: Any = sys.stdout) -> None:
                     for k in ("l_sign", "r_sign", "l_off_deg", "r_off_deg", "swap")
                     if k in req
                 }
-                sim.wiring = Wiring(**fields)
+                sim.wiring = Wiring(**{**sim.wiring.__dict__, **fields})
             else:
                 reply = {"ok": False, "error": f"unknown op {op!r}"}
-        except (KeyError, TypeError, ValueError) as e:
-            reply = {"ok": False, "error": str(e)}
+        except Exception as e:  # one bad request (or no GL for a camera) answers, never kills it
+            reply = {"ok": False, "error": f"{type(e).__name__}: {e}"}
         out.write(json.dumps(reply) + "\n")
         out.flush()
 

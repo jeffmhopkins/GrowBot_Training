@@ -170,3 +170,31 @@ def test_json_lines_drive_the_same_body() -> None:
     assert replies[0]["state"]["screen_up"]
     assert set(replies[2]["motion"]) == {"accel", "rate", "orientation"}
     assert sim.wiring.swap
+
+
+def test_a_reset_drops_a_shove_still_under_way(sim: SimBody) -> None:
+    sim.reset("standing")
+    sim.push((0.0, 20.0, 0.0), 5.0)
+    sim.tick()
+    sim.reset("standing")
+    for _ in range(25):
+        sim.tick()
+    assert abs(sim.state()["roll_deg"]) < 2
+
+
+def test_a_moved_person_is_drawn_where_they_now_stand(sim: SimBody) -> None:
+    sim.reset("standing")
+    sim.place_person(Person(x=-0.8, y=0.3, face_z=0.6))
+    # The picture is drawn from the bodies' poses, which must follow the move at once.
+    head = sim.model.body("person").id
+    np.testing.assert_allclose(sim.data.xpos[head], [-0.8, 0.3, 0.6])
+
+
+def test_a_failing_request_answers_and_the_server_lives_on() -> None:
+    sim = SimBody()
+    sim.camera = lambda fmt="jpeg": (_ for _ in ()).throw(RuntimeError("no GL"))  # type: ignore[method-assign]
+    out = io.StringIO()
+    serve(sim, io.StringIO('{"op": "camera"}\n{"op": "release"}\n'), out)
+    replies = [json.loads(line) for line in out.getvalue().splitlines()]
+    assert [r["ok"] for r in replies] == [False, True]
+    assert "no GL" in replies[0]["error"]
