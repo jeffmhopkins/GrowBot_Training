@@ -40,6 +40,16 @@ slower speeds and stops come in over the first 8M steps. The evaluation adds a s
 Downloads and the Live card work as for the heading walk."""
 
 [[job]]
+name = "growbot_nose_walk_smooth"
+title = "GrowBot nose walk, smoothed (the master's backing teacher)"
+config = "configs/nose_walk_smooth.toml"
+est_hours = "1-3 h"
+notes = """nose-walk-1's own config with jerky leg commands charged 3x harder \
+(configs/nose_walk_smooth.toml): the same nose-first backing at a commanded speed, without \
+the fast leg chatter the real servos shake on. Downloads and the Live card work as for the \
+heading walk."""
+
+[[job]]
 name = "growbot_camera_walk"
 title = "GrowBot camera walk (tail first, toward the camera's view)"
 config = "configs/camera_walk.toml"
