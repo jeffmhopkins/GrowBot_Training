@@ -1,5 +1,5 @@
 # GrowBot nose-first walk, smoothed: nose-walk-1's own config (policies/nose-walk-1/
-# config.json, run 6e69e32c, the master's backing teacher) with one change, so the new run
+# config.json, run 6e69e32c, the master's first backing teacher) with one change, so the new run
 # compares with it line for line. On the real robot that policy's leg commands chattered
 # 30-60 degrees a tick (most of their power above 4 Hz), which the sim's servo lag hides
 # and the real servos shake on. configs/nose_walk.toml is the later waddle-based walk,

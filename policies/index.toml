@@ -37,11 +37,11 @@ notes = "Stand-in for the phone app's backing mode: walks nose first (away from 
 
 [[policy]]
 slug = "nose-walk-2"
-title = "Nose walk smooth v1: back away, less leg chatter"
+title = "Nose walk, smoothed v1: back away, less leg chatter"
 job = "growbot_nose_walk_smooth"
 file = "policies/nose-walk-2/policy_nose_walk.json"
 run = "37a1a118"
-notes = "The backing teacher now: nose-walk-1's own config with jerky leg commands charged 3x harder. Its legs change about a third less per tick (18-21 degrees, against 27-33), and it does better than nose-walk-1 too: 1.9 cm/s toward the target (1.7) and 22 degrees off on random bodies (34), no falls in 36 randomised evaluations. Still slow to turn from dead behind."
+notes = "The backing teacher now: nose-walk-1's own config with jerky leg commands charged 3x harder. Its legs change about a third less per tick (18-21 degrees, against 27-33), and it aims better than nose-walk-1: 22 degrees off on random bodies (34), no falls in 36 randomised evaluations. It backs a little slower at full speed, 1.6 cm/s when asked 3 (nose-walk-1 1.9), though faster averaged over its turns. Still slow to turn from dead behind."
 
 [[policy]]
 slug = "lift-fall-1"

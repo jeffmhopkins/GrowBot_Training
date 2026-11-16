@@ -575,8 +575,9 @@ it matches its teachers:
 The 22.5M nose walk (7f4fe43d), tried as the backing teacher, kept the body on course
 but swung the camera about 35 degrees a step and lost the face (19% in the picture for a
 seated face at 2 m), so nose-walk-1 stays. Its smoothed rerun, nose-walk-2 (`configs/nose_walk_smooth.toml`), replaces it as
-the backing teacher from the next master on: legs about a third calmer, 1.9 cm/s and 22
-degrees off on random bodies (nose-walk-1 1.7 and 34). The lift and fall retrained the same
+the backing teacher from the next master on: legs about a third calmer (18-21 degrees a tick in
+`master`-style sim rollouts, against 27-33) and 22 degrees off on random bodies (nose-walk-1
+34), though it backs 1.6 cm/s at full speed where nose-walk-1 did 1.9. The lift and fall retrained the same
 way (action_rate 0.1, run 69ed7af1) came out only a tenth calmer with the same walk, so
 lift-fall-3 stays.
 
