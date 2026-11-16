@@ -28,7 +28,7 @@ build-backend = "setuptools.build_meta"
 include = ["growbot_train*"]
 
 [tool.setuptools.package-data]
-growbot_train = ["bodies/*.xml", "bodies/LICENSE-upstream", "replay_template.html"]
+growbot_train = ["bodies/*.xml", "bodies/LICENSE-upstream", "replay_template.html", "sim_assets/*"]
 
 [tool.ruff]
 line-length = 100

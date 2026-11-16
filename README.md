@@ -161,6 +161,30 @@ The `walk/` graphs are the useful ones: `v_along` (speed toward the target, shou
 to near the cap), `abs_err_deg` (should fall), `speed` (should stay under the cap) and
 `falls_per_1k_steps` (should stay near zero), plus one graph per reward term.
 
+### The whole creature: the sim body (Dave simulator)
+
+`growbot_train/simbody.py` is the simulated robot as the JBrain2 creature page sees it, for
+running the real page (Dave's brain, the body runner, the follower, face tracking) end to end
+with no phone or robot. JBrain2's `growbot/sim/` drives it. Where training steps the body in
+policy actions, the sim body speaks the page's terms:
+
+- **Servos** take the relay wire's absolute degrees (0 to 180, 90 neutral) through the
+  physical wiring: the stock build turns the right horn with the wire and the left against
+  it, which body.json's calibration undoes. `Wiring(swap=True)` crosses the pins, the way a
+  robot that moonwalks is wired. `release()` goes limp, as the chip's stop and dead-man do.
+- **Motion** comes out as the phone's `devicemotion` and `deviceorientation` would report
+  it, in the conventions JBrain2's `growbot-box.js` (`bodyAccel`, `bodyGyro`) reads.
+- **The camera** renders the phone's front camera (portrait, 60 degrees across, as the
+  robot's phone measured), in a room with a person whose face is a photo. The face is a
+  generated one (`sim_assets/`, public domain); nobody real.
+- **Starts:** `standing`; `lying`, flat with both legs stretched out past the nose, from
+  which upstream's stock get-up stands it; and `back`, flipped over, screen down.
+- **Disturbances:** `push` (a shove, newtons) and `lift`.
+
+`python -m growbot_train.simbody --serve` takes the same over JSON lines on stdin, so a
+harness in any language steps it. Rendering headless needs software OpenGL:
+`MUJOCO_GL=osmesa` with `libosmesa6` installed (CI does this).
+
 ### How long it takes
 
 The default run is 30 million steps, about 330 hours of simulated walking. In the
@@ -856,6 +880,7 @@ doing only if the CPU runs prove too slow.
 | `growbot_train/export.py` | Trained network to the app's JSON, with a match check |
 | `growbot_train/evaluate.py` | Scores an exported JSON, optional robustness sweep |
 | `growbot_train/follow.py` | The follow-me harness: person, camera model, tracker, follower, voice script |
+| `growbot_train/simbody.py`, `growbot_train/sim_assets/` | The sim body for JBrain2's Dave simulator: wire servos, phone motion, a rendered front camera |
 | `growbot_train/master.py` | Distils the skills into one master policy and scores it against them |
 | `growbot_train/replay.py` | Writes the browser 3D replay page (`replay_template.html`) |
 | `growbot_train/view.py` | Live MuJoCo viewer with a steerable target, or an mp4 |

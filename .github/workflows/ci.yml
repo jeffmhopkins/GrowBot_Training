@@ -23,6 +23,8 @@ jobs:
           mkdir -p /tmp/site
           curl -fsSL -o /tmp/site/growbot_runner.js https://raw.githubusercontent.com/jeffmhopkins/JBrain2/main/growbot/site/growbot_runner.js
           curl -fsSL -o /tmp/site/growbot_policy.js https://raw.githubusercontent.com/jeffmhopkins/JBrain2/main/growbot/site/growbot_policy.js
-      - run: GROWBOT_SITE=/tmp/site .venv/bin/python -m pytest -q -rs
+      # Software OpenGL, so the simulated phone camera (simbody.py) renders headless.
+      - run: sudo apt-get update -q && sudo apt-get install -y -q libosmesa6
+      - run: GROWBOT_SITE=/tmp/site MUJOCO_GL=osmesa PYOPENGL_PLATFORM=osmesa .venv/bin/python -m pytest -q -rs
       - name: smoke-train
         run: .venv/bin/python -m growbot_train.train --out runs/ci --steps 4096 --envs 2 --set train.n_steps=1024 --set train.batch_size=512
