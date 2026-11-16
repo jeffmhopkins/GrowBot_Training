@@ -36,6 +36,14 @@ run = "6e69e32c"
 notes = "Stand-in for the phone app's backing mode: walks nose first (away from the camera) at a commanded speed, though slower than asked (1.9 cm/s when asked 3, 0.5 when asked to stop). Holds a heading within about 90 degrees but rarely turns from dead behind; no falls in its 36 randomised evaluations, 2 in 60 on the odd bodies (slow relay, nose-heavy), and short-legged or nose-heavy bodies fail to turn from 90 degrees."
 
 [[policy]]
+slug = "nose-walk-2"
+title = "Nose walk smooth v1: back away, less leg chatter"
+job = "growbot_nose_walk_smooth"
+file = "policies/nose-walk-2/policy_nose_walk.json"
+run = "37a1a118"
+notes = "The backing teacher now: nose-walk-1's own config with jerky leg commands charged 3x harder. Its legs change about a third less per tick (18-21 degrees, against 27-33), and it does better than nose-walk-1 too: 1.9 cm/s toward the target (1.7) and 22 degrees off on random bodies (34), no falls in 36 randomised evaluations. Still slow to turn from dead behind."
+
+[[policy]]
 slug = "lift-fall-1"
 title = "Lift and fall v2: walk tall toward a heading"
 job = "growbot_lift_fall"

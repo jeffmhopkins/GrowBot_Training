@@ -1,0 +1,4 @@
+policy: policy_nose_walk.json
+obs_size: 60
+max |json - network|: 4.735e-07 (tolerance 1e-05)
+EXPORT OK

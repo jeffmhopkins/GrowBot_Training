@@ -85,7 +85,7 @@ ACTION_FILTER = {
 DEFAULT_TEACHERS = {
     "look": "policies/look-v9/policy_look.json",
     "walk": "policies/lift-fall-3/policy_lift_fall.json",
-    "back": "policies/nose-walk-1/policy_nose_walk.json",
+    "back": "policies/nose-walk-2/policy_nose_walk.json",
 }
 # The robot is built as the STL (Jeff, 2026-11-15), as lift-fall-3 trained: only the weight
 # and its balance point vary. Look and the nose walk trained on wider bodies.

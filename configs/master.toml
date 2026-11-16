@@ -4,7 +4,7 @@
 [master]
 look = "policies/look-v9/policy_look.json"
 walk = "policies/lift-fall-3/policy_lift_fall.json"
-back = "policies/nose-walk-1/policy_nose_walk.json"
+back = "policies/nose-walk-2/policy_nose_walk.json"  # nose-walk-1 retrained with jerky leg commands charged 3x (configs/nose_walk_smooth.toml): about a third less chatter, aims 22 degrees off where it was 34
 episodes = 128  # minute-long episodes per round; 64 walked about 20% slow from +25
 rounds = [1.0, 0.5, 0.25, 0.0, 0.0]  # how often the teachers drive, per DAgger round
 epochs = 40

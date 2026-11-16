@@ -1,0 +1,218 @@
+{
+  "name": "nose_walk",
+  "reward": {
+    "progress": 2.0,
+    "heading": 0.5,
+    "heading_width_deg": 0.0,
+    "progress_width_deg": 0.0,
+    "arrive": 0.0,
+    "arrive_within_deg": 15.0,
+    "arrive_hold_s": 1.0,
+    "arrive_by_s": 20.0,
+    "speed_cap_m_s": 0.03,
+    "speed_window_s": 1.0,
+    "overspeed": 4.0,
+    "tilt": 1.0,
+    "fall": 10.0,
+    "action_rate": 0.15,
+    "effort": 0.01,
+    "stance": 0.0,
+    "stance_tol_deg": 6.0,
+    "back_lean": 0.0,
+    "back_lean_margin_deg": 12.0,
+    "stop_drift_free": 0.5,
+    "stop_drift_free_final": -1.0,
+    "anchor": 0.0,
+    "anchor_free_m": 0.02,
+    "wobble": 0.0,
+    "frame": 0.0,
+    "frame_avg_s": 1.0,
+    "frame_hfov_deg": 60.0,
+    "frame_vfov_deg": 75.0,
+    "frame_distance_m": [
+      0.7,
+      2.5
+    ],
+    "frame_face_height_m": [
+      1.1,
+      1.65
+    ],
+    "turn": 0.0
+  },
+  "task": {
+    "body": "build",
+    "episode_seconds": 60.0,
+    "initial_error_deg": 180.0,
+    "retarget_every_s": [
+      10.0,
+      25.0
+    ],
+    "retarget_max_deg": 120.0,
+    "gait_hz": 1.0,
+    "residual_gait": "",
+    "residual_rad": 0.5,
+    "residual_steer_deg": 0.0,
+    "residual_steer_rad": 0.5,
+    "history_frames": 5,
+    "action_to_rad": 1.0,
+    "fall_tilt_deg": 55.0,
+    "facing": "nose",
+    "heading_from": "body",
+    "stand_lift_deg": 0.0,
+    "lying_start_prob": 0.0,
+    "lying_leg_rad": [
+      -0.95,
+      -0.75
+    ],
+    "back_fall_pitch_deg": 0.0,
+    "speed": "command",
+    "speed_command_every_s": [
+      6.0,
+      15.0
+    ],
+    "speed_stop_prob": 0.15,
+    "speed_back_min": 0.0,
+    "speed_ramp_steps": 8000000,
+    "speed_reward": "progress",
+    "tilt_command": false,
+    "tilt_lift_deg": [
+      -30.0,
+      6.0
+    ],
+    "tilt_command_every_s": [
+      3.0,
+      8.0
+    ],
+    "tilt_tall_prob": 0.5,
+    "surfaces": [
+      "pla",
+      "pla",
+      "pla",
+      "pla"
+    ],
+    "floors": [
+      "hard",
+      "carpet"
+    ],
+    "start_pitch_deg": 35.0,
+    "servo_torque_nm": 0.25
+  },
+  "randomization": {
+    "enabled": true,
+    "mass_scale": [
+      0.8,
+      1.25
+    ],
+    "com_x_m": [
+      -0.03,
+      0.03
+    ],
+    "com_y_m": [
+      -0.015,
+      0.015
+    ],
+    "com_z_m": [
+      -0.01,
+      0.015
+    ],
+    "leg_length_scale": [
+      0.85,
+      1.15
+    ],
+    "leg_asymmetry": [
+      0.96,
+      1.04
+    ],
+    "servo_gain_scale": [
+      0.75,
+      1.25
+    ],
+    "friction": [
+      0.2,
+      2.2
+    ],
+    "surface_friction_scale": [
+      0.7,
+      1.3
+    ],
+    "floor_friction_scale": [
+      0.5,
+      1.6
+    ],
+    "servo_slew_rad_s": [
+      8.7,
+      10.5
+    ],
+    "servo_lag_s": [
+      0.015,
+      0.035
+    ],
+    "relay_delay_s": [
+      0.02,
+      0.16
+    ],
+    "servo_torque_scale": [
+      0.5,
+      1.2
+    ],
+    "trim_err_rad": 0.087,
+    "sensor_delay_s": [
+      0.0,
+      0.12
+    ],
+    "foot_width_scale": [
+      0.57,
+      1.0
+    ],
+    "relay_drop_prob": 0.08,
+    "imu_tilt_rad": 0.15,
+    "accel_noise_m_s2": 0.3,
+    "gyro_noise_rad_s": 0.1,
+    "gyro_bias_rad_s": 0.02,
+    "heading_noise_deg": 3.0,
+    "heading_drift_deg_per_s": 0.2,
+    "heading_refresh_ticks": [
+      1,
+      6
+    ],
+    "push_every_s": [
+      0.0,
+      0.0
+    ],
+    "push_pitch_rad_s": 0.0,
+    "ramp_steps": 0,
+    "ramp_from": 0.15,
+    "ramp_to": 1.0
+  },
+  "train": {
+    "total_steps": 30000000,
+    "n_envs": 0,
+    "envs_per_worker": 4,
+    "n_steps": 64,
+    "batch_size": 4096,
+    "n_epochs": 5,
+    "learning_rate": 0.0003,
+    "gamma": 0.99,
+    "gae_lambda": 0.95,
+    "clip_range": 0.2,
+    "ent_coef": 0.0,
+    "log_std_init": -0.5,
+    "policy_layers": [
+      128,
+      128
+    ],
+    "value_layers": [
+      256,
+      256
+    ],
+    "checkpoint_every_steps": 2000000,
+    "live_replay_every_steps": 500000,
+    "seed": 0,
+    "warm_gait": "",
+    "warm_gait_samples": 200000,
+    "warm_gait_epochs": 40,
+    "warm_gait_steer": false,
+    "warm_gait_deadband_deg": 10.0,
+    "warm_gait_tilt_offset": []
+  }
+}
