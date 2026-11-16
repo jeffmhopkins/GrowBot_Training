@@ -602,7 +602,9 @@ the phone sends `sent + alpha x (net - sent)`, alpha 0.7 while `cmd_forward` is 
 robot's. On Master v2 it cuts the standing chatter from about 10 to 5 degrees a tick and the
 walk's from 26 to 20, keeps the walk at 5.6-5.8 cm/s and turns 3.1-3.7 degrees off with
 0.9-1.4 cm of drift over a look's last 15 s (unfiltered 2.7-4.8); backing is 2.6-2.9 cm/s
-(unfiltered 2.8-2.9), and no falls in 45 runs or 181 switches. Look-v9 alone at 0.4-0.5 aims
+(unfiltered 2.8-2.9), and no falls in 45 runs or in 213 mode switches driven filtered
+(`Rollout.episode` filters an exported master too). Distillation still trains on the
+teachers' unfiltered commands; the filter is only scored once a master declares it. Look-v9 alone at 0.4-0.5 aims
 as well as unfiltered. The heavier `reward.action_rate` the look retrain tried (0.5) cut
 its chatter only a quarter and doubled its aim error.
 

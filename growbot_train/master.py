@@ -455,6 +455,7 @@ class Rollout:
             t.reset()
         self.hold.reset()
         hist = np.zeros((FRAMES, len(STUDENT_CHANNELS)))
+        sent: np.ndarray | None = None
         obs, labels, modes = [], [], []
         mode = None
         switches = held = 0
@@ -480,6 +481,14 @@ class Rollout:
                 drive = label
             else:
                 drive = np.clip(runner_forward(student, x), -SQUASH, SQUASH)
+                # An exported master runs filtered, as on the phone (the switch test). The
+                # students DAgger trains have no filter yet: they learn the teachers'
+                # unfiltered commands, and the filter is scored only once it is declared.
+                filt = student.get("obs_spec", {}).get("action_filter")
+                if filt and sent is not None:
+                    k = filt["forward" if s.forward > 0 else "otherwise"]
+                    drive = sent + k * (drive - sent)
+            sent = drive
             _, _, term, _, _ = env.step(np.arctanh(drive))
             if term:
                 fell = True
@@ -747,8 +756,8 @@ SCENARIOS = {
 
 
 class MasterRunner:
-    """The master as the phone runs it, its declared action filter included, so every
-    score here is the robot's."""
+    """The master as the phone runs it, its declared action filter included (as
+    Rollout.episode does for the switch test), so every score is the filtered robot's."""
 
     def __init__(self, policy: dict[str, Any], teachers: dict[str, Teacher]) -> None:
         self.policy = policy
