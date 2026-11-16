@@ -106,3 +106,11 @@ job = "growbot_master"
 file = "policies/master-v2/policy_master.json"
 run = "aa884b2d"
 notes = "The master to drive now: distilled on the box from look-v9, lift-fall-3 and nose-walk-1 on the robot as built to the STL, holding still once it faces the target. Walks 5.5-5.8 cm/s camera first (v1 4.7-5.0), backs 2.8-2.9 cm/s nose first, 3-4 degrees off after a turn, 3-5 cm of drift over the last 15 s of a look; no falls in 45 runs or in 181 mode switches."
+
+[[policy]]
+slug = "master-v3"
+title = "Master v3: turn, walk and back up, calmer backing"
+job = "growbot_master"
+file = "policies/master-v3/policy_master.json"
+run = "8775c248"
+notes = "Master v2's teachers with the smoothed nose walk (nose-walk-2) for backing, and the same leg low-pass. Turns and walks as v2 does (5.5-5.8 cm/s, 2.6-3.7 degrees off after a turn); backs with about a third less leg chatter, but slower (2.4 cm/s, v2 2.9) and wider (12 degrees off, v2 7). Kept to try on the robot if v2's backing shakes; Master v2 stays the one to drive. No falls in 45 runs or 174 mode switches."

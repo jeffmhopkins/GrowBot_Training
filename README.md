@@ -613,6 +613,13 @@ teachers' unfiltered commands; the filter is only scored once a master declares 
 as well as unfiltered. The heavier `reward.action_rate` the look retrain tried (0.5) cut
 its chatter only a quarter and doubled its aim error.
 
+`policies/master-v3` ("Master v3", growbot_master run 8775c248) is the same distillation
+with nose-walk-2 backing, under the filter. It turns and walks as Master v2 does (5.5-5.8
+cm/s, 2.6-3.7 degrees off after a turn, no falls in 45 runs or 174 switches) and backs with
+about a third less leg chatter (10 degrees a tick against 16), but slower (2.4 cm/s against
+2.9) and wider (12 degrees off against 7). Backing is the follower's rarest mode, so it is
+listed to try on the robot if Master v2's backing shakes; Master v2 stays the one to drive.
+
 The current master is `policies/master-v2`, "Master v2" under Trained walks on the Body
 tab (growbot_master run v2): look-v9, lift-fall-3 and nose-walk-1 on the robot as built
 to the STL, with the hold below. It walks 5.5-5.8 cm/s (v1 4.7-5.0), aims 2.9-4.3 degrees off
