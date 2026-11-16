@@ -66,6 +66,22 @@ ACTION_TO_RAD = CTRL_LIMIT  # the student may reach every teacher's swing
 FRAMES = 5
 SQUASH = 0.9993  # tanh(ACTION_LIMIT): the furthest a squashed action reaches
 
+# The teachers' leg commands chatter 20-30 degrees a tick, mostly above 4 Hz: the sim's
+# servo lag hid it and the real servos shook (body test, 2026-11-16). A low-pass between
+# the net and the servos cuts that 2-3x and costs Master v2 nothing in sim at these rates:
+# standing turns at 0.5 aim as well as unfiltered, and the walk keeps 5.7 of 5.8 cm/s at
+# 0.7 (0.5 halved it, as the lift-and-fall gait needs its fast swing). Retraining look
+# with action_rate 0.5 only cut it a quarter and doubled its aim error.
+ACTION_FILTER = {
+    "forward": 0.7,
+    "otherwise": 0.5,
+    "meaning": (
+        "each tick, sent = previous sent + alpha x (net output - previous sent), on the "
+        "squashed action, from the first output on; alpha is 'forward' while cmd_forward "
+        "is above 0, else 'otherwise'; prev_action_N reads the sent action"
+    ),
+}
+
 DEFAULT_TEACHERS = {
     "look": "policies/look-v9/policy_look.json",
     "walk": "policies/lift-fall-3/policy_lift_fall.json",
@@ -638,6 +654,7 @@ def export_policy(
                     "turns first"
                 ),
             },
+            "action_filter": dict(ACTION_FILTER),
             "cmd_pitch": {
                 "meaning": "camera_height",
                 "range": [-1, 1],
@@ -730,18 +747,29 @@ SCENARIOS = {
 
 
 class MasterRunner:
+    """The master as the phone runs it, its declared action filter included, so every
+    score here is the robot's."""
+
     def __init__(self, policy: dict[str, Any], teachers: dict[str, Teacher]) -> None:
         self.policy = policy
         self.clocks = student_clocks(teachers)
         self.hist = np.zeros((FRAMES, len(STUDENT_CHANNELS)))
+        self.filter = policy.get("obs_spec", {}).get("action_filter")
+        self.sent: np.ndarray | None = None
 
     def reset(self) -> None:
         self.hist[:] = 0
+        self.sent = None
 
     def act(self, s: Senses) -> np.ndarray:
         frame = build_frame(STUDENT_CHANNELS, s, ACTION_TO_RAD, True, self.clocks)
         self.hist = np.concatenate([frame[None], self.hist[:-1]])
-        return np.clip(runner_forward(self.policy, self.hist.reshape(-1)), -SQUASH, SQUASH)
+        a = np.clip(runner_forward(self.policy, self.hist.reshape(-1)), -SQUASH, SQUASH)
+        if self.filter and self.sent is not None:
+            k = self.filter["forward" if s.forward > 0 else "otherwise"]
+            a = self.sent + k * (a - self.sent)
+        self.sent = a
+        return a
 
 
 def drive(

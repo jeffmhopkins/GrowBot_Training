@@ -594,6 +594,18 @@ Its limits, until the walks it learns from are retrained:
   wherever its clock is, which the teacher never trained on. The switch test counts the
   falls that causes.
 
+**The action filter.** On the robot the legs jittered fast (body test, 2026-11-16): the
+teachers' commands swing 20-30 degrees a tick, mostly above 4 Hz, which the sim's servo
+lag hides. The master declares `obs_spec.action_filter` (`master.ACTION_FILTER`): each tick
+the phone sends `sent + alpha x (net - sent)`, alpha 0.7 while `cmd_forward` is above 0 and
+0.5 otherwise, and `MasterRunner` does the same, so every master score is the filtered
+robot's. On Master v2 it cuts the standing chatter from about 10 to 5 degrees a tick and the
+walk's from 26 to 20, keeps the walk at 5.6-5.8 cm/s and turns 3.1-3.7 degrees off with
+0.9-1.4 cm of drift over a look's last 15 s (unfiltered 2.7-4.8); backing is 2.6-2.9 cm/s
+(unfiltered 2.8-2.9), and no falls in 45 runs or 181 switches. Look-v9 alone at 0.4-0.5 aims
+as well as unfiltered. The heavier `reward.action_rate` the look retrain tried (0.5) cut
+its chatter only a quarter and doubled its aim error.
+
 The current master is `policies/master-v2`, "Master v2" under Trained walks on the Body
 tab (growbot_master run v2): look-v9, lift-fall-3 and nose-walk-1 on the robot as built
 to the STL, with the hold below. It walks 5.5-5.8 cm/s (v1 4.7-5.0), aims 2.9-4.3 degrees off
