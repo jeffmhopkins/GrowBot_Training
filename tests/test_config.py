@@ -201,3 +201,20 @@ def test_lift_fall_speed_is_lift_fall_with_a_speed_input() -> None:
     assert path.read_text().count("# CHANGED:") == len(changed)
     assert fast.task.speed == "command" and fast.task.speed_reward == "progress"
     assert fast.task.speed_back_min == 0.0  # backing up is the nose walk's
+
+
+def test_nose_walk_smooth_is_nose_walk_1_with_a_steeper_action_rate() -> None:
+    # The new run must compare with the teacher it replaces, so nothing else may move.
+    path = SHIPPED.with_name("nose_walk_smooth.toml")
+    smooth = config_mod.load(path).to_dict()
+    kept = config_mod.load(SHIPPED.parents[1] / "policies/nose-walk-1/config.json").to_dict()
+    changed = {
+        (section, key)
+        for section, values in smooth.items()
+        if isinstance(values, dict)
+        for key, value in values.items()
+        if kept[section][key] != value
+    }
+    assert changed == {("reward", "action_rate")}
+    assert smooth["reward"]["action_rate"] > kept["reward"]["action_rate"]
+    assert path.read_text().count("# CHANGED:") == len(changed)
