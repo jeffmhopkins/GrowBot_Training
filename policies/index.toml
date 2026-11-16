@@ -20,14 +20,6 @@
 # tests/test_policies_index.py checks this file the way the box does.
 
 [[policy]]
-slug = "look-v6"
-title = "Look v6: turn on the spot to face a target"
-job = "growbot_look"
-file = "policies/look-v6/policy_look.json"
-run = "36d29750"
-notes = "Stand-in for the phone app. Best aim so far (about 16 degrees off on random bodies) but creeps about 1-2 cm/s while turning, and half a turn takes 20-28 s. Some odd bodies (short or long legs, nose-heavy) fall 1 in 3 on big turns."
-
-[[policy]]
 slug = "nose-walk-1"
 title = "Nose walk v3: back away at a commanded speed"
 job = "growbot_nose_walk"
@@ -42,30 +34,6 @@ job = "growbot_nose_walk_smooth"
 file = "policies/nose-walk-2/policy_nose_walk.json"
 run = "37a1a118"
 notes = "The backing teacher now: nose-walk-1's own config with jerky leg commands charged 3x harder. Its legs change about a third less per tick (18-21 degrees, against 27-33), and it aims better than nose-walk-1: 22 degrees off on random bodies (34), no falls in 36 randomised evaluations. It backs a little slower at full speed, 1.6 cm/s when asked 3 (nose-walk-1 1.9), though faster averaged over its turns. Still slow to turn from dead behind."
-
-[[policy]]
-slug = "lift-fall-1"
-title = "Lift and fall v2: walk tall toward a heading"
-job = "growbot_lift_fall"
-file = "policies/lift-fall-1/policy_lift_fall.json"
-run = "ca607df3"
-notes = "Walks tall, camera first, at its 5 cm/s cap (no speed input). About 17 degrees off on random bodies and 4 cm/s toward the target; a quarter turn takes about 5 s. 4 falls in 36 randomised evaluations, half of them on half turns."
-
-[[policy]]
-slug = "lift-fall-1-16m"
-title = "Lift and fall v2 at 16M steps"
-job = "growbot_lift_fall"
-file = "policies/lift-fall-1-16m/policy_lift_fall.json"
-run = "ca607df3"
-notes = "The same run's 16M checkpoint, kept for comparison: about 27 degrees off and 5 falls in 36. The final policy (lift-fall-1) beats it."
-
-[[policy]]
-slug = "look-v7"
-title = "Look v8: turn on the spot to face a target"
-job = "growbot_look"
-file = "policies/look-v7/policy_look.json"
-run = "200aa414"
-notes = "The best look so far: 11.5 degrees off on random bodies from every start including 180, half a turn in about 20 s, creeps 0.7 cm/s, and no falls in 36 randomised evaluations or 153 sweep ones; short-legged, nose-heavy and mis-trimmed bodies end 35-47 degrees off from a quarter turn. Keeps a walking person in view less than look-v6 in the follow-me test (56% vs 68%)."
 
 [[policy]]
 slug = "lift-fall-2"
