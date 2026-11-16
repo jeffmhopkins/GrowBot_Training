@@ -498,3 +498,28 @@ def test_follow_me_runs_the_master_through_the_voice_script_with_two_people() ->
     r = master.follow_me(policy, 1, seconds=20.0, distractor=True)
     assert r["fell"] == 0.0 and r["completed"] == 1.0
     assert 0.0 <= r["wrong_pct"] <= 100.0 and r["in_view_pct"] > 0.0
+
+
+def test_the_runner_low_passes_as_the_policy_declares() -> None:
+    # The phone filters between the net and the servos, so the scores here must too.
+    r = master.Rollout(master.DEFAULT_TEACHERS)
+    policy = json.loads((master.Path("policies/master-1/policy_master.json")).read_text())
+    raw = master.MasterRunner(policy, r.teachers)
+    filt = dict(policy, obs_spec=dict(policy["obs_spec"], action_filter=master.ACTION_FILTER))
+    smooth = master.MasterRunner(filt, r.teachers)
+    r.env.reset(seed=0, options={"retarget": False, "nominal": True})
+    for forward, key in ((0.0, "otherwise"), (1.0, "forward")):
+        raw.reset()
+        smooth.reset()
+        s = master.senses(r.env, forward, 1.0)
+        first = smooth.act(s)
+        assert np.allclose(first, raw.act(s))  # the first output goes straight through
+        net = raw.act(s)
+        k = master.ACTION_FILTER[key]
+        assert np.allclose(smooth.act(s), first + k * (net - first))
+
+
+def test_the_master_declares_its_action_filter() -> None:
+    assert 0 < master.ACTION_FILTER["otherwise"] <= master.ACTION_FILTER["forward"] <= 1
+    shipped = json.loads(master.Path("policies/master-v2/policy_master.json").read_text())
+    assert shipped["obs_spec"]["action_filter"] == master.ACTION_FILTER
