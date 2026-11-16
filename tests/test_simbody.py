@@ -50,6 +50,8 @@ def test_standing_robot_reads_gravity_like_the_training_env(sim: SimBody) -> Non
     np.testing.assert_allclose(acc, d.sensordata[sim._accel : sim._accel + 3], atol=1e-9)
     np.testing.assert_allclose(gyro, d.sensordata[sim._gyro : sim._gyro + 3], atol=1e-9)
     assert np.linalg.norm(acc) == pytest.approx(9.81, abs=0.05)
+    lin = sim.motion()["linear"]
+    assert abs(lin["x"]) + abs(lin["y"]) + abs(lin["z"]) < 0.1  # at rest: no acceleration
     # Nose up: gravity leans onto the body's -x, as a nose-up phone reads it.
     assert acc[0] > 4
 
@@ -168,7 +170,7 @@ def test_json_lines_drive_the_same_body() -> None:
     replies = [json.loads(line) for line in out.getvalue().splitlines()]
     assert [r["ok"] for r in replies] == [True] * 5 + [False, False]
     assert replies[0]["state"]["screen_up"]
-    assert set(replies[2]["motion"]) == {"accel", "rate", "orientation"}
+    assert set(replies[2]["motion"]) == {"accel", "linear", "rate", "orientation"}
     assert sim.wiring.swap
 
 

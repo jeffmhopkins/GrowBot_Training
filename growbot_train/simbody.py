@@ -408,11 +408,14 @@ class SimBody:
         a = d.sensordata[self._accel : self._accel + 3]
         w = np.degrees(d.sensordata[self._gyro : self._gyro + 3])
         accel = {"x": -float(a[1]), "y": float(a[0]), "z": float(a[2])}
+        # devicemotion's `acceleration` is the same reading with gravity taken out.
+        lin = a - self._torso_rot().T @ np.array([0.0, 0.0, G])
+        linear = {"x": -float(lin[1]), "y": float(lin[0]), "z": float(lin[2])}
         rate = {"alpha": -float(w[1]), "beta": float(w[0]), "gamma": float(w[2])}
         # Device axes in the world, columns x, y, z.
         rb = self._torso_rot()
         rd = np.column_stack([-rb[:, 1], rb[:, 0], rb[:, 2]])
-        return {"accel": accel, "rate": rate, "orientation": _w3c_euler(rd)}
+        return {"accel": accel, "linear": linear, "rate": rate, "orientation": _w3c_euler(rd)}
 
     def state(self) -> dict[str, Any]:
         """Where the robot is and how it sits, for scoring a run (never fed to the page)."""
