@@ -150,9 +150,9 @@ def test_each_house_hangs_together(name: str) -> None:
 
 
 def test_the_flat_stands_him_up_at_its_start() -> None:
+    # With no reset of its own, a house puts him down at its start, not the origin.
     sb = SimBody(scene="flat")
     x, y, yaw = sb.layout.start
-    sb.reset("standing", yaw_deg=yaw, x=x, y=y)
     st = sb.state()
     assert 30 < st["pitch_deg"] < 50 and abs(st["x"] - x) < 0.05
     # From the living room to the study is out through its door and in through the study's.
@@ -161,3 +161,5 @@ def test_the_flat_stands_him_up_at_its_start() -> None:
         "study door",
     ]
     assert SimBody().layout is None
+    with pytest.raises(ValueError):
+        sb.layout.route("living room", "attic")

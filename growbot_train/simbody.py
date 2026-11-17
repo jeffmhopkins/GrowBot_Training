@@ -276,7 +276,12 @@ class SimBody:
         self._push: tuple[np.ndarray, float] | None = None
         self.servo = _Servo()
         self.person = Person()
-        self.reset()
+        # A house stands him up where it says he starts; a reset with no x, y is the origin.
+        if self.layout is None:
+            self.reset()
+        else:
+            sx, sy, syaw = self.layout.start
+            self.reset(yaw_deg=syaw, x=sx, y=sy)
 
     # ------------------------------------------------------------------ setup
 

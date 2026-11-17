@@ -100,7 +100,11 @@ class Layout:
         return _distance(self.ITEM[name], x, y)
 
     def route(self, a: str, b: str) -> list[Door]:
-        """The doors from room a to room b, fewest first (empty when they are the same)."""
+        """The doors from room a to room b, fewest first (empty when they are the same).
+        A room the house doesn't have is a caller's typo, so it raises, not returns []."""
+        for r in (a, b):
+            if r not in self.ROOMS:
+                raise ValueError(f"no room {r!r} in this house")
         seen, todo = {a}, [(a, [])]
         while todo:
             room, path = todo.pop(0)
