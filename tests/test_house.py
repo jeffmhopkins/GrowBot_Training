@@ -1,0 +1,95 @@
+import math
+
+import mujoco
+import numpy as np
+import pytest
+
+from growbot_train import house
+from growbot_train.simbody import SimBody
+
+
+@pytest.fixture(scope="module")
+def sim() -> SimBody:
+    return SimBody(scene="house")
+
+
+def test_rooms_and_distances() -> None:
+    assert house.room_at(0.0, 0.0) == "living room"
+    assert house.room_at(1.5, -1.0) == "kitchen"
+    assert house.room_at(9.0, 0.0) == ""
+    piano = house.ITEM["piano"]
+    assert house.distance_to("piano", piano.x, piano.y) == 0.0
+    # Straight out from its front (south), half a metre past the footprint.
+    assert house.distance_to("piano", piano.x, piano.y - piano.hy - 0.5) == pytest.approx(0.5)
+    assert house.distance_to("piano", piano.x - piano.hx - 0.3, piano.y) == pytest.approx(0.3)
+
+
+def test_every_item_stands_inside_its_room() -> None:
+    for it in house.ITEMS:
+        x0, y0, x1, y1 = house.ROOMS[it.room]
+        # Against a wall is inside; a millimetre over it is not.
+        assert x0 - 1e-6 <= it.x - it.hx and it.x + it.hx <= x1 + 1e-6, it.name
+        assert y0 - 1e-6 <= it.y - it.hy and it.y + it.hy <= y1 + 1e-6, it.name
+
+
+def test_the_start_is_clear_and_he_stands(sim: SimBody) -> None:
+    sim.reset("standing")
+    st = sim.state()
+    assert st["screen_up"] and 30 < st["pitch_deg"] < 50
+    for it in house.ITEMS:
+        if it.name != "rug":
+            assert house.distance_to(it.name, st["x"], st["y"]) > 0.5, it.name
+
+
+@pytest.mark.parametrize("yaw", [90.0, 180.0, -135.0])
+def test_a_turned_start_keeps_its_stance(sim: SimBody, yaw: float) -> None:
+    sim.reset("standing", yaw_deg=yaw, x=-1.0, y=0.5)
+    st = sim.state()
+    assert math.isclose(st["nose_deg"] % 360, yaw % 360, abs_tol=1.0)
+    assert 30 < st["pitch_deg"] < 50 and abs(st["roll_deg"]) < 1
+    assert st["x"] == pytest.approx(-1.0, abs=0.03) and st["y"] == pytest.approx(0.5, abs=0.03)
+
+
+def test_a_wall_stops_him(sim: SimBody) -> None:
+    # Set down just inside the west wall and shoved toward it: he ends against it, not
+    # through it, as the bare room's walls (which collide with nothing) would let him.
+    x0 = house.OUTER[0]
+    sim.reset("lying", x=x0 + 0.12, y=1.0)
+    d = sim.data
+    for _ in range(50):
+        d.qvel[0] = -1.0
+        sim.tick()
+    assert sim.state()["x"] > x0
+    wall = sim.model.geom("house_wall_w").id
+    robot = mujoco.mj_name2id(sim.model, mujoco.mjtObj.mjOBJ_BODY, "base_body")
+    root = sim.model.body_rootid[robot]
+    hit = any(
+        wall in (c.geom1, c.geom2)
+        and root
+        in (
+            sim.model.body_rootid[sim.model.geom_bodyid[c.geom1]],
+            sim.model.body_rootid[sim.model.geom_bodyid[c.geom2]],
+        )
+        for c in d.contact[: d.ncon]
+    )
+    assert hit or sim.state()["x"] < x0 + 0.1
+
+
+def test_the_camera_sees_the_room(sim: SimBody) -> None:
+    import imageio.v3 as iio
+
+    sim.reset("standing")
+    img = np.asarray(iio.imread(sim.camera()))
+    # The bookshelf straight ahead: many distinct colours, not a flat wall.
+    assert len(np.unique(img.reshape(-1, 3) // 32, axis=0)) > 20
+
+
+def test_the_bare_room_is_unchanged() -> None:
+    plain = SimBody()
+    names = {
+        mujoco.mj_id2name(plain.model, mujoco.mjtObj.mjOBJ_GEOM, g)
+        for g in range(plain.model.ngeom)
+    }
+    assert "wall_n" in names and not any(n and n.startswith("house_") for n in names)
+    with pytest.raises(ValueError):
+        SimBody(scene="castle")

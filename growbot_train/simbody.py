@@ -28,6 +28,7 @@ from typing import Any
 import mujoco
 import numpy as np
 
+from growbot_train import house
 from growbot_train.env import CONTROL_DT, CTRL_LIMIT, LENS_OFFSET_M, body_xml
 
 ASSETS = Path(__file__).parent / "sim_assets"
@@ -45,6 +46,7 @@ LAG_S = 0.025
 CAM_W, CAM_H = 360, 480
 CAM_VFOV_DEG = 75.0
 STARTS = ("standing", "lying", "back")
+SCENES = ("room", "house")
 G = 9.81
 
 
@@ -92,10 +94,11 @@ class _Servo:
     limp: bool = True
 
 
-def _scene_xml(body: str, face_png: str) -> str:
+def _scene_xml(body: str, face_png: str, scene: str = "room") -> str:
     """The body's MJCF plus a camera where the phone's front camera looks out, a room, and
     a person whose face carries the photo. The person is mocap and touches nothing, so the
-    physics is the training body's own."""
+    physics is the training body's own. ``scene`` "house" swaps the bare room for
+    ``house.py``'s furnished two rooms, whose walls and furniture the robot bumps into."""
     root = ET.fromstring(body_xml(body))
     torso = root.find(".//body[@name='base_body']")
     assert torso is not None
@@ -155,12 +158,18 @@ def _scene_xml(body: str, face_png: str) -> str:
     ET.SubElement(root, "statistic", extent="1", center="0 0 0.3")
     world = root.find("worldbody")
     assert world is not None
+    if scene == "house":
+        house.add(root, asset, world)
     for name, pos, size in (
-        ("wall_n", "0 3 1.3", "3 0.02 1.3"),
-        ("wall_s", "0 -3 1.3", "3 0.02 1.3"),
-        ("wall_e", "3 0 1.3", "0.02 3 1.3"),
-        ("wall_w", "-3 0 1.3", "0.02 3 1.3"),
-        ("ceiling", "0 0 2.6", "3 3 0.02"),
+        ()
+        if scene == "house"
+        else (
+            ("wall_n", "0 3 1.3", "3 0.02 1.3"),
+            ("wall_s", "0 -3 1.3", "3 0.02 1.3"),
+            ("wall_e", "3 0 1.3", "0.02 3 1.3"),
+            ("wall_w", "-3 0 1.3", "0.02 3 1.3"),
+            ("ceiling", "0 0 2.6", "3 3 0.02"),
+        )
     ):
         ET.SubElement(
             world,
@@ -224,7 +233,11 @@ class SimBody:
         wiring: Wiring | None = None,
         face_png: Path | None = None,
         seed: int = 0,
+        scene: str = "room",
     ) -> None:
+        if scene not in SCENES:
+            raise ValueError(f"scene must be one of {SCENES}, not {scene!r}")
+        self.scene = scene
         face = face_png or ASSETS / "face_stylegan.png"
         import imageio.v3 as iio
 
@@ -240,7 +253,9 @@ class SimBody:
         photo = iio.imwrite("<bytes>", np.ascontiguousarray(np.rot90(img, ROT90)), extension=".png")
         # A cube texture's six pictures must be one size.
         assets = {face.name: photo, _HAIR: _flat_png((64, 44, 30), img.shape[0])}
-        self.model = mujoco.MjModel.from_xml_string(_scene_xml(body, face.name), assets)
+        if scene == "house":
+            assets.update(house.textures(ROT90))
+        self.model = mujoco.MjModel.from_xml_string(_scene_xml(body, face.name, scene), assets)
         self.data = mujoco.MjData(self.model)
         self.wiring = wiring or Wiring()
         self.rng = np.random.default_rng(seed)
@@ -262,10 +277,14 @@ class SimBody:
 
     # ------------------------------------------------------------------ setup
 
-    def reset(self, start: str = "standing", yaw_deg: float = 0.0) -> None:
+    def reset(
+        self, start: str = "standing", yaw_deg: float = 0.0, x: float = 0.0, y: float = 0.0
+    ) -> None:
         """Put the robot down. "standing": on its feet at its resting stance, set down
         tail first as the real one is. "lying": flat on its belly, legs folded up along
-        the body. "back": on its back, legs in the air."""
+        the body. "back": on its back, legs in the air. ``x``, ``y`` is where on the floor,
+        ``yaw_deg`` which way its nose points (0 = +x, so the front camera, at the tail
+        end, looks toward -x)."""
         if start not in STARTS:
             raise ValueError(f"start must be one of {STARTS}, not {start!r}")
         m, d = self.model, self.data
@@ -280,8 +299,11 @@ class SimBody:
             pitch, roll, legs = 0.0, math.pi, np.zeros(2)
         q = np.zeros(4)
         # Nose-up pitch is a negative turn about the body's y axis.
-        mujoco.mju_euler2Quat(q, np.array([roll, -pitch, yaw]), "xyz")
-        d.qpos[0:3] = [0.0, 0.0, 0.3]
+        # Extrinsic (world axes): roll, then pitch, then yaw about the world's vertical, so a
+        # turned start keeps its stance. Intrinsic order turned the yaw about the pitched
+        # body, which tipped a 90 degree start onto its side.
+        mujoco.mju_euler2Quat(q, np.array([roll, -pitch, yaw]), "XYZ")
+        d.qpos[0:3] = [x, y, 0.3]
         d.qpos[3:7] = q
         d.qpos[7:9] = legs
         mujoco.mj_kinematics(m, d)
@@ -298,8 +320,10 @@ class SimBody:
     def _lowest_point(self) -> float:
         m, d = self.model, self.data
         low = math.inf
+        robot = m.body_rootid[self._torso]
         for g in range(m.ngeom):
-            if m.geom_type[g] == mujoco.mjtGeom.mjGEOM_PLANE or not m.geom_contype[g]:
+            # The robot's own solid parts only: the house's walls and furniture collide too.
+            if m.body_rootid[m.geom_bodyid[g]] != robot or not m.geom_contype[g]:
                 continue
             rot = d.geom_xmat[g].reshape(3, 3)
             reach = np.abs(rot[2]) @ m.geom_size[g]
