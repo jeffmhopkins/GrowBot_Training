@@ -1,22 +1,26 @@
-"""A small furnished house for the sim body (``SimBody(scene="house")``), so JBrain2's Dave
-simulator can ask Dave to go and find something, or leave him alone to wander, and score
-where he actually went.
+"""Furnished houses for the sim body, so JBrain2's Dave simulator can ask Dave to go and
+find something, or leave him alone to wander, and score where he actually went.
 
-Two rooms joined by a doorway: a living room (where he starts) with a piano in its far
-corner, a couch, a bookshelf, a plant and a lamp, and a kitchen behind him with a fridge, a
-counter and a table. The walls and the furniture's solid parts collide with the robot, so a
-wall stops him; a rug and the table top (above his head) don't.
+``SimBody(scene="house")`` is two rooms joined by a doorway: a living room (where he starts)
+with a piano in its far corner, a couch, a bookshelf, a plant and a lamp, and a kitchen
+behind him with a fridge, a counter, a table and the cat. ``scene="flat"`` is the next
+level: a hallway joining four rooms, doors out of line with each other, a couch in the way
+of the straight line out of the living room, and the piano in a study at the far end. The
+walls and the furniture's solid parts collide with the robot, so a wall stops him; a rug and
+the table top (above his head) don't.
 
 Everything is plain boxes, cylinders and spheres with drawn textures (no photos), shaped so
 a vision model reads them as what they are from a phone a few centimetres off the floor.
-``ITEMS`` and ``ROOMS`` are the ground truth a scenario scores against and a report draws.
+A ``Layout`` (``LAYOUTS[scene]``) holds the ground truth a scenario scores against and a
+report draws: its rooms, walls, doors and furniture. The module-level names are the two-room
+house's, as they always were.
 """
 
 from __future__ import annotations
 
 import math
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -47,6 +51,72 @@ class Item:
     hy: float
     face_deg: float
     rgb: tuple[int, int, int]
+    kind: str = ""  # the builder, when it isn't the name
+
+    @property
+    def build(self) -> str:
+        return self.kind or self.name
+
+
+@dataclass(frozen=True)
+class Door:
+    """A gap in a wall: its centre, which way the wall runs through it ("x" or "y"), its half
+    width, and the two rooms it joins."""
+
+    name: str
+    x: float
+    y: float
+    along: str
+    half: float
+    rooms: tuple[str, str]
+
+
+@dataclass(frozen=True)
+class Layout:
+    """One house: footprint, rooms, wall segments (name, ax, ay, bx, by, material), doors,
+    furniture, a light per room, and where he starts (x, y, nose yaw degrees)."""
+
+    name: str
+    OUTER: tuple[float, float, float, float]
+    ROOMS: dict[str, tuple[float, float, float, float]]
+    WALLS: tuple[tuple[str, float, float, float, float, str], ...]
+    DOORS: tuple[Door, ...]
+    ITEMS: tuple[Item, ...]
+    lights: tuple[tuple[float, float], ...]
+    start: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    ITEM: dict[str, Item] = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "ITEM", {i.name: i for i in self.ITEMS})
+
+    def room_at(self, x: float, y: float) -> str:
+        for name, (x0, y0, x1, y1) in self.ROOMS.items():
+            if x0 <= x <= x1 and y0 <= y <= y1:
+                return name
+        return ""
+
+    def distance_to(self, name: str, x: float, y: float) -> float:
+        """How far (x, y) is from the item's footprint (0 inside it), metres."""
+        return _distance(self.ITEM[name], x, y)
+
+    def route(self, a: str, b: str) -> list[Door]:
+        """The doors from room a to room b, fewest first (empty when they are the same).
+        A room the house doesn't have is a caller's typo, so it raises, not returns []."""
+        for r in (a, b):
+            if r not in self.ROOMS:
+                raise ValueError(f"no room {r!r} in this house")
+        seen, todo = {a}, [(a, [])]
+        while todo:
+            room, path = todo.pop(0)
+            if room == b:
+                return path
+            for d in self.DOORS:
+                if room in d.rooms:
+                    nxt = d.rooms[1] if d.rooms[0] == room else d.rooms[0]
+                    if nxt not in seen:
+                        seen.add(nxt)
+                        todo.append((nxt, [*path, d]))
+        return []
 
 
 ITEMS: tuple[Item, ...] = (
@@ -61,20 +131,110 @@ ITEMS: tuple[Item, ...] = (
     Item("fridge", "kitchen", 2.22, -1.75, 0.35, 0.4, 180.0, (225, 228, 232)),
     Item("counter", "kitchen", 2.27, 0.4, 0.3, 0.9, 180.0, (200, 190, 170)),
     Item("table", "kitchen", 1.45, 1.35, 0.45, 0.6, 0.0, (150, 110, 70)),
+    # Curled up by the table, facing the doorway: out of sight from the living room.
+    Item("cat", "kitchen", 1.3, 0.55, 0.22, 0.12, 180.0, (215, 125, 50)),
 )
 ITEM = {i.name: i for i in ITEMS}
+_X0, _Y0, _X1, _Y1 = OUTER
+TWO_ROOM = Layout(
+    name="house",
+    OUTER=OUTER,
+    ROOMS=ROOMS,
+    WALLS=(
+        ("house_wall_w", _X0, _Y0, _X0, _Y1, "house_living"),
+        ("house_wall_n_living", _X0, _Y1, DIVIDE_X, _Y1, "house_living"),
+        ("house_wall_s_living", _X0, _Y0, DIVIDE_X, _Y0, "house_living"),
+        ("house_wall_n_kitchen", DIVIDE_X, _Y1, _X1, _Y1, "house_kitchen"),
+        ("house_wall_s_kitchen", DIVIDE_X, _Y0, _X1, _Y0, "house_kitchen"),
+        ("house_wall_e", _X1, _Y0, _X1, _Y1, "house_kitchen"),
+        ("house_divide_s", DIVIDE_X, _Y0, DIVIDE_X, DOOR[0], "house_living"),
+        ("house_divide_n", DIVIDE_X, DOOR[1], DIVIDE_X, _Y1, "house_living"),
+    ),
+    DOORS=(
+        Door(
+            "kitchen door",
+            DIVIDE_X,
+            (DOOR[0] + DOOR[1]) / 2,
+            "y",
+            (DOOR[1] - DOOR[0]) / 2,
+            ("living room", "kitchen"),
+        ),
+    ),
+    ITEMS=ITEMS,
+    lights=((1.6, 0.0), (-1.8, 0.0)),
+)
+
+# The flat: a hallway across the middle, the living room (where he starts) and the kitchen
+# south of it with no door between them, a bedroom and a study north. Every door is off line
+# from the last, so no room is reached by walking straight.
+_FY = 0.6  # the hallway's walls at y = -0.6 and 0.6
+_FLAT_OUTER = (-4.0, -3.0, 4.0, 3.0)
+FLAT = Layout(
+    name="flat",
+    OUTER=_FLAT_OUTER,
+    ROOMS={
+        "living room": (-4.0, -3.0, -0.5, -_FY),
+        "kitchen": (-0.5, -3.0, 4.0, -_FY),
+        "hallway": (-4.0, -_FY, 4.0, _FY),
+        "bedroom": (-4.0, _FY, 0.5, 3.0),
+        "study": (0.5, _FY, 4.0, 3.0),
+    },
+    WALLS=(
+        ("house_wall_w", -4.0, -3.0, -4.0, 3.0, "house_hall"),
+        ("house_wall_e", 4.0, -3.0, 4.0, 3.0, "house_hall"),
+        ("house_wall_s_living", -4.0, -3.0, -0.5, -3.0, "house_living"),
+        ("house_wall_s_kitchen", -0.5, -3.0, 4.0, -3.0, "house_kitchen"),
+        ("house_wall_n_bedroom", -4.0, 3.0, 0.5, 3.0, "house_bedroom"),
+        ("house_wall_n_study", 0.5, 3.0, 4.0, 3.0, "house_study"),
+        # The hallway's south side: the living room's door, then the kitchen's far along.
+        ("house_hall_s_0", -4.0, -_FY, -1.95, -_FY, "house_living"),
+        ("house_hall_s_1", -1.05, -_FY, 2.55, -_FY, "house_kitchen"),
+        ("house_hall_s_2", 3.45, -_FY, 4.0, -_FY, "house_kitchen"),
+        # Its north side: the bedroom's door at the west end, the study's in the middle.
+        ("house_hall_n_0", -4.0, _FY, -3.65, _FY, "house_bedroom"),
+        ("house_hall_n_1", -2.75, _FY, 0.75, _FY, "house_bedroom"),
+        ("house_hall_n_2", 1.65, _FY, 4.0, _FY, "house_study"),
+        ("house_divide_south", -0.5, -3.0, -0.5, -_FY, "house_living"),
+        ("house_divide_north", 0.5, _FY, 0.5, 3.0, "house_study"),
+    ),
+    DOORS=(
+        Door("living room door", -1.5, -_FY, "x", 0.45, ("living room", "hallway")),
+        Door("kitchen door", 3.0, -_FY, "x", 0.45, ("kitchen", "hallway")),
+        Door("bedroom door", -3.2, _FY, "x", 0.45, ("bedroom", "hallway")),
+        Door("study door", 1.2, _FY, "x", 0.45, ("study", "hallway")),
+    ),
+    ITEMS=(
+        # Across the straight line from his start to the living room's door.
+        Item("couch", "living room", -2.0, -1.5, 1.05, 0.45, 90.0, (150, 45, 40)),
+        Item("lamp", "living room", -0.8, -2.75, 0.15, 0.15, 45.0, (230, 210, 150)),
+        Item("rug", "living room", -2.2, -2.3, 0.9, 0.5, 0.0, (70, 90, 140)),
+        Item("fridge", "kitchen", 3.62, -2.55, 0.35, 0.4, 180.0, (225, 228, 232)),
+        Item("counter", "kitchen", 1.5, -2.64, 0.9, 0.3, 90.0, (200, 190, 170)),
+        Item("table", "kitchen", 1.0, -1.5, 0.45, 0.6, 0.0, (150, 110, 70)),
+        Item("bookshelf", "bedroom", -3.77, 2.0, 0.2, 0.5, 0.0, (120, 80, 45)),
+        Item("plant", "bedroom", -0.2, 2.75, 0.2, 0.2, -90.0, (60, 140, 60)),
+        Item("cat", "bedroom", -1.6, 1.9, 0.22, 0.12, 0.0, (215, 125, 50)),
+        Item("piano", "study", 2.5, 2.65, 0.75, 0.32, -90.0, (25, 25, 28)),
+        Item("piano bench", "study", 2.5, 2.05, 0.4, 0.18, -90.0, (40, 30, 25)),
+    ),
+    lights=((-2.2, -1.8), (1.7, -1.8), (0.0, 0.0), (-1.7, 1.8), (2.2, 1.8)),
+    # In the living room's south-west corner, his camera on the far (east) wall: the couch
+    # stands between him and the door.
+    start=(-3.3, -2.4, 180.0),
+)
+LAYOUTS = {"house": TWO_ROOM, "flat": FLAT}
 
 
 def room_at(x: float, y: float) -> str:
-    for name, (x0, y0, x1, y1) in ROOMS.items():
-        if x0 <= x <= x1 and y0 <= y <= y1:
-            return name
-    return ""
+    return TWO_ROOM.room_at(x, y)
 
 
 def distance_to(name: str, x: float, y: float) -> float:
-    """How far (x, y) is from the item's footprint (0 inside it), metres."""
-    it = ITEM[name]
+    """How far (x, y) is from the two-room house's item's footprint (0 inside it), metres."""
+    return TWO_ROOM.distance_to(name, x, y)
+
+
+def _distance(it: Item, x: float, y: float) -> float:
     a = math.radians(it.face_deg)
     dx, dy = x - it.x, y - it.y
     # Into the item's own frame (front along u), where its footprint is axis-aligned.
@@ -229,7 +389,7 @@ def _geom(parent: ET.Element, solid: bool, **kw: str) -> None:
     ET.SubElement(parent, "geom", **kw)
 
 
-def add(root: ET.Element, asset: ET.Element, world: ET.Element) -> None:
+def add(root: ET.Element, asset: ET.Element, world: ET.Element, layout: Layout = TWO_ROOM) -> None:
     """Add the house's walls, materials and furniture to the scene."""
     del root
     for name in _FACES:
@@ -263,9 +423,12 @@ def add(root: ET.Element, asset: ET.Element, world: ET.Element) -> None:
     ET.SubElement(asset, "material", name="house_rug", texture="house_rug")
     ET.SubElement(asset, "material", name="house_living", rgba="0.86 0.80 0.66 1")
     ET.SubElement(asset, "material", name="house_kitchen", rgba="0.72 0.82 0.86 1")
+    ET.SubElement(asset, "material", name="house_hall", rgba="0.80 0.78 0.74 1")
+    ET.SubElement(asset, "material", name="house_bedroom", rgba="0.78 0.74 0.86 1")
+    ET.SubElement(asset, "material", name="house_study", rgba="0.70 0.80 0.68 1")
 
-    _walls(world)
-    for it in ITEMS:
+    _walls(world, layout)
+    for it in layout.ITEMS:
         body = ET.SubElement(
             world,
             "body",
@@ -273,17 +436,20 @@ def add(root: ET.Element, asset: ET.Element, world: ET.Element) -> None:
             pos=f"{it.x:g} {it.y:g} 0",
             quat=_quat(it.face_deg + 180.0),
         )
-        _BUILD[it.name](body, _half(it))
-    ET.SubElement(
-        world, "light", name="kitchen_light", pos="1.6 0 2.3", dir="0 0 -1", diffuse="0.5 0.5 0.5"
-    )
-    ET.SubElement(
-        world, "light", name="living_light", pos="-1.8 0 2.3", dir="0 0 -1", diffuse="0.5 0.5 0.5"
-    )
+        _BUILD[it.build](body, _half(it))
+    for k, (lx, ly) in enumerate(layout.lights):
+        ET.SubElement(
+            world,
+            "light",
+            name=f"house_light_{k}",
+            pos=f"{lx:g} {ly:g} 2.3",
+            dir="0 0 -1",
+            diffuse="0.5 0.5 0.5",
+        )
 
 
-def _walls(world: ET.Element) -> None:
-    x0, y0, x1, y1 = OUTER
+def _walls(world: ET.Element, layout: Layout) -> None:
+    x0, y0, x1, y1 = layout.OUTER
     h = WALL_H / 2
     t = WALL_T
 
@@ -300,24 +466,20 @@ def _walls(world: ET.Element) -> None:
             material=mat,
         )
 
-    wall("house_wall_w", x0, y0, x0, y1, "house_living")
-    wall("house_wall_n_living", x0, y1, DIVIDE_X, y1, "house_living")
-    wall("house_wall_s_living", x0, y0, DIVIDE_X, y0, "house_living")
-    wall("house_wall_n_kitchen", DIVIDE_X, y1, x1, y1, "house_kitchen")
-    wall("house_wall_s_kitchen", DIVIDE_X, y0, x1, y0, "house_kitchen")
-    wall("house_wall_e", x1, y0, x1, y1, "house_kitchen")
-    # The dividing wall, either side of the doorway, and the lintel over it.
-    wall("house_divide_s", DIVIDE_X, y0, DIVIDE_X, DOOR[0], "house_living")
-    wall("house_divide_n", DIVIDE_X, DOOR[1], DIVIDE_X, y1, "house_living")
-    _geom(
-        world,
-        False,
-        name="house_lintel",
-        type="box",
-        pos=f"{DIVIDE_X:g} 0 {(2.0 + WALL_H) / 2:g}",
-        size=f"{t:g} {(DOOR[1] - DOOR[0]) / 2:g} {(WALL_H - 2.0) / 2:g}",
-        material="house_living",
-    )
+    for name, ax, ay, bx, by, mat in layout.WALLS:
+        wall(name, ax, ay, bx, by, mat)
+    # A lintel over each doorway, above his head.
+    for k, d in enumerate(layout.DOORS):
+        sx, sy = (d.half, t) if d.along == "x" else (t, d.half)
+        _geom(
+            world,
+            False,
+            name=f"house_lintel_{k}",
+            type="box",
+            pos=f"{d.x:g} {d.y:g} {(2.0 + WALL_H) / 2:g}",
+            size=f"{sx:g} {sy:g} {(WALL_H - 2.0) / 2:g}",
+            material="house_hall",
+        )
     _geom(
         world,
         False,
@@ -631,6 +793,69 @@ def _table(b: ET.Element, hs: tuple[float, float]) -> None:
     )
 
 
+def _cat(b: ET.Element, hs: tuple[float, float]) -> None:
+    """A ginger cat lying down, head up toward its front (local -x), tail curled behind."""
+    del hs
+    fur, dark = "0.84 0.49 0.2 1", "0.55 0.3 0.12 1"
+    _geom(
+        b,
+        True,
+        name="cat_body",
+        type="ellipsoid",
+        pos="0.03 0 0.09",
+        size="0.17 0.1 0.09",
+        rgba=fur,
+    )
+    _geom(b, True, name="cat_head", type="sphere", pos="-0.15 0 0.19", size="0.075", rgba=fur)
+    for s in (-1, 1):
+        _geom(
+            b,
+            False,
+            name=f"cat_ear_{s}",
+            type="box",
+            pos=f"-0.15 {s * 0.045:g} 0.27",
+            size="0.012 0.022 0.03",
+            euler=f"{s * 15} 0 0",
+            rgba=dark,
+        )
+        _geom(
+            b,
+            False,
+            name=f"cat_eye_{s}",
+            type="sphere",
+            pos=f"-0.22 {s * 0.03:g} 0.2",
+            size="0.012",
+            rgba="0.15 0.6 0.2 1",
+        )
+        _geom(
+            b,
+            False,
+            name=f"cat_paw_{s}",
+            type="ellipsoid",
+            pos=f"-0.17 {s * 0.05:g} 0.025",
+            size="0.05 0.025 0.025",
+            rgba=fur,
+        )
+    _geom(
+        b,
+        False,
+        name="cat_nose",
+        type="sphere",
+        pos="-0.224 0 0.18",
+        size="0.01",
+        rgba="0.85 0.45 0.5 1",
+    )
+    _geom(
+        b,
+        False,
+        name="cat_tail",
+        type="capsule",
+        fromto="0.17 0 0.04 0.1 0.13 0.03",
+        size="0.022",
+        rgba=dark,
+    )
+
+
 _BUILD = {
     "piano": _piano,
     "piano bench": _bench,
@@ -642,4 +867,5 @@ _BUILD = {
     "fridge": _fridge_build,
     "counter": _counter,
     "table": _table,
+    "cat": _cat,
 }

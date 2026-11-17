@@ -46,7 +46,7 @@ LAG_S = 0.025
 CAM_W, CAM_H = 360, 480
 CAM_VFOV_DEG = 75.0
 STARTS = ("standing", "lying", "back")
-SCENES = ("room", "house")
+SCENES = ("room", "house", "flat")
 G = 9.81
 
 
@@ -98,7 +98,8 @@ def _scene_xml(body: str, face_png: str, scene: str = "room") -> str:
     """The body's MJCF plus a camera where the phone's front camera looks out, a room, and
     a person whose face carries the photo. The person is mocap and touches nothing, so the
     physics is the training body's own. ``scene`` "house" swaps the bare room for
-    ``house.py``'s furnished two rooms, whose walls and furniture the robot bumps into."""
+    ``house.py``'s furnished two rooms, and "flat" for its hallway and four rooms; their
+    walls and furniture the robot bumps into."""
     root = ET.fromstring(body_xml(body))
     torso = root.find(".//body[@name='base_body']")
     assert torso is not None
@@ -158,11 +159,11 @@ def _scene_xml(body: str, face_png: str, scene: str = "room") -> str:
     ET.SubElement(root, "statistic", extent="1", center="0 0 0.3")
     world = root.find("worldbody")
     assert world is not None
-    if scene == "house":
-        house.add(root, asset, world)
+    if scene in house.LAYOUTS:
+        house.add(root, asset, world, house.LAYOUTS[scene])
     for name, pos, size in (
         ()
-        if scene == "house"
+        if scene in house.LAYOUTS
         else (
             ("wall_n", "0 3 1.3", "3 0.02 1.3"),
             ("wall_s", "0 -3 1.3", "3 0.02 1.3"),
@@ -238,6 +239,8 @@ class SimBody:
         if scene not in SCENES:
             raise ValueError(f"scene must be one of {SCENES}, not {scene!r}")
         self.scene = scene
+        # The house's ground truth (rooms, walls, doors, furniture), None in the bare room.
+        self.layout = house.LAYOUTS.get(scene)
         face = face_png or ASSETS / "face_stylegan.png"
         import imageio.v3 as iio
 
@@ -253,7 +256,7 @@ class SimBody:
         photo = iio.imwrite("<bytes>", np.ascontiguousarray(np.rot90(img, ROT90)), extension=".png")
         # A cube texture's six pictures must be one size.
         assets = {face.name: photo, _HAIR: _flat_png((64, 44, 30), img.shape[0])}
-        if scene == "house":
+        if scene in house.LAYOUTS:
             assets.update(house.textures(ROT90))
         self.model = mujoco.MjModel.from_xml_string(_scene_xml(body, face.name, scene), assets)
         self.data = mujoco.MjData(self.model)
@@ -273,7 +276,12 @@ class SimBody:
         self._push: tuple[np.ndarray, float] | None = None
         self.servo = _Servo()
         self.person = Person()
-        self.reset()
+        # A house stands him up where it says he starts; a reset with no x, y is the origin.
+        if self.layout is None:
+            self.reset()
+        else:
+            sx, sy, syaw = self.layout.start
+            self.reset(yaw_deg=syaw, x=sx, y=sy)
 
     # ------------------------------------------------------------------ setup
 

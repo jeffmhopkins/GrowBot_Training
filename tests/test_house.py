@@ -115,3 +115,51 @@ def test_nothing_is_buried_in_a_wall() -> None:
         hx, hy = it.hx, it.hy  # half sizes in the world's x and y
         assert x0 + 0.03 - 1e-6 <= it.x - hx and it.x + hx <= x1 - 0.03 + 1e-6, it.name
         assert y0 + 0.03 - 1e-6 <= it.y - hy and it.y + hy <= y1 - 0.03 + 1e-6, it.name
+
+
+@pytest.mark.parametrize("name", sorted(house.LAYOUTS))
+def test_each_house_hangs_together(name: str) -> None:
+    lay = house.LAYOUTS[name]
+    for it in lay.ITEMS:
+        x0, y0, x1, y1 = lay.ROOMS[it.room]
+        # Off the walls' inner faces, 3 cm in from the room's edges.
+        assert x0 + 0.03 - 1e-6 <= it.x - it.hx and it.x + it.hx <= x1 - 0.03 + 1e-6, it.name
+        assert y0 + 0.03 - 1e-6 <= it.y - it.hy and it.y + it.hy <= y1 - 0.03 + 1e-6, it.name
+    solid = [it for it in lay.ITEMS if it.name != "rug"]
+    for i, a in enumerate(solid):
+        for b in solid[i + 1 :]:
+            apart = abs(a.x - b.x) >= a.hx + b.hx or abs(a.y - b.y) >= a.hy + b.hy
+            assert apart, (a.name, b.name)
+    # Every room reaches every other, and no wall stands in a doorway.
+    for a in lay.ROOMS:
+        for b in lay.ROOMS:
+            assert a == b or lay.route(a, b), (a, b)
+    for d in lay.DOORS:
+        assert {lay.room_at(d.x + 0.1, d.y + 0.1), lay.room_at(d.x - 0.1, d.y - 0.1)} == set(
+            d.rooms
+        ), d.name
+        for _, ax, ay, bx, by, _ in lay.WALLS:
+            on = (
+                min(ax, bx) - 1e-6 <= d.x <= max(ax, bx) + 1e-6
+                and min(ay, by) - 1e-6 <= d.y <= max(ay, by) + 1e-6
+            )
+            assert not on, d.name
+    x, y, _ = lay.start
+    assert lay.room_at(x, y) == "living room"
+    assert all(lay.distance_to(it.name, x, y) > 0.4 for it in solid)
+
+
+def test_the_flat_stands_him_up_at_its_start() -> None:
+    # With no reset of its own, a house puts him down at its start, not the origin.
+    sb = SimBody(scene="flat")
+    x, y, yaw = sb.layout.start
+    st = sb.state()
+    assert 30 < st["pitch_deg"] < 50 and abs(st["x"] - x) < 0.05
+    # From the living room to the study is out through its door and in through the study's.
+    assert [d.name for d in sb.layout.route("living room", "study")] == [
+        "living room door",
+        "study door",
+    ]
+    assert SimBody().layout is None
+    with pytest.raises(ValueError):
+        sb.layout.route("living room", "attic")
