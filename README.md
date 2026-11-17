@@ -186,7 +186,7 @@ policy actions, the sim body speaks the page's terms:
   `reset(start, yaw_deg, x, y)` sets him down anywhere in it, facing any way.
 
 `python -m growbot_train.simbody --serve` takes the same over JSON lines on stdin, so a
-harness in any language steps it. Rendering headless needs software OpenGL:
+harness in any language steps it (`--scene house` for the house; a `reset` takes `x`, `y`). Rendering headless needs software OpenGL:
 `MUJOCO_GL=osmesa` with `libosmesa6` installed (CI does this).
 
 ### How long it takes

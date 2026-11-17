@@ -573,7 +573,12 @@ def serve(sim: SimBody, inp: Any = sys.stdin, out: Any = sys.stdout) -> None:
             op = req.get("op")
             reply: dict[str, Any] = {"ok": True}
             if op == "reset":
-                sim.reset(req.get("start", "standing"), float(req.get("yaw_deg", 0.0)))
+                sim.reset(
+                    req.get("start", "standing"),
+                    float(req.get("yaw_deg", 0.0)),
+                    float(req.get("x", 0.0)),
+                    float(req.get("y", 0.0)),
+                )
                 reply["state"] = sim.state()
             elif op == "servos":
                 sim.servos(float(req["l"]), float(req["r"]))
@@ -616,11 +621,12 @@ def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--body", default="build")
     ap.add_argument("--serve", action="store_true", help="JSON lines on stdin/stdout")
+    ap.add_argument("--scene", choices=SCENES, default="room")
     ap.add_argument("--render-start", choices=STARTS, help="render one start pose and exit")
     ap.add_argument("--out", default="start.png")
     ap.add_argument("--camera", action="store_true", help="render the front camera instead")
     args = ap.parse_args(argv)
-    sim = SimBody(args.body)
+    sim = SimBody(args.body, scene=args.scene)
     if args.serve:
         serve(sim)
         return

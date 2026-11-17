@@ -54,12 +54,12 @@ ITEMS: tuple[Item, ...] = (
     Item("piano", "living room", -2.15, 1.85, 0.75, 0.32, -90.0, (25, 25, 28)),
     Item("piano bench", "living room", -2.15, 1.25, 0.4, 0.18, -90.0, (40, 30, 25)),
     Item("couch", "living room", -1.2, -1.72, 1.05, 0.45, 90.0, (150, 45, 40)),
-    Item("bookshelf", "living room", -2.8, -0.4, 0.2, 0.5, 0.0, (120, 80, 45)),
+    Item("bookshelf", "living room", -2.77, -0.4, 0.2, 0.5, 0.0, (120, 80, 45)),
     Item("plant", "living room", -0.2, 1.9, 0.2, 0.2, -90.0, (60, 140, 60)),
     Item("lamp", "living room", -2.65, -1.85, 0.15, 0.15, 45.0, (230, 210, 150)),
     Item("rug", "living room", -1.3, 0.0, 0.9, 0.6, 0.0, (70, 90, 140)),
-    Item("fridge", "kitchen", 2.25, -1.75, 0.35, 0.4, 180.0, (225, 228, 232)),
-    Item("counter", "kitchen", 2.3, 0.4, 0.3, 0.9, 180.0, (200, 190, 170)),
+    Item("fridge", "kitchen", 2.22, -1.75, 0.35, 0.4, 180.0, (225, 228, 232)),
+    Item("counter", "kitchen", 2.27, 0.4, 0.3, 0.9, 180.0, (200, 190, 170)),
     Item("table", "kitchen", 1.45, 1.35, 0.45, 0.6, 0.0, (150, 110, 70)),
 )
 ITEM = {i.name: i for i in ITEMS}
