@@ -222,7 +222,229 @@ FLAT = Layout(
     # stands between him and the door.
     start=(-3.3, -2.4, 180.0),
 )
-LAYOUTS = {"house": TWO_ROOM, "flat": FLAT}
+
+# Small maze houses, made from a seed: a grid of rooms joined by doorways off the middle of
+# their walls, the furniture against the walls, so exploring can't be tuned to one floor plan
+# (owner, 2026-11-18: "randomized small maze like houses as a test case too").
+_CELL = 2.6
+_MAZE_FURNITURE: dict[str, tuple[tuple[str, float, float, tuple[int, int, int]], ...]] = {
+    # name, half length along the wall, half depth off it, map colour
+    "living room": (
+        ("couch", 0.85, 0.4, (150, 45, 40)),
+        ("lamp", 0.15, 0.15, (230, 210, 150)),
+    ),
+    "kitchen": (
+        ("fridge", 0.4, 0.35, (225, 228, 232)),
+        ("counter", 0.9, 0.3, (200, 190, 170)),
+    ),
+    "bedroom": (
+        ("bookshelf", 0.5, 0.2, (120, 80, 45)),
+        ("cat", 0.22, 0.12, (215, 125, 50)),
+    ),
+    "study": (("piano", 0.75, 0.32, (25, 25, 28)),),
+    "dining room": (("table", 0.45, 0.6, (150, 110, 70)),),
+    "den": (("plant", 0.2, 0.2, (60, 140, 60)),),
+}
+_MAZE_MATERIAL = {
+    "living room": "house_living",
+    "kitchen": "house_kitchen",
+    "bedroom": "house_bedroom",
+    "study": "house_study",
+}
+
+
+def maze(seed: int, cols: int = 3, rows: int = 2) -> Layout:
+    """A small maze house: cols by rows rooms of 2.6 m, joined so every room reaches every
+    other (a random spanning tree, and one more doorway for a loop), the living room his
+    start. The same seed makes the same house."""
+    import random
+
+    rng = random.Random(seed)
+    w, h = cols * _CELL, rows * _CELL
+    x0, y0 = -w / 2, -h / 2
+    cells = [(c, r) for r in range(rows) for c in range(cols)]
+    kinds = list(_MAZE_FURNITURE)[1:]
+    rng.shuffle(kinds)
+    start = rng.choice(cells)
+    name = {start: "living room"}
+    for cell in cells:
+        if cell != start:
+            name[cell] = kinds.pop()
+    box = {
+        name[(c, r)]: (
+            x0 + c * _CELL,
+            y0 + r * _CELL,
+            x0 + (c + 1) * _CELL,
+            y0 + (r + 1) * _CELL,
+        )
+        for c, r in cells
+    }
+
+    # Doorways: a spanning tree from the start, then one extra edge.
+    def near(cell: tuple[int, int]) -> list[tuple[int, int]]:
+        c, r = cell
+        return [
+            (a, b) for a, b in ((c + 1, r), (c - 1, r), (c, r + 1), (c, r - 1)) if (a, b) in name
+        ]
+
+    seen, edges, todo = {start}, [], [start]
+    while todo:
+        cell = todo[-1]
+        nxt = [n for n in near(cell) if n not in seen]
+        if not nxt:
+            todo.pop()
+            continue
+        n = rng.choice(nxt)
+        seen.add(n)
+        edges.append((cell, n))
+        todo.append(n)
+    spare = [
+        (a, b)
+        for a in cells
+        for b in near(a)
+        if a < b and (a, b) not in edges and (b, a) not in edges
+    ]
+    if spare:
+        edges.append(rng.choice(spare))
+    doors: list[Door] = []
+    for a, b in edges:
+        ra, rb = name[a], name[b]
+        off = rng.uniform(-0.7, 0.7)
+        if a[1] == b[1]:  # side by side: the wall runs along y
+            x = x0 + max(a[0], b[0]) * _CELL
+            y = y0 + (a[1] + 0.5) * _CELL + off
+            doors.append(Door(f"{ra} to {rb}", round(x, 3), round(y, 3), "y", 0.45, (ra, rb)))
+        else:
+            x = x0 + (a[0] + 0.5) * _CELL + off
+            y = y0 + max(a[1], b[1]) * _CELL
+            doors.append(Door(f"{ra} to {rb}", round(x, 3), round(y, 3), "x", 0.45, (ra, rb)))
+
+    # Walls: every grid line, cut where a doorway stands in it.
+    walls: list[tuple[str, float, float, float, float, str]] = []
+
+    def run(tag: str, ax: float, ay: float, bx: float, by: float, mat: str) -> None:
+        along = "x" if ay == by else "y"
+        cuts = sorted(
+            (d.x if along == "x" else d.y)
+            for d in doors
+            if d.along == along
+            and abs((d.y if along == "x" else d.x) - (ay if along == "x" else ax)) < 1e-6
+            and min(ax, bx) - 1e-6 <= d.x <= max(ax, bx) + 1e-6
+            and min(ay, by) - 1e-6 <= d.y <= max(ay, by) + 1e-6
+        )
+        lo, hi = (ax, bx) if along == "x" else (ay, by)
+        k = 0
+        for c in [*cuts, None]:
+            end = hi if c is None else c - 0.45
+            if end - lo > 0.05:
+                if along == "x":
+                    walls.append((f"house_{tag}_{k}", lo, ay, end, ay, mat))
+                else:
+                    walls.append((f"house_{tag}_{k}", ax, lo, ax, end, mat))
+                k += 1
+            if c is not None:
+                lo = c + 0.45
+
+    for c, r in cells:
+        mat = _MAZE_MATERIAL.get(name[(c, r)], "house_hall")
+        cx0, cy0, cx1, cy1 = box[name[(c, r)]]
+        run(f"s_{c}_{r}", cx0, cy0, cx1, cy0, mat)
+        run(f"w_{c}_{r}", cx0, cy0, cx0, cy1, mat)
+        if r == rows - 1:
+            run(f"n_{c}_{r}", cx0, cy1, cx1, cy1, mat)
+        if c == cols - 1:
+            run(f"e_{c}_{r}", cx1, cy0, cx1, cy1, mat)
+
+    # Furniture against the walls, clear of every doorway and of each other.
+    items: list[Item] = []
+
+    def clear(it: Item) -> bool:
+        for d in doors:
+            if _distance(it, d.x, d.y) < 0.65:
+                return False
+        return all(
+            abs(it.x - o.x) >= it.hx + o.hx + 0.1 or abs(it.y - o.y) >= it.hy + o.hy + 0.1
+            for o in items
+        )
+
+    for room, (bx0, by0, bx1, by1) in box.items():
+        for nm, long, deep, rgb in _MAZE_FURNITURE[room]:
+            for _ in range(200):
+                if nm == "table":  # stands free, mid-room
+                    it = Item(
+                        nm,
+                        room,
+                        (bx0 + bx1) / 2 + rng.uniform(-0.4, 0.4),
+                        (by0 + by1) / 2 + rng.uniform(-0.4, 0.4),
+                        long,
+                        deep,
+                        0.0,
+                        rgb,
+                    )
+                else:
+                    side = rng.choice("nsew")
+                    inset = 0.04 + deep
+                    if side in "ns":
+                        x = rng.uniform(bx0 + 0.04 + long, bx1 - 0.04 - long)
+                        y = by0 + inset if side == "s" else by1 - inset
+                        it = Item(
+                            nm,
+                            room,
+                            round(x, 3),
+                            round(y, 3),
+                            long,
+                            deep,
+                            90.0 if side == "s" else -90.0,
+                            rgb,
+                        )
+                    else:
+                        y = rng.uniform(by0 + 0.04 + long, by1 - 0.04 - long)
+                        x = bx0 + inset if side == "w" else bx1 - inset
+                        it = Item(
+                            nm,
+                            room,
+                            round(x, 3),
+                            round(y, 3),
+                            deep,
+                            long,
+                            0.0 if side == "w" else 180.0,
+                            rgb,
+                        )
+                if clear(it):
+                    items.append(it)
+                    if nm == "piano":  # its bench in front
+                        a = math.radians(it.face_deg)
+                        bx, by = it.x + 0.6 * math.cos(a), it.y + 0.6 * math.sin(a)
+                        hx, hy = (0.4, 0.18) if it.face_deg in (90.0, -90.0) else (0.18, 0.4)
+                        items.append(
+                            Item(
+                                "piano bench",
+                                room,
+                                round(bx, 3),
+                                round(by, 3),
+                                hx,
+                                hy,
+                                it.face_deg,
+                                (40, 30, 25),
+                            )
+                        )
+                    break
+    sx0, sy0, sx1, sy1 = box["living room"]
+    lights = tuple(((a + c) / 2, (b + d) / 2) for a, b, c, d in box.values())
+    for _ in range(200):
+        sx, sy = rng.uniform(sx0 + 0.5, sx1 - 0.5), rng.uniform(sy0 + 0.5, sy1 - 0.5)
+        if all(_distance(it, sx, sy) > 0.45 for it in items if it.name != "rug"):
+            break
+    return Layout(
+        name=f"maze{seed}",
+        OUTER=(x0, y0, x0 + w, y0 + h),
+        ROOMS=box,
+        WALLS=tuple(walls),
+        DOORS=tuple(doors),
+        ITEMS=tuple(items),
+        lights=lights,
+        start=(round(sx, 3), round(sy, 3), float(rng.choice(range(-180, 180, 45)))),
+    )
 
 
 def room_at(x: float, y: float) -> str:
@@ -869,3 +1091,7 @@ _BUILD = {
     "table": _table,
     "cat": _cat,
 }
+
+
+# Built last: maze() measures its furniture with _distance, defined above.
+LAYOUTS = {"house": TWO_ROOM, "flat": FLAT, **{f"maze{k}": maze(k) for k in range(1, 6)}}

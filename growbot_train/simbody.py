@@ -46,7 +46,7 @@ LAG_S = 0.025
 CAM_W, CAM_H = 360, 480
 CAM_VFOV_DEG = 75.0
 STARTS = ("standing", "lying", "back")
-SCENES = ("room", "house", "flat")
+SCENES = ("room", "house", "flat", *(f"maze{k}" for k in range(1, 6)))
 G = 9.81
 
 

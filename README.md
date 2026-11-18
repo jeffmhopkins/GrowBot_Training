@@ -182,7 +182,10 @@ policy actions, the sim body speaks the page's terms:
 - **Disturbances:** `push` (a shove, newtons) and `lift`.
 - **Scenes:** `room`, the bare room, or `house` (`growbot_train/house.py`): a living room
   with a piano, couch, bookshelf and the rest, through a doorway from a kitchen, walls and
-  furniture solid, so the page's brain has somewhere to look for things and explore.
+  furniture solid, so the page's brain has somewhere to look for things and explore;
+  `flat`, a hallway joining four rooms; or `maze1` to `maze5`, small maze houses made from
+  a seed by `house.maze(seed)` (six 2.6 m rooms joined at random, one doorway more for a
+  loop, furniture against the walls), so exploring is not tuned to one floor plan.
   `reset(start, yaw_deg, x, y)` sets him down anywhere in it, facing any way.
 
 `python -m growbot_train.simbody --serve` takes the same over JSON lines on stdin, so a
