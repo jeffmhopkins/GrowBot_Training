@@ -163,3 +163,34 @@ def test_the_flat_stands_him_up_at_its_start() -> None:
     assert SimBody().layout is None
     with pytest.raises(ValueError):
         sb.layout.route("living room", "attic")
+
+
+def test_a_maze_house_is_the_same_for_its_seed_and_differs_by_seed() -> None:
+    a, b, c = house.maze(7), house.maze(7), house.maze(8)
+    assert a == b and (a.DOORS, a.ITEMS) != (c.DOORS, c.ITEMS)
+    # Six rooms, every one reached (the tree), and one doorway more for a loop.
+    assert len(a.ROOMS) == 6 and len(a.DOORS) == 6
+    assert {i.name for i in a.ITEMS} >= {"couch", "lamp", "fridge", "bookshelf", "plant"}
+
+
+def test_a_maze_house_builds_and_stands_him_at_its_start() -> None:
+    sb = SimBody(scene="maze1")
+    x, y, _ = sb.layout.start
+    assert abs(sb.state()["x"] - x) < 0.05
+
+
+@pytest.mark.parametrize("seed", range(1, 41))
+def test_every_maze_room_keeps_all_its_furniture(seed: int) -> None:
+    # A doorway-crowded room once dropped its counter or piano without a word, and a maze
+    # missing its piano can't be asked for it.
+    m = house.maze(seed)
+    want = {n for pieces in house._MAZE_FURNITURE.values() for n, *_ in pieces}
+    names = {it.name for it in m.ITEMS}
+    assert want | {"piano bench"} <= names
+    for it in m.ITEMS:
+        assert all(m.distance_to(it.name, d.x, d.y) >= 0.65 for d in m.DOORS), it.name
+
+
+def test_a_maze_has_no_more_rooms_than_it_has_kinds_of() -> None:
+    with pytest.raises(ValueError):
+        house.maze(1, 4, 2)
