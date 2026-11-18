@@ -19,6 +19,7 @@ house's, as they always were.
 from __future__ import annotations
 
 import math
+import random
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 
@@ -253,17 +254,32 @@ _MAZE_MATERIAL = {
 }
 
 
+class _Cramped(Exception):
+    pass
+
+
 def maze(seed: int, cols: int = 3, rows: int = 2) -> Layout:
     """A small maze house: cols by rows rooms of 2.6 m, joined so every room reaches every
     other (a random spanning tree, and one more doorway for a loop), the living room his
     start. The same seed makes the same house."""
-    import random
-
+    if cols * rows > len(_MAZE_FURNITURE):
+        raise ValueError(f"a maze has at most {len(_MAZE_FURNITURE)} rooms")
+    # Doorways can crowd a room until a piece fits nowhere along its walls; that draw is
+    # thrown away and the house drawn again, so every room keeps all its furniture.
     rng = random.Random(seed)
+    for _ in range(100):
+        try:
+            return _maze_once(seed, rng, cols, rows)
+        except _Cramped:
+            continue
+    raise ValueError(f"maze {seed}: no draw left room for all the furniture")
+
+
+def _maze_once(seed: int, rng: random.Random, cols: int, rows: int) -> Layout:
+    kinds = list(_MAZE_FURNITURE)[1:]
     w, h = cols * _CELL, rows * _CELL
     x0, y0 = -w / 2, -h / 2
     cells = [(c, r) for r in range(rows) for c in range(cols)]
-    kinds = list(_MAZE_FURNITURE)[1:]
     rng.shuffle(kinds)
     start = rng.choice(cells)
     name = {start: "living room"}
@@ -355,86 +371,76 @@ def maze(seed: int, cols: int = 3, rows: int = 2) -> Layout:
         if c == cols - 1:
             run(f"e_{c}_{r}", cx1, cy0, cx1, cy1, mat)
 
-    # Furniture against the walls, clear of every doorway and of each other.
+    # Furniture against the walls, clear of every doorway and of each other; a room is
+    # laid out afresh until all of its pieces fit.
     items: list[Item] = []
 
-    def clear(it: Item) -> bool:
+    def clear(it: Item, others: list[Item]) -> bool:
         for d in doors:
             if _distance(it, d.x, d.y) < 0.65:
                 return False
         return all(
             abs(it.x - o.x) >= it.hx + o.hx + 0.1 or abs(it.y - o.y) >= it.hy + o.hy + 0.1
-            for o in items
+            for o in others
         )
 
-    for room, (bx0, by0, bx1, by1) in box.items():
-        for nm, long, deep, rgb in _MAZE_FURNITURE[room]:
-            for _ in range(200):
-                if nm == "table":  # stands free, mid-room
-                    it = Item(
-                        nm,
-                        room,
-                        (bx0 + bx1) / 2 + rng.uniform(-0.4, 0.4),
-                        (by0 + by1) / 2 + rng.uniform(-0.4, 0.4),
-                        long,
-                        deep,
-                        0.0,
-                        rgb,
-                    )
-                else:
-                    side = rng.choice("nsew")
-                    inset = 0.04 + deep
-                    if side in "ns":
-                        x = rng.uniform(bx0 + 0.04 + long, bx1 - 0.04 - long)
-                        y = by0 + inset if side == "s" else by1 - inset
-                        it = Item(
-                            nm,
-                            room,
-                            round(x, 3),
-                            round(y, 3),
-                            long,
-                            deep,
-                            90.0 if side == "s" else -90.0,
-                            rgb,
-                        )
-                    else:
-                        y = rng.uniform(by0 + 0.04 + long, by1 - 0.04 - long)
-                        x = bx0 + inset if side == "w" else bx1 - inset
-                        it = Item(
-                            nm,
-                            room,
-                            round(x, 3),
-                            round(y, 3),
-                            deep,
-                            long,
-                            0.0 if side == "w" else 180.0,
-                            rgb,
-                        )
-                if clear(it):
-                    items.append(it)
-                    if nm == "piano":  # its bench in front
-                        a = math.radians(it.face_deg)
-                        bx, by = it.x + 0.6 * math.cos(a), it.y + 0.6 * math.sin(a)
-                        hx, hy = (0.4, 0.18) if it.face_deg in (90.0, -90.0) else (0.18, 0.4)
-                        items.append(
-                            Item(
-                                "piano bench",
-                                room,
-                                round(bx, 3),
-                                round(by, 3),
-                                hx,
-                                hy,
-                                it.face_deg,
-                                (40, 30, 25),
-                            )
-                        )
+    def piece(room: str, nm: str, long: float, deep: float, rgb: tuple[int, int, int]) -> Item:
+        bx0, by0, bx1, by1 = box[room]
+        if nm == "table":  # stands free, mid-room
+            return Item(
+                nm,
+                room,
+                (bx0 + bx1) / 2 + rng.uniform(-0.4, 0.4),
+                (by0 + by1) / 2 + rng.uniform(-0.4, 0.4),
+                long,
+                deep,
+                0.0,
+                rgb,
+            )
+        side = rng.choice("nsew")
+        inset = 0.04 + deep
+        if side in "ns":
+            x = rng.uniform(bx0 + 0.04 + long, bx1 - 0.04 - long)
+            y = by0 + inset if side == "s" else by1 - inset
+            return Item(
+                nm, room, round(x, 3), round(y, 3), long, deep, 90.0 if side == "s" else -90.0, rgb
+            )
+        y = rng.uniform(by0 + 0.04 + long, by1 - 0.04 - long)
+        x = bx0 + inset if side == "w" else bx1 - inset
+        return Item(
+            nm, room, round(x, 3), round(y, 3), deep, long, 0.0 if side == "w" else 180.0, rgb
+        )
+
+    def bench(it: Item) -> Item:
+        a = math.radians(it.face_deg)
+        bx, by = it.x + 0.6 * math.cos(a), it.y + 0.6 * math.sin(a)
+        hx, hy = (0.4, 0.18) if it.face_deg in (90.0, -90.0) else (0.18, 0.4)
+        return Item(
+            "piano bench", it.room, round(bx, 3), round(by, 3), hx, hy, it.face_deg, (40, 30, 25)
+        )
+
+    for room in box:
+        for _ in range(500):
+            laid: list[Item] = []
+            for nm, long, deep, rgb in _MAZE_FURNITURE[room]:
+                it = piece(room, nm, long, deep, rgb)
+                group = [it, bench(it)] if nm == "piano" else [it]
+                if not all(clear(g, items + laid) for g in group):
                     break
+                laid += group
+            else:
+                items += laid
+                break
+        else:
+            raise _Cramped
     sx0, sy0, sx1, sy1 = box["living room"]
     lights = tuple(((a + c) / 2, (b + d) / 2) for a, b, c, d in box.values())
     for _ in range(200):
         sx, sy = rng.uniform(sx0 + 0.5, sx1 - 0.5), rng.uniform(sy0 + 0.5, sy1 - 0.5)
         if all(_distance(it, sx, sy) > 0.45 for it in items if it.name != "rug"):
             break
+    else:
+        raise _Cramped
     return Layout(
         name=f"maze{seed}",
         OUTER=(x0, y0, x0 + w, y0 + h),
