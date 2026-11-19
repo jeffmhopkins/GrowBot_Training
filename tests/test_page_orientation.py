@@ -1,8 +1,10 @@
 """Every kept walk, run the way the robot runs it, turns the way it is asked and walks the
-end it should lead with. The JBrain2 page's own runner (growbot_runner.js, legs swapped as
-growbot-box.js walkerFor swaps them) drives the sim body wired as the owner's robot is,
-fed the phone's readings through the page's bodyAccel/bodyGyro and its levelling, steered
-by the gyro heading the page integrates. Needs node and a JBrain2 checkout: set
+end it should lead with. The JBrain2 page's own runner (growbot_runner.js) drives the sim
+body wired as the owner's robot is; around it, this file restates the page's side of
+growbot-box.js start() (walkerFor's leg swap, bodyAccel/bodyGyro, the stance levelling and
+the gyro heading), so a change there must be copied here: only the runner is the page's
+own code. simbody's phone readings are bodyAccel/bodyGyro's inverse by construction, so the
+axes rest on the facts below, not on this test. Needs node and a JBrain2 checkout: set
 GROWBOT_SITE to its growbot/site.
 
 The robot's facts this rests on (owner, 2026-11-19, and body test #40):
@@ -40,8 +42,9 @@ ROBOT = sb.Wiring(swap=True, l_sign=1, r_sign=-1)
 STOCK_CAL = {"L_SIGN": -1, "R_SIGN": 1, "L_OFF": 0, "R_OFF": 0}
 SECS = 12.0
 
-# What each job is asked, and the command the page gives it (growbot-box.js command and
-# growbot-drive.js inputs): a turn stands at camera height 0, a nose walk's +1 backs away.
+# What each job is asked, and the command a skill set gives it (growbot-drive.js inputs,
+# growbot-box.js setCommand): a turn by degrees stands at camera height 0 (TURN_PITCH), and a
+# nose walk's +1 backs away.
 LEFT = ("left", {"target": 90.0, "fwd": 0.0, "pitch": 0.0})
 RIGHT = ("right", {"target": -90.0, "fwd": 0.0, "pitch": 0.0})
 FORWARD = ("forward", {"target": 0.0, "fwd": 1.0, "pitch": 1.0})
@@ -59,8 +62,12 @@ MOVES = {
 
 def _kept() -> list[tuple[str, str, str, dict[str, float]]]:
     index = tomllib.loads((ROOT / "policies" / "index.toml").read_text())
+    # A job this file doesn't know yet fails its own case rather than the whole collection.
+    unknown = (("unknown", {}),)
     return [
-        (p["slug"], p["file"], name, cmd) for p in index["policy"] for name, cmd in MOVES[p["job"]]
+        (p["slug"], p["file"], name, cmd)
+        for p in index["policy"]
+        for name, cmd in MOVES.get(p["job"], unknown)
     ]
 
 
@@ -99,6 +106,7 @@ def _walk(policy: Path, cmd: dict[str, float], swap: bool = True) -> dict[str, f
         + [json.dumps(STOCK_CAL)],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
     )
     assert js.stdin and js.stdout
@@ -122,11 +130,16 @@ def _walk(policy: Path, cmd: dict[str, float], swap: bool = True) -> dict[str, f
             line = {"A": _xyz(accel), "G": _xyz(gyro), "cmd": fed}
             js.stdin.write(json.dumps(line) + "\n")
             js.stdin.flush()
-            out = json.loads(js.stdout.readline())
+            reply = js.stdout.readline()
+            if not reply:
+                js.kill()
+                raise AssertionError(f"the runner stopped: {js.stderr.read() if js.stderr else ''}")
+            out = json.loads(reply)
             sim.servos(out["l"], out["r"])
             sim.tick()
     finally:
-        js.stdin.close()
+        if js.poll() is None:
+            js.stdin.close()
         js.wait()
     s = sim.state()
     nose = math.radians(s0["nose_deg"])
@@ -138,6 +151,7 @@ def _walk(policy: Path, cmd: dict[str, float], swap: bool = True) -> dict[str, f
 def test_kept_walk_goes_the_way_it_is_asked(
     slug: str, file: str, move: str, cmd: dict[str, float]
 ) -> None:
+    assert move != "unknown", f"{slug}: add its job to MOVES"
     got = _walk(ROOT / file, cmd)
     if move == "left":
         assert got["turned"] > 30.0, got  # counter-clockwise from above: Dave's own left
@@ -146,11 +160,14 @@ def test_kept_walk_goes_the_way_it_is_asked(
     elif move == "forward":
         assert got["camera_cm"] > 30.0 and abs(got["turned"]) < 30.0, got
     else:
-        assert got["camera_cm"] < -5.0, got  # away from what the camera sees
+        # Away from what the camera sees, and clearly more than the same file standing
+        # still creeps: a stand can drift a few centimetres either way.
+        still = _walk(ROOT / file, {**cmd, "fwd": 0.0})
+        assert got["camera_cm"] < still["camera_cm"] - 5.0, (got, still)
 
 
 def test_without_the_page_swap_a_look_left_turns_right() -> None:
-    """The same run with the runner's own a0=right mapping: the check above would catch a
-    page that dropped the swap."""
+    """The same run with the runner's own a0=right mapping, unswapped: the leg mapping is
+    what decides the turn's direction, so the checks above tell the two apart."""
     got = _walk(ROOT / "policies" / "look-v9" / "policy_look.json", LEFT[1], swap=False)
     assert got["turned"] < -30.0, got
