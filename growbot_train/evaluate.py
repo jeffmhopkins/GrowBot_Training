@@ -178,6 +178,7 @@ def sweep_cases(cfg: config_mod.Config) -> dict[str, dict[str, Any]]:
     def hi(rng: tuple[float, float], nominal: float = 1.0) -> float:
         return nominal + (rng[1] - nominal) * k
 
+    loosest = config_mod.RandomizationConfig().servo_play_rad[1] * k
     floors = {f: {"floor": f} for f in cfg.task.floors} if cfg.task.surfaces else {}
     # With surfaces, the floor's slickness is drawn from its own range: test its edges.
     fr = r.floor_friction_scale if cfg.task.surfaces else r.friction
@@ -198,6 +199,9 @@ def sweep_cases(cfg: config_mod.Config) -> dict[str, dict[str, Any]]:
         "weak_torque": {"torque_scale": lo(r.servo_torque_scale)},
         "narrow_feet": {"foot_width": lo(r.foot_width_scale)},
         "mis_trimmed": {"trim": np.array([r.trim_err_rad * k, -r.trim_err_rad * k])},
+        # A run trained without slack is still tried on today's loosest servos, so the
+        # sweep shows whether it needs retraining with them.
+        "loose_servos": {"play": np.full(2, hi(r.servo_play_rad, 0.0) or loosest)},
         "nose_heavy": {"com": np.array([hi(r.com_x_m, 0.0), 0.0, 0.0])},
         "tail_heavy": {"com": np.array([lo(r.com_x_m, 0.0), 0.0, 0.0])},
     }

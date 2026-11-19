@@ -519,9 +519,75 @@ def test_servo_torque_and_foot_width_draws_land_and_restore() -> None:
 
 def test_a_mis_trimmed_leg_holds_off_its_command() -> None:
     env = GrowBotHeadingEnv(Config())
-    env.reset(seed=0, options={"overrides": {"trim": np.array([0.08, -0.05])}})
+    env.reset(seed=0, options={"overrides": {"trim": np.array([0.08, -0.05]), "play": np.zeros(2)}})
     env.step(np.zeros(2))
     np.testing.assert_allclose(env.data.ctrl, env.motor + [0.08, -0.05])
+
+
+def _rock(env: GrowBotHeadingEnv, play: float) -> list[float]:
+    """Each leg's angle after a swing forward then the same swing back, held at stance."""
+    env.reset(seed=0, options={"nominal": True, "overrides": {"play": np.full(2, play)}})
+    out = []
+    for target in (0.3, 0.0, -0.3, 0.0):
+        env._hold = np.full(2, target)
+        env._physics(400)
+        out.append(float(env.data.qpos[7]))
+    return out
+
+
+def test_a_slack_servo_lets_its_leg_rest_anywhere_inside_the_play() -> None:
+    cfg = Config()
+    cfg.randomization.enabled = False
+    env = GrowBotHeadingEnv(cfg)
+    # Weightless, so nothing loads the legs: standing, the body's weight holds each leg
+    # against one side of its slack and hides it.
+    env.model.opt.gravity[:] = 0.0
+    tight = _rock(env, 0.0)
+    loose = _rock(env, 0.1)
+    # The same command, reached from either side, lands the leg the play apart; with
+    # none it comes back to the same place.
+    assert abs(tight[1] - tight[3]) < 0.005
+    assert abs(loose[1] - loose[3]) == pytest.approx(0.1, abs=0.01)
+
+
+def test_a_leg_inside_its_slack_feels_no_servo_force() -> None:
+    cfg = Config()
+    cfg.randomization.enabled = False
+    env = GrowBotHeadingEnv(cfg)
+    env.model.opt.gravity[:] = 0.0
+    env.reset(seed=0, options={"nominal": True, "overrides": {"play": np.full(2, 1.0)}})
+    env._hold = env.data.qpos[7:9].copy()
+    env.data.qvel[6:8] = 2.0  # swinging, well inside the gap
+    env._physics(1)
+    # Uncancelled, its damping alone would be 0.05 * 2 = 0.1 N m; what's left is the leg
+    # moving within the one substep the target was set for.
+    assert np.abs(env.data.actuator_force).max() < 1e-3
+    env._hold = env.data.qpos[7:9] + 0.8  # now past it: the servo pushes
+    env._physics(1)
+    assert (env.data.actuator_force > 0.01).all()
+
+
+def test_slack_is_drawn_per_leg_within_its_range() -> None:
+    env = GrowBotHeadingEnv(Config())
+    lo, hi = Config().randomization.servo_play_rad
+    plays = []
+    for seed in range(20):
+        env.reset(seed=seed)
+        plays.append(env.ep.play.copy())
+    plays = np.array(plays)
+    assert plays.min() >= lo and plays.max() <= hi
+    assert not np.allclose(plays[:, 0], plays[:, 1])
+
+
+def test_a_run_saved_before_the_slack_draw_has_none(tmp_path) -> None:
+    from growbot_train import config as config_mod
+
+    data = Config().to_dict()
+    del data["randomization"]["servo_play_rad"]
+    assert config_mod.from_dict(data, saved=True).randomization.servo_play_rad == (0.0, 0.0)
+    env = GrowBotHeadingEnv(config_mod.from_dict(data, saved=True))
+    env.reset(seed=3)
+    assert not env.ep.play.any()
 
 
 def test_late_sensors_show_the_reading_from_ticks_ago() -> None:

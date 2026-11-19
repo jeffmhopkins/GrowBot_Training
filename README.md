@@ -703,7 +703,19 @@ noise and bias. On top of that, from the ranges upstream's shipped walks
 1.2x an MG90S's, each leg's zero off by up to 5 degrees (trim), the phone's readings
 arriving up to 120 ms late, the foot's contact width down to 57% of the printed 21 mm,
 and friction from 0.2 to 2.2 (0.5 to 1.6x a floor's own with per-surface materials). The heading error gets noise, a slow drift (like a gyro-integrated
-heading) and a random refresh rate (like a camera target). `ramp_steps` turns on a
+heading) and a random refresh rate (like a camera target).
+
+Each servo also has gear slack (`servo_play_rad`), drawn per leg from 0.5 to 3 degrees end
+to end: inside it the leg swings free and the servo pushes only once the leg is past it.
+Jeff's hand check on the printed build (2026-11-19) found about 1.5 mm of play at the tip
+of a 74 mm leg, about 1.2 degrees. Open Duck Mini's sim-to-real work found modelling
+slack mattered for its walk. Standing, the body's weight holds each leg against one side
+of its slack, so it shows when a foot's load flips mid-stride. Runs saved before the
+draw keep none, and the `--sweep` tries every policy with the loosest servos
+(`loose_servos`). On the nominal body with 3 degrees, lift-fall-3 walked about 8% slower
+with no falls, and look-v9 aimed about half a degree worse.
+
+`ramp_steps` turns on a
 curriculum: every body, servo, friction and sensor-offset range starts at `ramp_from` of
 its width around the as-built robot and widens to the full range over that many steps.
 `ramp_to` stops the body ranges at that share of their width, in training and evaluation

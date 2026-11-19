@@ -231,6 +231,10 @@ class RandomizationConfig:
     # Each leg's zero is off by up to this much (rad): a horn is seated a spline tooth
     # out, or the trim is set by eye. Upstream draws +-4 to 5 degrees.
     trim_err_rad: float = 0.087
+    # Gear slack at each servo (rad, end to end), drawn per leg. Jeff's hand check on the
+    # printed build (2026-11-19): the tip of a leg lying flat moves about 1.5 mm, half
+    # the lid's 3 mm lip, on its 74 mm reach, so about 1.2 degrees. Drawn from 0.5 to 3.
+    servo_play_rad: tuple[float, float] = (0.009, 0.052)
     # The phone's sensors arrive this late (s), separate from the relay's delay.
     sensor_delay_s: tuple[float, float] = (0.0, 0.12)
     # The foot's width along the body, as a share of the printed 21 mm: a worn or
@@ -373,6 +377,9 @@ _LEGACY_RANDOMIZATION = {
 def from_dict(data: dict[str, Any], saved: bool = False) -> Config:
     """``saved``: ``data`` is a run's or policy's own config, not a hand-written one."""
     cfg = Config()
+    if saved and "servo_play_rad" not in data.get("randomization", {}):
+        # Trained before the gear-slack draw: its servos had none.
+        cfg.randomization.servo_play_rad = (0.0, 0.0)
     if saved and "surfaces" not in data.get("task", {}):
         for k, v in _LEGACY_TASK.items():
             setattr(cfg.task, k, v)

@@ -145,6 +145,9 @@ class Episode:
     gyro_bias: np.ndarray
     heading_drift_deg_s: float
     heading_refresh: int
+    # Each leg's gear slack (rad, end to end): the leg swings this far with the motor
+    # still, and the servo only pushes once the leg is past it.
+    play: np.ndarray
 
 
 class GrowBotHeadingEnv(gym.Env):
@@ -439,6 +442,9 @@ class GrowBotHeadingEnv(gym.Env):
                 heading_refresh=int(
                     rng.integers(r.heading_refresh_ticks[0], r.heading_refresh_ticks[1] + 1)
                 ),
+                # Drawn last, and only where the range has width, so a run saved before
+                # it keeps every other draw.
+                play=np.array([self._u_if(near(r.servo_play_rad, 0.0)) for _ in range(2)]),
             )
             if self._split:
                 # Each surface drifts on its own (a coating and bare print don't wear
@@ -461,6 +467,7 @@ class GrowBotHeadingEnv(gym.Env):
                 gyro_bias=np.zeros(3),
                 heading_drift_deg_s=0.0,
                 heading_refresh=1,
+                play=np.zeros(2),
             )
         # A robustness sweep pins single parameters to the edge of their range.
         for k, v in overrides.items():
@@ -518,9 +525,8 @@ class GrowBotHeadingEnv(gym.Env):
         d.qpos[7:9] = self.np_random.uniform(-0.05, 0.05, 2)
         # The legs hold where a mis-trimmed robot's do, so the stance it settles into, and
         # levels on, is its own.
-        d.ctrl[:] = np.clip(self.ep.trim, -CTRL_LIMIT, CTRL_LIMIT)
-        for _ in range(round(self._settle_s() / m.opt.timestep)):  # settle onto the feet
-            mujoco.mj_step(m, d)
+        self._hold = np.clip(self.ep.trim, -CTRL_LIMIT, CTRL_LIMIT)
+        self._physics(round(self._settle_s() / m.opt.timestep))  # settle onto the feet
         d.time = 0.0
         # This body rests nose-up (about 34 degrees on the nominal build), so "upright"
         # means "as it stood at the start", the same reference the app's tip check uses.
@@ -545,9 +551,8 @@ class GrowBotHeadingEnv(gym.Env):
         legs = np.zeros(2)
         if lying:
             legs[:] = self._u(self.cfg.task.lying_leg_rad)
-            d.ctrl[:] = np.clip(legs + self.ep.trim, -CTRL_LIMIT, CTRL_LIMIT)
-            for _ in range(round(0.6 / m.opt.timestep)):
-                mujoco.mj_step(m, d)
+            self._hold = np.clip(legs + self.ep.trim, -CTRL_LIMIT, CTRL_LIMIT)
+            self._physics(round(0.6 / m.opt.timestep))
             d.time = 0.0
 
         self.step_index = 0
@@ -588,7 +593,7 @@ class GrowBotHeadingEnv(gym.Env):
         return self._obs(), {}
 
     def step(self, action: np.ndarray) -> tuple[np.ndarray, float, bool, bool, dict[str, Any]]:
-        cfg, m, d = self.cfg, self.model, self.data
+        cfg, d = self.cfg, self.data
         a = np.tanh(np.clip(np.asarray(action, dtype=np.float64), -ACTION_LIMIT, ACTION_LIMIT))
         if self._gait is None:
             self._actuate(a * cfg.task.action_to_rad)
@@ -601,8 +606,7 @@ class GrowBotHeadingEnv(gym.Env):
         # Headings before the step; the error is taken against the target after any
         # retarget below, so a retarget itself pays no turn reward.
         yaw0, body0 = self.yaw_deg(), self.body_yaw_deg()
-        for _ in range(self.n_substeps):
-            mujoco.mj_step(m, d)
+        self._physics(self.n_substeps)
         self.step_index += 1
         self.cycles += cfg.task.gait_hz * CONTROL_DT * self.gait_rate()
         t = self.step_index * CONTROL_DT
@@ -847,7 +851,32 @@ class GrowBotHeadingEnv(gym.Env):
         alpha = CONTROL_DT / (ep.lag + CONTROL_DT)
         self.motor = (1 - alpha) * self.motor + alpha * slewed
         # A mis-trimmed leg holds a little off wherever it's told to go.
-        self.data.ctrl[:] = np.clip(self.motor + ep.trim, -CTRL_LIMIT, CTRL_LIMIT)
+        self._hold = np.clip(self.motor + ep.trim, -CTRL_LIMIT, CTRL_LIMIT)
+
+    def _physics(self, n: int) -> None:
+        """Step the physics with the servos holding `_hold` through their gear slack."""
+        m, d = self.model, self.data
+        half = self.ep.play / 2
+        if not half.any():
+            d.ctrl[:] = self._hold
+            for _ in range(n):
+                mujoco.mj_step(m, d)
+            return
+        kv_over_kp = m.actuator_biasprm[:, 2] / m.actuator_gainprm[:, 0]  # -kv / kp
+        for _ in range(n):
+            # Within the slack the gears aren't meshed and the servo can't feel the leg,
+            # so it pushes only on the error past it. Taken every substep: the leg crosses
+            # the gap in a few milliseconds when its load flips mid-stride.
+            q = d.qpos[7:9]
+            err = self._hold - q
+            past = np.sign(err) * np.maximum(np.abs(err) - half, 0.0)
+            # Its damping goes too: the position actuator's kv term would drag the leg
+            # across the gap, so the target leads it by exactly what cancels it.
+            free = past == 0.0
+            ctrl = q + past
+            ctrl[free] -= kv_over_kp[free] * d.qvel[6:8][free]
+            d.ctrl[:] = np.clip(ctrl, -CTRL_LIMIT, CTRL_LIMIT)
+            mujoco.mj_step(m, d)
 
     def _up_in_body(self) -> np.ndarray:
         # World "up" expressed in the torso frame: the bottom row of the rotation matrix.
