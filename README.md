@@ -712,8 +712,8 @@ of a 74 mm leg, about 1.2 degrees. Open Duck Mini's sim-to-real work found model
 slack mattered for its walk. Standing, the body's weight holds each leg against one side
 of its slack, so it shows when a foot's load flips mid-stride. Runs saved before the
 draw keep none, and the `--sweep` tries every policy with the loosest servos
-(`loose_servos`). On the nominal body with 3 degrees, lift-fall-3 walked about 10% slower
-with no falls, and look-v9 aimed about a degree worse.
+(`loose_servos`). On the nominal body with 3 degrees, lift-fall-3 walked about 8% slower
+with no falls, and look-v9 aimed about half a degree worse.
 
 `ramp_steps` turns on a
 curriculum: every body, servo, friction and sensor-offset range starts at `ramp_from` of

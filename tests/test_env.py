@@ -550,6 +550,23 @@ def test_a_slack_servo_lets_its_leg_rest_anywhere_inside_the_play() -> None:
     assert abs(loose[1] - loose[3]) == pytest.approx(0.1, abs=0.01)
 
 
+def test_a_leg_inside_its_slack_feels_no_servo_force() -> None:
+    cfg = Config()
+    cfg.randomization.enabled = False
+    env = GrowBotHeadingEnv(cfg)
+    env.model.opt.gravity[:] = 0.0
+    env.reset(seed=0, options={"nominal": True, "overrides": {"play": np.full(2, 1.0)}})
+    env._hold = env.data.qpos[7:9].copy()
+    env.data.qvel[6:8] = 2.0  # swinging, well inside the gap
+    env._physics(1)
+    # Uncancelled, its damping alone would be 0.05 * 2 = 0.1 N m; what's left is the leg
+    # moving within the one substep the target was set for.
+    assert np.abs(env.data.actuator_force).max() < 1e-3
+    env._hold = env.data.qpos[7:9] + 0.8  # now past it: the servo pushes
+    env._physics(1)
+    assert (env.data.actuator_force > 0.01).all()
+
+
 def test_slack_is_drawn_per_leg_within_its_range() -> None:
     env = GrowBotHeadingEnv(Config())
     lo, hi = Config().randomization.servo_play_rad

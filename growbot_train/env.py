@@ -862,6 +862,7 @@ class GrowBotHeadingEnv(gym.Env):
             for _ in range(n):
                 mujoco.mj_step(m, d)
             return
+        kv_over_kp = m.actuator_biasprm[:, 2] / m.actuator_gainprm[:, 0]  # -kv / kp
         for _ in range(n):
             # Within the slack the gears aren't meshed and the servo can't feel the leg,
             # so it pushes only on the error past it. Taken every substep: the leg crosses
@@ -869,7 +870,12 @@ class GrowBotHeadingEnv(gym.Env):
             q = d.qpos[7:9]
             err = self._hold - q
             past = np.sign(err) * np.maximum(np.abs(err) - half, 0.0)
-            d.ctrl[:] = np.clip(q + past, -CTRL_LIMIT, CTRL_LIMIT)
+            # Its damping goes too: the position actuator's kv term would drag the leg
+            # across the gap, so the target leads it by exactly what cancels it.
+            free = past == 0.0
+            ctrl = q + past
+            ctrl[free] -= kv_over_kp[free] * d.qvel[6:8][free]
+            d.ctrl[:] = np.clip(ctrl, -CTRL_LIMIT, CTRL_LIMIT)
             mujoco.mj_step(m, d)
 
     def _up_in_body(self) -> np.ndarray:
