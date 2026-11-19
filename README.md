@@ -804,6 +804,15 @@ What the app still needs before it can drive with one (app-side, not done here):
    default flips y). Check on the bench that tipping the nose up and turning left read
    the same signs as in the simulator before walking it.
 
+**Which leg is which.** Every body here names its legs from the nose: action 0 is
+`right_leg` (-y), action 1 `left_leg` (+y), both hinged about +y so a positive action swings
+the foot toward the camera end (the tail). The robot faces out of its camera end, so the
+model's `right_leg` is Dave's own left, the wire's `l`; the page swaps every trained walk's
+legs onto the wire to match (`growbot-box.js` `walkerFor`). `tests/test_page_orientation.py`
+runs every walk in `policies/index.toml` through the app's own runner that way, on the sim
+body wired as the robot is, and checks that a look left turns counter-clockwise, a look right
+clockwise, the forward walk goes camera first and the back walks away from the camera.
+
 ## Keeping results
 
 `runs/` is scratch and isn't committed. To keep a result, copy it into `policies/`:
@@ -912,4 +921,4 @@ doing only if the CPU runs prove too slow.
 | `scripts/keep_policy.sh` | Copy a result into `policies/` |
 | `scripts/try_jax_rocm.sh` | Optional: does JAX see the GPU? |
 | `policies/` | Kept results; `policies/index.toml` lists the ones JBrain's Body tab offers |
-| `tests/` | `pytest`; the parity test needs node and a JBrain2 checkout |
+| `tests/` | `pytest`; the parity and orientation tests need node and a JBrain2 checkout |
