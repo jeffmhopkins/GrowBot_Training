@@ -25,6 +25,8 @@ from typing import Any
 
 import numpy as np
 
+from growbot_train.env import _pitch_deg
+
 # SIM_MATCH_V "sm1" in growbot-box.js: [seconds from the start, a0, a1], linear between, two
 # keys at one time a step. Change both together, under a new version.
 VERSION = "sm1"
@@ -99,9 +101,11 @@ def robot_trace(run: dict[str, Any]) -> dict[str, np.ndarray]:
     if v not in (None, VERSION):
         raise ValueError(f"the run played series {v!r}, this replays {VERSION!r}")
     t0 = starts[-1]["t"]
+    ends = [r["t"] for r in log if r.get("k") == "e" and r.get("e") == "simmatch_end"]
+    t1 = min((t for t in ends if t >= t0), default=math.inf)
     rows = [
         r for r in log
-        if r.get("k") == "s" and r["t"] >= t0 and r.get("mode") == "simmatch"
+        if r.get("k") == "s" and t0 <= r["t"] <= t1 and r.get("mode") == "simmatch"
         and isinstance(r.get("st"), (int, float)) and r.get("ob") is not None
     ]  # fmt: skip
     if not rows:
@@ -116,15 +120,20 @@ def robot_trace(run: dict[str, Any]) -> dict[str, np.ndarray]:
 
 
 def _pitch(env: Any) -> float:
-    w, x, y, z = env.data.qpos[3:7]
-    return -math.degrees(math.asin(max(-1.0, min(1.0, 2 * (w * y - z * x)))))
+    # The env's own reading, which runs on past 90 degrees as the phone's beta does; an
+    # Euler pitch folds back there, right where a backward tip goes.
+    return _pitch_deg(env._up_in_body())
 
 
 def sim_trace(
     env: Any, overrides: dict[str, Any], until_s: float = TOTAL_S
 ) -> dict[str, np.ndarray]:
     """The series on a sim body: settled at the stance for a second, as the robot's prep
-    settles, then each 25 Hz tick's action. Pitch in degrees nose-up, height in metres."""
+    settles, then each 25 Hz tick's action. Pitch in degrees nose-up, height in metres.
+    The sim's ticks land on an exact 1/25 s grid; the robot's drift a little with its timer,
+    which compare() absorbs by reading the sim at each of his series times."""
+    if env._gait is not None:
+        raise ValueError("this policy's env adds a residual gait to each action; use one without")
     opts = {"nominal": True, "overrides": overrides, "retarget": False, "speed_cmd": 1.0}
     env.reset(seed=0, options={**opts, "tilt_cmd": 1.0, "target_error_deg": 0.0})
     for _ in range(HZ):
@@ -148,6 +157,8 @@ def compare(robot: dict[str, np.ndarray], sim: dict[str, np.ndarray]) -> dict[st
     ran; and when each first tipped 45 degrees past that."""
     end = min(robot["st"][-1], sim["st"][-1])
     keep = robot["st"] <= end
+    if keep.sum() < 2:
+        raise ValueError("the sim and the robot's run don't overlap; the sim fell at once")
     real = robot["tilt"][keep] - robot["tilt"][0]
     mine = np.interp(robot["st"][keep], sim["st"], sim["pitch"] - sim["pitch"][0])
 
@@ -159,14 +170,24 @@ def compare(robot: dict[str, np.ndarray], sim: dict[str, np.ndarray]) -> dict[st
         "rms_deg": float(np.sqrt(np.mean((mine - real) ** 2))),
         "robot_tip_s": tipped(robot["st"], robot["tilt"] - robot["tilt"][0]),
         "sim_tip_s": tipped(sim["st"], sim["pitch"] - sim["pitch"][0]),
-        "act_err": float(np.nanmax(np.abs(robot["act"] - np.array([at(t) for t in robot["st"]])))),
+        "act_err": _act_err(robot),
         "until_s": float(end),
     }
 
 
+def _act_err(robot: dict[str, np.ndarray]) -> float:
+    """The worst gap between the actions he logged and the series, away from its steps: his
+    series time is kept to the millisecond, so a tick beside a step can read either side."""
+    steps = [b[0] for a, b in zip(KEYS[:-1], KEYS[1:], strict=True) if a[0] == b[0]]
+    near = np.array([min((abs(t - s) for s in steps), default=1.0) < 0.002 for t in robot["st"]])
+    want = np.array([at(t) for t in robot["st"]])
+    gap = np.abs(robot["act"] - want)[~near]
+    return float(np.nanmax(gap)) if gap.size else math.nan
+
+
 def _value(v: str) -> Any:
     try:
-        return float(v)
+        return json.loads(v)
     except ValueError:
         return v
 
@@ -186,7 +207,7 @@ def main(argv: list[str] | None = None) -> int:
         action="append",
         default=[],
         metavar="KEY=VALUE",
-        help="a body override (env._draw's keys: floor, foot_width, mass_scale, ...)",
+        help="a body override, JSON or a string (floor, foot_width, mass_scale, com=[x,y,z], ...)",
     )
     args = ap.parse_args(argv)
     from growbot_train.evaluate import env_for
